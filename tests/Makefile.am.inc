@@ -11,6 +11,7 @@ tests_run_tests_SOURCES = \
 	tests/run-tests.c tests/run-tests.h \
 	tests/test-connection.c \
 	tests/test-osversion.c \
+	tests/test-uuid.c \
 	tests/test-web.c \
 	$(NULL)
 tests_run_tests_CPPFLAGS = $(TEST_FLAGS)

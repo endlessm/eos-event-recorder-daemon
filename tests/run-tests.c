@@ -12,6 +12,7 @@ main (int    argc,
   g_test_init (&argc, &argv, NULL);
 
   add_osversion_tests ();
+  add_uuid_tests ();
   add_web_tests ();
   add_connection_tests ();
 

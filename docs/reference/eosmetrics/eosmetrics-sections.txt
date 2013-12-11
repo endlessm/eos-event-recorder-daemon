@@ -1,0 +1,26 @@
+<SECTION>
+<FILE>emtr-connection</FILE>
+<TITLE>EmtrConnection</TITLE>
+EmtrConnection
+EmtrConnectionClass
+emtr_connection_new
+<SUBSECTION Methods>
+emtr_connection_send
+<SUBSECTION Getters>
+emtr_connection_get_endpoint
+emtr_connection_get_endpoint_config_file
+emtr_connection_get_fingerprint_file
+emtr_connection_get_form_param_name
+emtr_connection_get_uri_context
+<SUBSECTION Standard>
+EMTR_CONNECTION
+EMTR_CONNECTION_CLASS
+EMTR_CONNECTION_GET_CLASS
+EMTR_IS_CONNECTION
+EMTR_IS_CONNECTION_CLASS
+EMTR_TYPE_CONNECTION
+emtr_connection_get_type
+EMTR_ALL_API_VERSIONS
+EMTR_DEFINE_ENUM_TYPE
+EMTR_ENUM_VALUE
+</SECTION>

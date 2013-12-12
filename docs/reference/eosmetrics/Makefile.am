@@ -51,6 +51,7 @@ EXTRA_HFILES=
 IGNORE_HFILES= \
 	emtr-osversion-private.h \
 	emtr-mac-private.h \
+	emtr-util-private.h \
 	emtr-uuid-private.h \
 	emtr-web-private.h \
 	$(NULL)

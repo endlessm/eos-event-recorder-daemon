@@ -39,27 +39,6 @@ mock_mac (void)
 }
 
 static gboolean
-mock_web_send (const gchar *uri,
-               const gchar *data,
-               const gchar *username,
-               const gchar *password,
-               GError     **error)
-{
-  return TRUE;
-}
-
-static gboolean
-mock_web_send_exception (const gchar *uri,
-                         const gchar *data,
-                         const gchar *username,
-                         const gchar *password,
-                         GError     **error)
-{
-  g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "Mock message");
-  return FALSE;
-}
-
-static gboolean
 mock_web_send_assert (const gchar *uri,
                       const gchar *data,
                       const gchar *username,
@@ -115,23 +94,6 @@ teardown (struct ConnectionFixture *fixture,
   g_object_unref (fixture->tmpdir);
   g_object_unref (fixture->fingerprint_file);
   g_object_unref (fixture->test_object);
-}
-
-/* Returns a GVariant with a floating reference */
-static GVariant *
-create_payload (const gchar *message,
-                gint64       timestamp,
-                gboolean     is_bug)
-{
-  GVariantBuilder builder;
-  g_variant_builder_init (&builder, G_VARIANT_TYPE_VARDICT);
-  g_variant_builder_add (&builder, "{sv}",
-                         "message", g_variant_new_string (message));
-  g_variant_builder_add (&builder, "{sv}",
-                         "timestamp", g_variant_new_int64 (timestamp));
-  g_variant_builder_add (&builder, "{sv}",
-                         "bug", g_variant_new_boolean (is_bug));
-  return g_variant_builder_end (&builder);
 }
 
 static void

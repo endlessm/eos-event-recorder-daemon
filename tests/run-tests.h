@@ -7,6 +7,7 @@
 
 void add_osversion_tests  (void);
 void add_uuid_tests       (void);
+void add_mac_tests        (void);
 void add_web_tests        (void);
 void add_connection_tests (void);
 

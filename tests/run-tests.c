@@ -13,6 +13,7 @@ main (int    argc,
 
   add_osversion_tests ();
   add_uuid_tests ();
+  add_mac_tests ();
   add_web_tests ();
   add_connection_tests ();
 

@@ -17,6 +17,7 @@
 
   <chapter>
     <title>EOS Metrics Reference Manual (C API)</title>
+    <xi:include href="xml/emtr-util.xml"/>
     <xi:include href="xml/emtr-connection.xml"/>
   </chapter>
 

@@ -17,9 +17,19 @@ test_util_data_dir_not_null (void)
   g_object_unref (file);
 }
 
+static void
+test_util_storage_dir_not_null (void)
+{
+  GFile *file = emtr_get_default_storage_dir ();
+  g_assert (file != NULL);
+  g_object_unref (file);
+}
+
 void
 add_util_tests (void)
 {
   g_test_add_func ("/util/data-dir-not-null",
                    test_util_data_dir_not_null);
+  g_test_add_func ("/util/storage-dir-not-null",
+                   test_util_storage_dir_not_null);
 }

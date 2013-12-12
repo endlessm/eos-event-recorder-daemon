@@ -7,6 +7,7 @@ eosmetrics_private_installed_headers = \
 	eosmetrics/emtr-macros.h \
 	eosmetrics/emtr-types.h \
 	eosmetrics/emtr-version.h \
+	eosmetrics/emtr-util.h \
 	eosmetrics/emtr-connection.h \
 	$(NULL)
 

@@ -13,6 +13,7 @@ G_BEGIN_DECLS
 #include "emtr-types.h"
 #include "emtr-util.h"
 #include "emtr-connection.h"
+#include "emtr-sender.h"
 
 #undef _EMTR_INSIDE_EOSMETRICS_H
 

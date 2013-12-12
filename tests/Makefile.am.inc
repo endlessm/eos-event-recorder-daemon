@@ -10,6 +10,7 @@ TEST_LIBS = @EOSMETRICS_LIBS@ $(top_builddir)/libeosmetrics-@EMTR_API_VERSION@.l
 tests_run_tests_SOURCES = \
 	tests/run-tests.c tests/run-tests.h \
 	tests/test-connection.c \
+	tests/test-mac.c \
 	tests/test-osversion.c \
 	tests/test-uuid.c \
 	tests/test-web.c \

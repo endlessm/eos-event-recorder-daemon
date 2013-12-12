@@ -3,6 +3,7 @@
 /* Copyright 2013 Endless Mobile, Inc. */
 
 #include "emtr-connection.h"
+#include "emtr-mac-private.h"
 #include "emtr-uuid-private.h"
 #include "emtr-web-private.h"
 
@@ -82,9 +83,8 @@ emtr_connection_constructed (GObject *object)
   /* Set real values for mock-able functions (can be overridden from test code
   later) */
   self->_uuid_gen_func = emtr_uuid_gen;
+  self->_mac_gen_func = emtr_mac_gen;
   self->_web_send_func = emtr_web_post_authorized;
-
-  /* TODO: self->_mac_gen_func */
 }
 
 static gchar *

@@ -14,6 +14,7 @@ eosmetrics_library_sources = \
 	eosmetrics/emtr-connection.c \
 	eosmetrics/emtr-mac.c eosmetrics/emtr-mac-private.h \
 	eosmetrics/emtr-osversion.c eosmetrics/emtr-osversion-private.h \
+	eosmetrics/emtr-util.c eosmetrics/emtr-util-private.h \
 	eosmetrics/emtr-uuid.c eosmetrics/emtr-uuid-private.h \
 	eosmetrics/emtr-web.c eosmetrics/emtr-web-private.h \
 	$(NULL)

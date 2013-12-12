@@ -31,3 +31,26 @@ EMTR_IS_CONNECTION_CLASS
 EMTR_TYPE_CONNECTION
 emtr_connection_get_type
 </SECTION>
+
+<SECTION>
+<FILE>emtr-sender</FILE>
+<TITLE>EmtrSender</TITLE>
+EmtrSender
+EmtrSenderClass
+emtr_sender_new
+<SUBSECTION Methods>
+emtr_sender_send_data
+<SUBSECTION Getters>
+emtr_sender_get_connection
+emtr_sender_get_storage_file
+<SUBSECTION Setters>
+emtr_sender_set_connection
+<SUBSECTION Standard>
+EMTR_IS_SENDER
+EMTR_IS_SENDER_CLASS
+EMTR_SENDER
+EMTR_SENDER_CLASS
+EMTR_SENDER_GET_CLASS
+EMTR_TYPE_SENDER
+emtr_sender_get_type
+</SECTION>

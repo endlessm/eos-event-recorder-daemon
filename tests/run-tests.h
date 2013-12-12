@@ -33,5 +33,6 @@ void add_uuid_tests       (void);
 void add_mac_tests        (void);
 void add_web_tests        (void);
 void add_connection_tests (void);
+void add_sender_tests     (void);
 
 #endif /* RUN_TESTS_H */

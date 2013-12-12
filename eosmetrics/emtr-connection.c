@@ -21,8 +21,8 @@
  * @include: eosmetrics/eosmetrics.h
  *
  * Represents a connection to a metrics collection server.
- * Usually you will not have to create this object yourself; the
- * #EmtrSendProcess will create one with default values.
+ * Usually you will not have to create this object yourself; the #EmtrSender
+ * will create one with default values.
  */
 
 #define DEFAULT_ENDPOINT "http://localhost:3000"

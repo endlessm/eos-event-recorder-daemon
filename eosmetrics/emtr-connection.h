@@ -73,11 +73,12 @@ struct _EmtrConnection
    *
    * For testing only.
    */
-  gboolean (*_web_send_func) (const gchar *uri,
-                              const gchar *data,
-                              const gchar *user,
-                              const gchar *pass,
-                              GError **error);
+  gboolean (*_web_send_func) (const gchar  *uri,
+                              const gchar  *data,
+                              const gchar  *user,
+                              const gchar  *pass,
+                              GCancellable *cancellable,
+                              GError      **error);
 };
 
 struct _EmtrConnectionClass
@@ -116,6 +117,7 @@ const gchar    *emtr_connection_get_endpoint             (EmtrConnection *self);
 EMTR_ALL_API_VERSIONS
 gboolean        emtr_connection_send                     (EmtrConnection *self,
                                                           GVariant       *payload,
+                                                          GCancellable   *cancellable,
                                                           GError        **error);
 
 G_END_DECLS

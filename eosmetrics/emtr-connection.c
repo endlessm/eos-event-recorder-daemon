@@ -530,6 +530,7 @@ emtr_connection_get_endpoint (EmtrConnection *self)
  * emtr_connection_send:
  * @self: the metrics connection
  * @payload: a #GVariant with the data to send
+ * @cancellable: (allow-none): currently unused, pass %NULL
  * @error: return location for an error, or %NULL
  *
  * Posts the metrics data specified by @payload to the metrics server referenced
@@ -543,10 +544,13 @@ emtr_connection_get_endpoint (EmtrConnection *self)
 gboolean
 emtr_connection_send (EmtrConnection *self,
                       GVariant       *payload,
+                      GCancellable   *cancellable,
                       GError        **error)
 {
   g_return_val_if_fail (self != NULL && EMTR_IS_CONNECTION (self), FALSE);
   g_return_val_if_fail (payload != NULL, FALSE);
+  g_return_val_if_fail (cancellable == NULL || G_IS_CANCELLABLE (cancellable),
+                        FALSE);
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
   EmtrConnectionPrivate *priv = emtr_connection_get_instance_private (self);
@@ -575,7 +579,7 @@ emtr_connection_send (EmtrConnection *self,
 
   GError *inner_error = NULL;
   if (!(self->_web_send_func (get_uri (self), post_data, USERNAME, PASSWORD,
-                              &inner_error)))
+                              cancellable, &inner_error)))
     {
       g_propagate_prefixed_error (error, inner_error,
                                   "Error sending metrics data to %s@%s: ",

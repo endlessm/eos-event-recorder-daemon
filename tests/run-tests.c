@@ -6,21 +6,23 @@
 #include "run-tests.h"
 
 gboolean
-mock_web_send (const gchar *uri,
-               const gchar *data,
-               const gchar *username,
-               const gchar *password,
-               GError     **error)
+mock_web_send (const gchar  *uri,
+               const gchar  *data,
+               const gchar  *username,
+               const gchar  *password,
+               GCancellable *cancellable,
+               GError      **error)
 {
   return TRUE;
 }
 
 gboolean
-mock_web_send_exception (const gchar *uri,
-                         const gchar *data,
-                         const gchar *username,
-                         const gchar *password,
-                         GError     **error)
+mock_web_send_exception (const gchar  *uri,
+                         const gchar  *data,
+                         const gchar  *username,
+                         const gchar  *password,
+                         GCancellable *cancellable,
+                         GError      **error)
 {
   g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "Mock message");
   return FALSE;

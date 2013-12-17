@@ -39,11 +39,12 @@ mock_mac (void)
 }
 
 static gboolean
-mock_web_send_assert (const gchar *uri,
-                      const gchar *data,
-                      const gchar *username,
-                      const gchar *password,
-                      GError     **error)
+mock_web_send_assert (const gchar  *uri,
+                      const gchar  *data,
+                      const gchar  *username,
+                      const gchar  *password,
+                      GCancellable *cancellable,
+                      GError      **error)
 {
   g_assert_cmpstr (uri, ==, EXPECTED_ENDPOINT "/foobar");
   g_assert_cmpstr (data, ==, EXPECTED_SENT_DATA);
@@ -53,11 +54,12 @@ mock_web_send_assert (const gchar *uri,
 }
 
 static gboolean
-mock_web_send_assert_fingerprint (const gchar *uri,
-                                  const gchar *data,
-                                  const gchar *username,
-                                  const gchar *password,
-                                  GError     **error)
+mock_web_send_assert_fingerprint (const gchar  *uri,
+                                  const gchar  *data,
+                                  const gchar  *username,
+                                  const gchar  *password,
+                                  GCancellable *cancellable,
+                                  GError      **error)
 {
   g_assert (strstr (data, "\"fingerprint\":\"" MOCK_FINGERPRINT "\"") != NULL);
   return TRUE;
@@ -115,7 +117,7 @@ test_connection_returns_true_if_data_sent_successfully (struct ConnectionFixture
 {
   GError *error = NULL;
   GVariant *payload = create_payload ("foo", 12345, TRUE);
-  gboolean success = emtr_connection_send (fixture->test_object, payload,
+  gboolean success = emtr_connection_send (fixture->test_object, payload, NULL,
                                            &error);
   g_variant_unref (payload);
 
@@ -130,7 +132,7 @@ test_connection_returns_error_if_data_not_sent_successfully (struct ConnectionFi
   GError *error = NULL;
   fixture->test_object->_web_send_func = mock_web_send_exception;
   GVariant *payload = create_payload ("foo", 1234, TRUE);
-  gboolean success = emtr_connection_send (fixture->test_object, payload,
+  gboolean success = emtr_connection_send (fixture->test_object, payload, NULL,
                                            &error);
   g_variant_unref (payload);
 
@@ -168,7 +170,7 @@ test_connection_makes_correct_send_call (struct ConnectionFixture *fixture,
   fixture->test_object->_web_send_func = mock_web_send_assert;
 
   GVariant *payload = create_payload ("foo", 1234, TRUE);
-  g_assert (emtr_connection_send (fixture->test_object, payload, NULL));
+  g_assert (emtr_connection_send (fixture->test_object, payload, NULL, NULL));
   g_variant_unref (payload);
 
   /* Other assertions in mock_web_send_assert() */
@@ -185,7 +187,7 @@ test_connection_get_fingerprint_returns_contents_of_file (struct ConnectionFixtu
                                      NULL, NULL));
   GVariant *payload = create_payload ("foo", 1234, TRUE);
   fixture->test_object->_web_send_func = mock_web_send_assert_fingerprint;
-  g_assert (emtr_connection_send (fixture->test_object, payload, NULL));
+  g_assert (emtr_connection_send (fixture->test_object, payload, NULL, NULL));
   g_variant_unref (payload);
 
   /* Other assertions in mock_web_send_assert_fingerprint() */
@@ -198,7 +200,7 @@ test_connection_getting_fingerprint_creates_file_if_it_doesnt_exist (struct Conn
   g_assert (!g_file_query_exists (fixture->fingerprint_file, NULL));
 
   GVariant *payload = create_payload ("foo", 1234, TRUE);
-  g_assert (emtr_connection_send (fixture->test_object, payload, NULL));
+  g_assert (emtr_connection_send (fixture->test_object, payload, NULL, NULL));
   g_variant_unref (payload);
 
   g_assert (g_file_query_exists (fixture->fingerprint_file, NULL));
@@ -212,7 +214,7 @@ test_connection_sending_metrics_get_uuid_and_mac_address (struct ConnectionFixtu
   mock_mac_called = FALSE;
 
   GVariant *payload = create_payload ("foo", 1234, TRUE);
-  g_assert (emtr_connection_send (fixture->test_object, payload, NULL));
+  g_assert (emtr_connection_send (fixture->test_object, payload, NULL, NULL));
   g_variant_unref (payload);
 
   g_assert (mock_uuid_called);

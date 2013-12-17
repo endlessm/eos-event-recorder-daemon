@@ -59,6 +59,7 @@ setup_authentication (SoupSession     *session,
  * string
  * @username: the username to authorize with
  * @password: the password to authorize with
+ * @cancellable: (allow-none): currently unused, pass %NULL
  * @error: return location for an error, or %NULL
  *
  * Synchronously carries out an HTTP POST request at the URI specified by @uri.
@@ -68,11 +69,12 @@ setup_authentication (SoupSession     *session,
  * Returns: %TRUE on success, %FALSE otherwise, in which case @error is set.
  */
 gboolean
-emtr_web_post_authorized (const gchar *uri,
-                          const gchar *json_data,
-                          const gchar *username,
-                          const gchar *password,
-                          GError     **error)
+emtr_web_post_authorized (const gchar  *uri,
+                          const gchar  *json_data,
+                          const gchar  *username,
+                          const gchar  *password,
+                          GCancellable *cancellable,
+                          GError      **error)
 {
   SoupSession *session = soup_session_new ();
   struct AuthData *data = auth_data_new (username, password);

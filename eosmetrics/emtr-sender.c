@@ -194,10 +194,11 @@ create_empty_json_array (void)
 /* Helper function: load JSON data from a file. If the file does not exist, or
 the file does not contain valid JSON data, return an empty JSON array. */
 static JsonNode *
-get_data_from_file (GFile   *file,
-                    GError **error)
+get_data_from_file (GFile        *file,
+                    GCancellable *cancellable,
+                    GError      **error)
 {
-  GFileInputStream *stream = g_file_read (file, NULL, error);
+  GFileInputStream *stream = g_file_read (file, cancellable, error);
   if (stream == NULL) {
     if (g_error_matches (*error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
       {
@@ -210,10 +211,10 @@ get_data_from_file (GFile   *file,
 
   JsonParser *parser = json_parser_new ();
   if (!json_parser_load_from_stream (parser, G_INPUT_STREAM (stream),
-                                     NULL, error))
+                                     cancellable, error))
     {
       g_object_unref (parser);
-      g_input_stream_close (G_INPUT_STREAM (stream), NULL, NULL);
+      g_input_stream_close (G_INPUT_STREAM (stream), NULL, NULL); /*ignore err*/
       if ((*error)->domain == JSON_PARSER_ERROR) {
         /* File contained invalid JSON data; return an empty array, but print a
         warning message */
@@ -223,7 +224,11 @@ get_data_from_file (GFile   *file,
       }
       return NULL;
     }
-  g_input_stream_close (G_INPUT_STREAM (stream), NULL, NULL); /* ignore error */
+  if (!g_input_stream_close (G_INPUT_STREAM (stream), cancellable, error))
+    {
+      g_object_unref (parser);
+      return NULL;
+    }
 
   JsonNode *retval = json_node_copy (json_parser_get_root (parser));
   g_object_unref (parser);
@@ -232,38 +237,41 @@ get_data_from_file (GFile   *file,
 
 /* Helper function: save JSON data to a file. */
 static gboolean
-save_data_to_file (GFile    *file,
-                   JsonNode *json_data,
-                   GError  **error)
+save_data_to_file (GFile        *file,
+                   JsonNode     *json_data,
+                   GCancellable *cancellable,
+                   GError      **error)
 {
   GFileOutputStream *stream = g_file_replace (file, NULL /* etag */,
                                               FALSE, /* make backup */
                                               G_FILE_CREATE_REPLACE_DESTINATION,
-                                              NULL /* cancellable */, error);
+                                              cancellable, error);
   if (stream == NULL)
     return FALSE;
 
   JsonGenerator *generator = json_generator_new ();
   json_generator_set_root (generator, json_data);
   gboolean success = json_generator_to_stream (generator,
-                                               G_OUTPUT_STREAM (stream), NULL,
-                                               error);
-  g_output_stream_close (G_OUTPUT_STREAM (stream), NULL, NULL); /*ignore error*/
-
+                                               G_OUTPUT_STREAM (stream),
+                                               cancellable, error);
+  success |= g_output_stream_close (G_OUTPUT_STREAM (stream), cancellable,
+                                    error);
   return success;
 }
 
 /* Helper function: save the data payload to a queueing file. Return FALSE and
 set error if the data was not saved. */
 static gboolean
-save_payload (EmtrSender *self,
-              GVariant   *payload,
-              GError    **error)
+save_payload (EmtrSender   *self,
+              GVariant     *payload,
+              GCancellable *cancellable,
+              GError      **error)
 {
   EmtrSenderPrivate *priv = emtr_sender_get_instance_private (self);
   GError *inner_error = NULL;
 
-  JsonNode *queued_data = get_data_from_file (priv->storage_file, &inner_error);
+  JsonNode *queued_data = get_data_from_file (priv->storage_file,
+                                              cancellable, &inner_error);
   if (queued_data == NULL)
     {
       g_propagate_prefixed_error (error, inner_error,
@@ -274,7 +282,8 @@ save_payload (EmtrSender *self,
   JsonNode *new_node = json_gvariant_serialize (payload);
   json_array_add_element (data_list, new_node);
 
-  if (!save_data_to_file (priv->storage_file, queued_data, &inner_error))
+  if (!save_data_to_file (priv->storage_file, queued_data,
+                          cancellable, &inner_error))
     {
       json_node_free (queued_data);
       g_propagate_prefixed_error (error, inner_error,
@@ -370,6 +379,7 @@ emtr_sender_set_connection (EmtrSender *self,
  * emtr_sender_send_data:
  * @self: the send process
  * @payload: a #GVariant with the data to send
+ * @cancellable: (allow-none): a #GCancellable, or %NULL to ignore
  * @error: return location for an error, or %NULL
  *
  * Posts the metrics data specified by @payload to a metrics server (see
@@ -382,6 +392,14 @@ emtr_sender_set_connection (EmtrSender *self,
  * lives.)
  * Queued data will be sent later.
  *
+ * To cancel the operation, pass a non-%NULL #GCancellable object to
+ * @cancellable and trigger it from another thread.
+ * If this operation is cancelled, then emtr_sender_send_data_finish() will
+ * return %FALSE with the error %G_IO_ERROR_CANCELLED.
+ * Note that currently the queueing part of the operation is the only part that
+ * can be cancelled; interrupting the transmission to the metrics server is
+ * not supported yet.
+ *
  * Note that the return value from this function does not tell you whether
  * @payload was actually <emphasis>sent</emphasis> to the server.
  * A return value of %TRUE means the data was processed: either sent, or queued
@@ -391,24 +409,28 @@ emtr_sender_set_connection (EmtrSender *self,
  * @error is set.
  */
 gboolean
-emtr_sender_send_data (EmtrSender *self,
-                       GVariant   *payload,
-                       GError    **error)
+emtr_sender_send_data (EmtrSender   *self,
+                       GVariant     *payload,
+                       GCancellable *cancellable,
+                       GError      **error)
 {
   g_return_val_if_fail (self != NULL && EMTR_IS_SENDER (self), FALSE);
   g_return_val_if_fail (payload != NULL, FALSE);
+  g_return_val_if_fail (cancellable == NULL || G_IS_CANCELLABLE (cancellable),
+                        FALSE);
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
   EmtrSenderPrivate *priv = emtr_sender_get_instance_private (self);
   GError *inner_error = NULL;
-  if (emtr_connection_send (priv->connection, payload, &inner_error))
+  if (emtr_connection_send (priv->connection, payload,
+                            cancellable, &inner_error))
     return TRUE;
 
   g_debug ("Queueing metrics data because sending failed: %s",
            inner_error->message);
   g_clear_error (&inner_error);
 
-  if (save_payload (self, payload, &inner_error))
+  if (save_payload (self, payload, cancellable, &inner_error))
     return TRUE;
   g_propagate_prefixed_error (error, inner_error,
                               "Metrics data could neither be sent nor queued: ");

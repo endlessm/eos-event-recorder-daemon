@@ -13,6 +13,7 @@ eosmetrics_private_installed_headers = \
 eosmetrics_library_sources = \
 	eosmetrics/emtr-connection.c \
 	eosmetrics/emtr-osversion.c eosmetrics/emtr-osversion-private.h \
+	eosmetrics/emtr-uuid.c eosmetrics/emtr-uuid-private.h \
 	eosmetrics/emtr-web.c eosmetrics/emtr-web-private.h \
 	$(NULL)
 

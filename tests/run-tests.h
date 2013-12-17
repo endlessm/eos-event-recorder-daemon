@@ -6,6 +6,7 @@
 #define TEST_LOG_DOMAIN "EosMetrics"
 
 void add_osversion_tests  (void);
+void add_uuid_tests       (void);
 void add_web_tests        (void);
 void add_connection_tests (void);
 

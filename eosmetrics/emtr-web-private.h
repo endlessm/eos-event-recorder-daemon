@@ -8,14 +8,16 @@
 #include "emtr-types.h"
 
 #include <glib.h>
+#include <gio/gio.h>
 
 G_BEGIN_DECLS
 
-gboolean emtr_web_post_authorized (const gchar *uri,
-                                   const gchar *json_data,
-                                   const gchar *username,
-                                   const gchar *password,
-                                   GError     **error);
+gboolean emtr_web_post_authorized (const gchar  *uri,
+                                   const gchar  *json_data,
+                                   const gchar  *username,
+                                   const gchar  *password,
+                                   GCancellable *cancellable,
+                                   GError      **error);
 
 G_END_DECLS
 

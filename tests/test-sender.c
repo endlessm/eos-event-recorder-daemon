@@ -17,25 +17,27 @@
 static gboolean mock_web_send_assert_data_called = FALSE;
 
 static gboolean
-mock_web_send_sometimes_fail (const gchar *uri,
-                              const gchar *data,
-                              const gchar *username,
-                              const gchar *password,
-                              GError     **error)
+mock_web_send_sometimes_fail (const gchar  *uri,
+                              const gchar  *data,
+                              const gchar  *username,
+                              const gchar  *password,
+                              GCancellable *cancellable,
+                              GError      **error)
 {
   static unsigned times_called = 0;
   ++times_called;
   if (times_called % 4 == 0 || times_called % 4 == 1)
-    return mock_web_send (uri, data, username, password, error);
-  return mock_web_send_exception (uri, data, username, password, error);
+    return mock_web_send (uri, data, username, password, NULL, error);
+  return mock_web_send_exception (uri, data, username, password, NULL, error);
 }
 
 static gboolean
-mock_web_send_assert_data (const gchar *uri,
-                           const gchar *data,
-                           const gchar *username,
-                           const gchar *password,
-                           GError     **error)
+mock_web_send_assert_data (const gchar  *uri,
+                           const gchar  *data,
+                           const gchar  *username,
+                           const gchar  *password,
+                           GCancellable *cancellable,
+                           GError      **error)
 {
   mock_web_send_assert_data_called = TRUE;
   g_assert (strstr (data, "\"message\":\"foo bar\""));
@@ -140,7 +142,8 @@ test_sender_invoking_send_data (struct SenderFixture *fixture,
 
   fixture->connection->_web_send_func = mock_web_send_assert_data;
 
-  g_assert (emtr_sender_send_data (fixture->test_object, payload, &error));
+  g_assert (emtr_sender_send_data (fixture->test_object, payload,
+                                   NULL, &error));
   g_assert_no_error (error);
   g_assert (mock_web_send_assert_data_called);
 
@@ -161,22 +164,42 @@ test_sender_on_failure_save_payload_to_file (struct SenderFixture *fixture,
 
   fixture->connection->_web_send_func = mock_web_send_sometimes_fail;
 
-  g_assert (emtr_sender_send_data (fixture->test_object, first, &error));
+  g_assert (emtr_sender_send_data (fixture->test_object, first, NULL, &error));
   g_assert_no_error (error);
   g_variant_unref (first);
-  g_assert (emtr_sender_send_data (fixture->test_object, second, &error));
+  g_assert (emtr_sender_send_data (fixture->test_object, second, NULL, &error));
   g_assert_no_error (error);
   g_variant_unref (second);
-  g_assert (emtr_sender_send_data (fixture->test_object, third, &error));
+  g_assert (emtr_sender_send_data (fixture->test_object, third, NULL, &error));
   g_assert_no_error (error);
   g_variant_unref (third);
-  g_assert (emtr_sender_send_data (fixture->test_object, fourth, &error));
+  g_assert (emtr_sender_send_data (fixture->test_object, fourth, NULL, &error));
   g_assert_no_error (error);
   g_variant_unref (fourth);
 
   gchar *loaded_payload = get_payload_from_file (fixture->test_object);
   g_assert_cmpstr (loaded_payload, ==, EXPECTED_DATA_QUEUE);
   g_free (loaded_payload);
+}
+
+static void
+test_sender_cancel_send (struct SenderFixture *fixture,
+                         gconstpointer         unused)
+{
+  GError *error = NULL;
+  GVariant *payload = create_payload ("foo", 1234, TRUE);
+  GCancellable *cancellable = g_cancellable_new ();
+
+  fixture->connection->_web_send_func = mock_web_send_exception;
+
+  g_cancellable_cancel (cancellable);
+  gboolean success = emtr_sender_send_data (fixture->test_object, payload,
+                                            cancellable, &error);
+  g_assert (!success);
+  g_assert_error (error, G_IO_ERROR, G_IO_ERROR_CANCELLED);
+
+  g_variant_unref (payload);
+  g_object_unref (cancellable);
 }
 
 void
@@ -194,6 +217,7 @@ add_sender_tests (void)
                         test_sender_invoking_send_data);
   ADD_SENDER_TEST_FUNC ("/sender/on-failure-save-payload-to-file",
                         test_sender_on_failure_save_payload_to_file);
+  ADD_SENDER_TEST_FUNC ("/sender/cancel-send", test_sender_cancel_send);
 
 #undef ADD_SENDER_TEST_FUNC
 }

@@ -86,6 +86,7 @@ void            emtr_sender_set_connection   (EmtrSender     *self,
 EMTR_ALL_API_VERSIONS
 gboolean        emtr_sender_send_data        (EmtrSender     *self,
                                               GVariant       *payload,
+                                              GCancellable   *cancellable,
                                               GError        **error);
 
 G_END_DECLS

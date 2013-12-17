@@ -176,6 +176,7 @@ test_web_post_authorized_success (WebFixture   *fixture,
   gboolean success = emtr_web_post_authorized ("http://localhost:8123", "{}",
                                                EXPECTED_USERNAME,
                                                EXPECTED_PASSWORD,
+                                               NULL,
                                                &error);
   g_assert (success);
   g_assert_no_error (error);
@@ -189,6 +190,7 @@ test_web_post_fails_on_404 (WebFixture   *fixture,
   gboolean success = emtr_web_post_authorized ("http://localhost:8123", "{}",
                                                EXPECTED_USERNAME,
                                                EXPECTED_PASSWORD,
+                                               NULL,
                                                &error);
   g_assert (!success);
   g_assert_error (error, G_IO_ERROR, G_IO_ERROR_FAILED);
@@ -203,6 +205,7 @@ test_web_post_fails_on_wrong_credentials (WebFixture   *fixture,
   gboolean success = emtr_web_post_authorized ("http://localhost:8123", "{}",
                                                "fake-username",
                                                "fake-password",
+                                               NULL,
                                                &error);
   g_assert (!success);
   g_assert_error (error, G_IO_ERROR, G_IO_ERROR_FAILED);
@@ -218,6 +221,7 @@ test_web_ensure_all_data_sent_correctly (WebFixture   *fixture,
                                                EXPECTED_JSON_DATA,
                                                EXPECTED_USERNAME,
                                                EXPECTED_PASSWORD,
+                                               NULL,
                                                &error);
   g_assert (success);
   g_assert_no_error (error);

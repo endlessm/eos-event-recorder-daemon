@@ -295,6 +295,50 @@ save_payload (EmtrSender   *self,
   return TRUE;
 }
 
+static void
+interpret_save_payload_error (GError  *inner_error,
+                              GError **error)
+{
+  g_propagate_prefixed_error (error, inner_error,
+                              "Metrics data could neither be sent nor queued: ");
+}
+
+static void
+interpret_send_error (GError **error)
+{
+  g_debug ("Queueing metrics data because sending failed: %s",
+           (*error)->message);
+  g_clear_error (error);
+}
+
+/* This could be improved by making the save_payload(), get_data_from_file(),
+and save_data_to_file() operations asynchronous as well; but for now they are
+just cancellable, since it's not likely they'll take up very much time. */
+static void
+send_async_callback (EmtrConnection *connection,
+                     GAsyncResult   *result,
+                     GTask          *task)
+{
+  GError *error = NULL;
+  GError *inner_error = NULL;
+  gboolean success = emtr_connection_send_finish (connection, result, &error);
+  if (success) {
+    g_task_return_boolean (task, TRUE);
+    return;
+  }
+  interpret_send_error (&error);
+
+  EmtrSender *self = EMTR_SENDER (g_task_get_source_object (task));
+  GVariant *payload = g_task_get_task_data (task);
+  if (save_payload (self, payload, g_task_get_cancellable (task), &inner_error))
+    {
+      g_task_return_boolean (task, TRUE);
+      return;
+    }
+  interpret_save_payload_error (inner_error, &error);
+  g_task_return_error (task, error);
+}
+
 /* PUBLIC API */
 
 /**
@@ -376,7 +420,7 @@ emtr_sender_set_connection (EmtrSender *self,
 }
 
 /**
- * emtr_sender_send_data:
+ * emtr_sender_send_data_sync:
  * @self: the send process
  * @payload: a #GVariant with the data to send
  * @cancellable: (allow-none): a #GCancellable, or %NULL to ignore
@@ -405,14 +449,20 @@ emtr_sender_set_connection (EmtrSender *self,
  * A return value of %TRUE means the data was processed: either sent, or queued
  * to be sent later; your application can safely forget about the data.
  *
+ * <note><para>
+ *   This a synchronous version of emtr_sender_send_data().
+ *   It may block if the operation takes a long time.
+ *   Use emtr_sender_send_data() unless you know what you're doing.
+ * </para></note>
+ *
  * Returns: %TRUE if the data was processed, %FALSE otherwise, in which case
  * @error is set.
  */
 gboolean
-emtr_sender_send_data (EmtrSender   *self,
-                       GVariant     *payload,
-                       GCancellable *cancellable,
-                       GError      **error)
+emtr_sender_send_data_sync (EmtrSender   *self,
+                            GVariant     *payload,
+                            GCancellable *cancellable,
+                            GError      **error)
 {
   g_return_val_if_fail (self != NULL && EMTR_IS_SENDER (self), FALSE);
   g_return_val_if_fail (payload != NULL, FALSE);
@@ -422,17 +472,90 @@ emtr_sender_send_data (EmtrSender   *self,
 
   EmtrSenderPrivate *priv = emtr_sender_get_instance_private (self);
   GError *inner_error = NULL;
-  if (emtr_connection_send (priv->connection, payload,
-                            cancellable, &inner_error))
+  if (emtr_connection_send_sync (priv->connection, payload,
+                                 cancellable, &inner_error))
     return TRUE;
-
-  g_debug ("Queueing metrics data because sending failed: %s",
-           inner_error->message);
-  g_clear_error (&inner_error);
-
+  interpret_send_error (&inner_error);
   if (save_payload (self, payload, cancellable, &inner_error))
     return TRUE;
-  g_propagate_prefixed_error (error, inner_error,
-                              "Metrics data could neither be sent nor queued: ");
+  interpret_save_payload_error (inner_error, error);
   return FALSE;
+}
+
+/**
+ * emtr_sender_send_data:
+ * @self: the send process
+ * @payload: a #GVariant with the data to send
+ * @cancellable: (allow-none): a #GCancellable, or %NULL to ignore
+ * @callback: (scope async): function to call when the operation is finished
+ * @user_data: (closure): extra parameter to pass to @callback
+ *
+ * Starts asynchronously posting the metrics data specified by @payload to a
+ * metrics server (see #EmtrSender:connection for how to specify which one.)
+ * The data @payload must be in the form of a #GVariant that has the
+ * <code>a{sv}</code> type; it is converted into JSON for sending.
+ *
+ * To cancel the operation, pass a non-%NULL #GCancellable object to
+ * @cancellable and trigger it from another thread.
+ * If this operation is cancelled, then emtr_sender_send_data_finish() will
+ * return %FALSE with the error %G_IO_ERROR_CANCELLED.
+ * Note that currently the queueing part of the operation is the only part that
+ * can be cancelled; interrupting the transmission to the metrics server is
+ * not supported yet.
+ *
+ * If the sending fails, the data will be queued in the storage file (see
+ * #EmtrSender:storage-file for how to specify where the storage file
+ * lives.)
+ * Queued data will be sent later.
+ *
+ * When the operation has completed, @callback will be called and @user_data
+ * will be passed to it.
+ * Inside @callback, you must finalize the operation with
+ * emtr_sender_send_data_finish().
+ */
+void
+emtr_sender_send_data (EmtrSender         *self,
+                       GVariant           *payload,
+                       GCancellable       *cancellable,
+                       GAsyncReadyCallback callback,
+                       gpointer            user_data)
+{
+  g_return_if_fail (self != NULL && EMTR_IS_SENDER (self));
+  g_return_if_fail (payload != NULL);
+  g_return_if_fail (cancellable == NULL || G_IS_CANCELLABLE (cancellable));
+  g_return_if_fail (callback != NULL);
+
+  EmtrSenderPrivate *priv = emtr_sender_get_instance_private (self);
+  GTask *task = g_task_new (self, cancellable, callback, user_data);
+  g_task_set_task_data (task, payload, NULL);
+  emtr_connection_send (priv->connection, payload, cancellable,
+                        (GAsyncReadyCallback)send_async_callback, task);
+}
+
+/**
+ * emtr_sender_send_data_finish:
+ * @self: the send process
+ * @result: a #GAsyncResult
+ * @error: return location for a #GError, or %NULL
+ *
+ * Finishes an operation begun by emtr_sender_send_data().
+ *
+ * Note that the return value from this function does not tell you whether
+ * @payload was actually <emphasis>sent</emphasis> to the server.
+ * A return value of %TRUE means the data was processed: either sent, or queued
+ * to be sent later; your application can safely forget about the data.
+ *
+ * Returns: %TRUE if the data was processed, %FALSE otherwise, in which case
+ * @error is set.
+ */
+gboolean
+emtr_sender_send_data_finish (EmtrSender   *self,
+                              GAsyncResult *result,
+                              GError      **error)
+{
+  g_return_val_if_fail (self != NULL && EMTR_IS_SENDER (self), FALSE);
+  g_return_val_if_fail (result != NULL && G_IS_ASYNC_RESULT (result), FALSE);
+  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+  return g_task_propagate_boolean (G_TASK (result), error);
 }

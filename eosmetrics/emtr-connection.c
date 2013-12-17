@@ -82,7 +82,9 @@ emtr_connection_constructed (GObject *object)
   later) */
   self->_uuid_gen_func = emtr_uuid_gen;
   self->_mac_gen_func = emtr_mac_gen;
-  self->_web_send_func = emtr_web_post_authorized;
+  self->_web_send_sync_func = emtr_web_post_authorized_sync;
+  self->_web_send_async_func = emtr_web_post_authorized;
+  self->_web_send_finish_func = emtr_web_post_authorized_finish;
 }
 
 static gchar *
@@ -398,6 +400,72 @@ emtr_connection_init (EmtrConnection *self)
   priv->mac_address = -1;
 }
 
+/* Turn the GVariant payload into JSON data in the form of a string. Free the
+string with g_free when done. */
+static gchar *
+prepare_post_data (EmtrConnection *self,
+                   GVariant       *payload)
+{
+  EmtrConnectionPrivate *priv = emtr_connection_get_instance_private (self);
+
+  JsonNode *payload_json = json_gvariant_serialize (payload);
+  JsonObject *data_object = json_node_get_object (payload_json);
+  json_object_set_string_member (data_object,
+                                 "fingerprint", get_fingerprint (self));
+  json_object_set_int_member (data_object,
+                             "machine", get_mac_address (self));
+
+  JsonObject *post_data_object = json_object_new ();
+  json_object_set_object_member (post_data_object,
+                                 priv->form_param_name, data_object);
+
+  JsonNode *post_data_node = json_node_alloc ();
+  json_node_init_object (post_data_node, post_data_object);
+
+  JsonGenerator *stringify = json_generator_new ();
+  json_generator_set_root (stringify, post_data_node);
+  gchar *post_data = json_generator_to_data (stringify, NULL);
+
+  json_node_free (payload_json);
+  json_node_free (post_data_node);
+  g_object_unref (stringify);
+
+  return post_data;
+}
+
+/* Moves (does not copy) inner_error into error */
+static void
+interpret_send_error (EmtrConnection *self,
+                      GError         *inner_error,
+                      GError        **error)
+{
+  g_propagate_prefixed_error (error, inner_error,
+                              "Error sending metrics data to %s@%s: ",
+                              USERNAME, get_uri (self));
+}
+
+/* Callback for the async operation of emtr_connection_send() */
+static void
+send_async_callback (GObject      *unused,
+                     GAsyncResult *result,
+                     GTask        *task)
+{
+  GError *inner_error = NULL;
+  GError *error = NULL;
+  EmtrConnection *self = EMTR_CONNECTION (g_task_get_source_object (task));
+
+  gboolean success = self->_web_send_finish_func (result, &inner_error);
+  if (success)
+    {
+      g_task_return_boolean (task, TRUE);
+    }
+  else
+    {
+      interpret_send_error (self, inner_error, &error);
+      g_task_return_error (task, error);
+    }
+}
+
 /* PUBLIC API */
 
 /**
@@ -527,7 +595,7 @@ emtr_connection_get_endpoint (EmtrConnection *self)
 }
 
 /**
- * emtr_connection_send:
+ * emtr_connection_send_sync:
  * @self: the metrics connection
  * @payload: a #GVariant with the data to send
  * @cancellable: (allow-none): currently unused, pass %NULL
@@ -539,13 +607,19 @@ emtr_connection_get_endpoint (EmtrConnection *self)
  * The data @payload must be in the form of a #GVariant that has the
  * <code>a{sv}</code> type; it is converted into JSON for sending.
  *
+ * <note><para>
+ *   This a synchronous version of emtr_connection_send().
+ *   It may block if the operation takes a long time.
+ *   Use emtr_connection_send() unless you know what you're doing.
+ * </para></note>
+ *
  * Returns: %TRUE on success, or %FALSE on failure.
  */
 gboolean
-emtr_connection_send (EmtrConnection *self,
-                      GVariant       *payload,
-                      GCancellable   *cancellable,
-                      GError        **error)
+emtr_connection_send_sync (EmtrConnection *self,
+                           GVariant       *payload,
+                           GCancellable   *cancellable,
+                           GError        **error)
 {
   g_return_val_if_fail (self != NULL && EMTR_IS_CONNECTION (self), FALSE);
   g_return_val_if_fail (payload != NULL, FALSE);
@@ -553,40 +627,77 @@ emtr_connection_send (EmtrConnection *self,
                         FALSE);
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
-  EmtrConnectionPrivate *priv = emtr_connection_get_instance_private (self);
-
-  JsonNode *payload_json = json_gvariant_serialize (payload);
-  JsonObject *data_object = json_node_get_object (payload_json);
-  json_object_set_string_member (data_object,
-                                 "fingerprint", get_fingerprint (self));
-  json_object_set_int_member (data_object,
-                             "machine", get_mac_address (self));
-
-  JsonObject *post_data_object = json_object_new ();
-  json_object_set_object_member (post_data_object,
-                                 priv->form_param_name, data_object);
-
-  JsonNode *post_data_node = json_node_alloc ();
-  json_node_init_object (post_data_node, post_data_object);
-
-  JsonGenerator *stringify = json_generator_new ();
-  json_generator_set_root (stringify, post_data_node);
-  gchar *post_data = json_generator_to_data (stringify, NULL);
-
-  json_node_free (payload_json);
-  json_node_free (post_data_node);
-  g_object_unref (stringify);
+  gchar *post_data = prepare_post_data (self, payload);
 
   GError *inner_error = NULL;
-  if (!(self->_web_send_func (get_uri (self), post_data, USERNAME, PASSWORD,
-                              cancellable, &inner_error)))
-    {
-      g_propagate_prefixed_error (error, inner_error,
-                                  "Error sending metrics data to %s@%s: ",
-                                  USERNAME, get_uri (self));
-      g_free (post_data);
-      return FALSE;
-    }
+  gboolean success = self->_web_send_sync_func (get_uri (self), post_data,
+                                                USERNAME, PASSWORD, cancellable,
+                                                &inner_error);
+  if (!success)
+    interpret_send_error (self, inner_error, error);
+
   g_free (post_data);
-  return TRUE;
+  return success;
+}
+
+/**
+ * emtr_connection_send:
+ * @self: the metrics connection
+ * @payload: a #GVariant with the data to send
+ * @cancellable: (allow-none): currently unused, pass %NULL
+ * @callback: (scope async): function to call when the operation is finished
+ * @user_data: (closure): extra parameter to pass to @callback
+ *
+ * Starts asynchronously posting the metrics data specified by @payload to the
+ * metrics server referenced by the endpoint of this connection (see
+ * #EmtrConnection:endpoint, #EmtrConnection:endpoint-config-file.)
+ * The data @payload must be in the form of a #GVariant that has the
+ * <code>a{sv}</code> type; it is converted into JSON for sending.
+ *
+ * When the operation has completed, @callback will be called and @user_data
+ * will be passed to it.
+ * Inside @callback, you must finalize the operation with
+ * emtr_connection_send_finish().
+ */
+void
+emtr_connection_send (EmtrConnection     *self,
+                      GVariant           *payload,
+                      GCancellable       *cancellable,
+                      GAsyncReadyCallback callback,
+                      gpointer            user_data)
+{
+  g_return_if_fail (self != NULL && EMTR_IS_CONNECTION (self));
+  g_return_if_fail (payload != NULL);
+  g_return_if_fail (cancellable == NULL || G_IS_CANCELLABLE (cancellable));
+  g_return_if_fail (callback != NULL);
+
+  gchar *post_data = prepare_post_data (self, payload);
+  GTask *task = g_task_new (self, cancellable, callback, user_data);
+  g_task_set_task_data (task, post_data, g_free);
+  self->_web_send_async_func (get_uri (self), post_data, USERNAME, PASSWORD,
+                              cancellable,
+                              (GAsyncReadyCallback)send_async_callback, task);
+}
+
+/**
+ * emtr_connection_send_finish:
+ * @self: the metrics connection
+ * @result: a #GAsyncResult
+ * @error: return location for a #GError, or %NULL
+ *
+ * Finishes an operation begun by emtr_connection_send().
+ *
+ * Returns: %TRUE if everything succeeded, or %FALSE if not, in which case
+ * @error is set.
+ */
+gboolean
+emtr_connection_send_finish (EmtrConnection *self,
+                             GAsyncResult   *result,
+                             GError        **error)
+{
+  g_return_val_if_fail (self != NULL && EMTR_IS_CONNECTION (self), FALSE);
+  g_return_val_if_fail (result != NULL && G_IS_ASYNC_RESULT (result), FALSE);
+  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+  return g_task_propagate_boolean (G_TASK (result), error);
 }

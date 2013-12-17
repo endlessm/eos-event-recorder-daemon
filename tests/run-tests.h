@@ -10,23 +10,43 @@
 
 /* Common code for tests */
 
-gboolean  mock_web_send           (const gchar  *uri,
-                                   const gchar  *data,
-                                   const gchar  *username,
-                                   const gchar  *password,
-                                   GCancellable *cancellable,
-                                   GError      **error);
+gboolean  mock_web_send_sync            (const gchar        *uri,
+                                         const gchar        *data,
+                                         const gchar        *username,
+                                         const gchar        *password,
+                                         GCancellable       *cancellable,
+                                         GError            **error);
 
-gboolean  mock_web_send_exception (const gchar  *uri,
-                                   const gchar  *data,
-                                   const gchar  *username,
-                                   const gchar  *password,
-                                   GCancellable *cancellable,
-                                   GError      **error);
+void      mock_web_send_async           (const gchar        *uri,
+                                         const gchar        *data,
+                                         const gchar        *username,
+                                         const gchar        *password,
+                                         GCancellable       *cancellable,
+                                         GAsyncReadyCallback callback,
+                                         gpointer            callback_data);
 
-GVariant *create_payload          (const gchar  *message,
-                                   gint64        timestamp,
-                                   gboolean      is_bug);
+gboolean  mock_web_send_finish          (GAsyncResult       *result,
+                                         GError            **error);
+
+gboolean  mock_web_send_exception_sync  (const gchar        *uri,
+                                         const gchar        *data,
+                                         const gchar        *username,
+                                         const gchar        *password,
+                                         GCancellable       *cancellable,
+                                         GError            **error);
+
+
+void      mock_web_send_exception_async (const gchar        *uri,
+                                         const gchar        *data,
+                                         const gchar        *username,
+                                         const gchar        *password,
+                                         GCancellable       *cancellable,
+                                         GAsyncReadyCallback callback,
+                                         gpointer            callback_data);
+
+GVariant *create_payload                (const gchar       *message,
+                                         gint64             timestamp,
+                                         gboolean           is_bug);
 
 /* Each module adds its own test cases: */
 

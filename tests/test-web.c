@@ -34,6 +34,9 @@ struct _WebFixture {
   /* The server handler function that the server should handle a particular test
   request with */
   WebHandlerFunc test_handler;
+
+  /* For async tests */
+  GMainLoop *testloop;
 };
 
 /* Authentication callback for test server */
@@ -89,6 +92,8 @@ setup (WebFixture   *fixture,
   fixture->server_thread = g_thread_new ("test server",
                                          (GThreadFunc)g_main_loop_run,
                                          fixture->mainloop);
+
+  fixture->testloop = g_main_loop_new (NULL, FALSE);
 }
 
 /* Unit test teardown function. The server should have exited by now, so wait
@@ -104,6 +109,7 @@ teardown (WebFixture   *fixture,
   g_thread_unref (fixture->server_thread);
   g_main_loop_unref (fixture->mainloop);
   g_main_context_unref (fixture->mainctxt);
+  g_main_loop_unref (fixture->testloop);
 }
 
 /* Handler that accepts all requests */
@@ -173,11 +179,10 @@ test_web_post_authorized_success (WebFixture   *fixture,
                                   gconstpointer unused)
 {
   GError *error = NULL;
-  gboolean success = emtr_web_post_authorized ("http://localhost:8123", "{}",
-                                               EXPECTED_USERNAME,
-                                               EXPECTED_PASSWORD,
-                                               NULL,
-                                               &error);
+  gboolean success = emtr_web_post_authorized_sync ("http://localhost:8123",
+                                                    "{}", EXPECTED_USERNAME,
+                                                    EXPECTED_PASSWORD, NULL,
+                                                    &error);
   g_assert (success);
   g_assert_no_error (error);
 }
@@ -187,14 +192,14 @@ test_web_post_fails_on_404 (WebFixture   *fixture,
                             gconstpointer unused)
 {
   GError *error = NULL;
-  gboolean success = emtr_web_post_authorized ("http://localhost:8123", "{}",
-                                               EXPECTED_USERNAME,
-                                               EXPECTED_PASSWORD,
-                                               NULL,
-                                               &error);
+  gboolean success = emtr_web_post_authorized_sync ("http://localhost:8123",
+                                                    "{}", EXPECTED_USERNAME,
+                                                    EXPECTED_PASSWORD, NULL,
+                                                    &error);
   g_assert (!success);
   g_assert_error (error, G_IO_ERROR, G_IO_ERROR_FAILED);
   g_assert (strstr (error->message, "404") != NULL);
+  g_error_free (error);
 }
 
 static void
@@ -202,14 +207,14 @@ test_web_post_fails_on_wrong_credentials (WebFixture   *fixture,
                                           gconstpointer unused)
 {
   GError *error = NULL;
-  gboolean success = emtr_web_post_authorized ("http://localhost:8123", "{}",
-                                               "fake-username",
-                                               "fake-password",
-                                               NULL,
-                                               &error);
+  gboolean success = emtr_web_post_authorized_sync ("http://localhost:8123",
+                                                    "{}", "fake-username",
+                                                    "fake-password", NULL,
+                                                    &error);
   g_assert (!success);
   g_assert_error (error, G_IO_ERROR, G_IO_ERROR_FAILED);
   g_assert (strstr (error->message, "401") != NULL);
+  g_error_free (error);
 }
 
 static void
@@ -217,12 +222,11 @@ test_web_ensure_all_data_sent_correctly (WebFixture   *fixture,
                                          gconstpointer unused)
 {
   GError *error = NULL;
-  gboolean success = emtr_web_post_authorized ("http://localhost:8123",
-                                               EXPECTED_JSON_DATA,
-                                               EXPECTED_USERNAME,
-                                               EXPECTED_PASSWORD,
-                                               NULL,
-                                               &error);
+  gboolean success = emtr_web_post_authorized_sync ("http://localhost:8123",
+                                                    EXPECTED_JSON_DATA,
+                                                    EXPECTED_USERNAME,
+                                                    EXPECTED_PASSWORD, NULL,
+                                                    &error);
   g_assert (success);
   g_assert_no_error (error);
 
@@ -240,23 +244,146 @@ test_web_ensure_all_data_sent_correctly (WebFixture   *fixture,
   g_free (body);
 }
 
+static void
+async_post_authorized_success_done (GObject      *unused,
+                                    GAsyncResult *result,
+                                    WebFixture   *fixture)
+{
+  GError *error = NULL;
+  gboolean success = emtr_web_post_authorized_finish (result, &error);
+  g_assert (success);
+  g_assert_no_error (error);
+  g_main_loop_quit (fixture->testloop);
+}
+
+static void
+test_web_async_post_authorized_success (WebFixture   *fixture,
+                                        gconstpointer unused)
+{
+  emtr_web_post_authorized ("http://localhost:8123", "{}",
+                            EXPECTED_USERNAME, EXPECTED_PASSWORD, NULL,
+                            (GAsyncReadyCallback)async_post_authorized_success_done,
+                            fixture);
+  g_main_loop_run (fixture->testloop);
+}
+
+static void
+async_post_fails_on_404_done (GObject      *unused,
+                              GAsyncResult *result,
+                              WebFixture   *fixture)
+{
+  GError *error = NULL;
+  gboolean success = emtr_web_post_authorized_finish (result, &error);
+  g_assert (!success);
+  g_assert_error (error, G_IO_ERROR, G_IO_ERROR_FAILED);
+  g_assert (strstr (error->message, "404") != NULL);
+  g_error_free (error);
+  g_main_loop_quit (fixture->testloop);
+}
+
+static void
+test_web_async_post_fails_on_404 (WebFixture   *fixture,
+                                  gconstpointer unused)
+{
+  emtr_web_post_authorized ("http://localhost:8123", "{}",
+                            EXPECTED_USERNAME, EXPECTED_PASSWORD, NULL,
+                            (GAsyncReadyCallback)async_post_fails_on_404_done,
+                            fixture);
+  g_main_loop_run (fixture->testloop);
+}
+
+static void
+async_post_fails_on_wrong_credentials_done (GObject      *unused,
+                                            GAsyncResult *result,
+                                            WebFixture   *fixture)
+{
+  GError *error = NULL;
+  gboolean success = emtr_web_post_authorized_finish (result, &error);
+  g_assert (!success);
+  g_assert_error (error, G_IO_ERROR, G_IO_ERROR_FAILED);
+  g_assert (strstr (error->message, "401") != NULL);
+  g_error_free (error);
+  g_main_loop_quit (fixture->testloop);
+}
+
+static void
+test_web_async_post_fails_on_wrong_credentials (WebFixture   *fixture,
+                                                gconstpointer unused)
+{
+  emtr_web_post_authorized ("http://localhost:8123", "{}",
+                            "fake-username", "fake-password", NULL,
+                            (GAsyncReadyCallback)async_post_fails_on_wrong_credentials_done,
+                            fixture);
+  g_main_loop_run (fixture->testloop);
+}
+
+static void
+async_ensure_all_data_sent_correctly_done (GObject      *unused,
+                                           GAsyncResult *result,
+                                           WebFixture   *fixture)
+{
+  GError *error = NULL;
+  gboolean success = emtr_web_post_authorized_finish (result, &error);
+
+  g_assert (success);
+  g_assert_no_error (error);
+
+  gchar *content_type = g_object_get_data (G_OBJECT (fixture->server),
+                                           "content-type");
+  g_assert_cmpstr (content_type, ==, "application/x-www-form-urlencoded");
+  g_free (content_type);
+
+  gchar *accept = g_object_get_data (G_OBJECT (fixture->server), "accept");
+  g_assert_cmpstr (accept, ==, "application/json");
+  g_free (accept);
+
+  gchar *body = g_object_get_data (G_OBJECT (fixture->server), "body");
+  g_assert_cmpstr (body, ==, EXPECTED_JSON_DATA);
+
+  g_free (body);
+  g_main_loop_quit (fixture->testloop);
+}
+
+static void
+test_web_async_ensure_all_data_sent_correctly (WebFixture   *fixture,
+                                               gconstpointer unused)
+{
+  emtr_web_post_authorized ("http://localhost:8123", EXPECTED_JSON_DATA,
+                            EXPECTED_USERNAME, EXPECTED_PASSWORD, NULL,
+                            (GAsyncReadyCallback)async_ensure_all_data_sent_correctly_done,
+                            fixture);
+  g_main_loop_run (fixture->testloop);
+}
+
 void
 add_web_tests (void)
 {
 #define ADD_WEB_TEST_FUNC(path, func, handler) \
   g_test_add ((path), WebFixture, (handler), setup, (func), teardown)
 
-  ADD_WEB_TEST_FUNC ("/web/post-authorized-success",
+  ADD_WEB_TEST_FUNC ("/web/sync/post-authorized-success",
                      test_web_post_authorized_success,
                      okay_everything_handler);
-  ADD_WEB_TEST_FUNC ("/web/post-fails-on-404",
+  ADD_WEB_TEST_FUNC ("/web/sync/post-fails-on-404",
                      test_web_post_fails_on_404,
                      reject_everything_handler);
-  ADD_WEB_TEST_FUNC ("/web/post-fails-on-wrong-credentials",
+  ADD_WEB_TEST_FUNC ("/web/sync/post-fails-on-wrong-credentials",
                      test_web_post_fails_on_wrong_credentials,
                      okay_everything_handler);
-  ADD_WEB_TEST_FUNC ("/web/ensure-all-data-sent-correctly",
+  ADD_WEB_TEST_FUNC ("/web/sync/ensure-all-data-sent-correctly",
                      test_web_ensure_all_data_sent_correctly,
+                     analyze_request_handler);
+  ADD_WEB_TEST_FUNC ("/web/async/post-authorized-success",
+                     test_web_async_post_authorized_success,
+                     okay_everything_handler);
+  ADD_WEB_TEST_FUNC ("/web/async/post-fails-on-404",
+                     test_web_async_post_fails_on_404,
+                     reject_everything_handler);
+  ADD_WEB_TEST_FUNC ("/web/async/post-fails-on-wrong-credentials",
+                     test_web_async_post_fails_on_wrong_credentials,
+                     okay_everything_handler);
+  ADD_WEB_TEST_FUNC ("/web/async/ensure-all-data-sent-correctly",
+                     test_web_async_ensure_all_data_sent_correctly,
                      analyze_request_handler);
 
 #undef ADD_WEB_TEST_FUNC

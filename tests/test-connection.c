@@ -66,6 +66,7 @@ mock_web_send_assert_fingerprint (const gchar *uri,
 struct ConnectionFixture {
   GFile *tmpdir;
   GFile *fingerprint_file;
+  GFile *endpoint_file;
   EmtrConnection *test_object;
 };
 
@@ -76,6 +77,12 @@ setup (struct ConnectionFixture *fixture,
   gchar *tmpdirpath = g_mkdtemp (g_strdup (TMP_DIRECTORY_TEMPLATE));
   fixture->tmpdir = g_file_new_for_path (tmpdirpath);
   fixture->fingerprint_file = g_file_get_child (fixture->tmpdir, "fingerprint");
+  fixture->endpoint_file = g_file_get_child (fixture->tmpdir, "endpoint.json");
+  g_assert (g_file_replace_contents (fixture->endpoint_file,
+                                     MOCK_ENDPOINT_FILE_CONTENTS,
+                                     strlen (MOCK_ENDPOINT_FILE_CONTENTS), NULL,
+                                     FALSE, G_FILE_CREATE_REPLACE_DESTINATION,
+                                     NULL, NULL, NULL));
   g_free (tmpdirpath);
 
   fixture->test_object = g_object_new (EMTR_TYPE_CONNECTION,
@@ -91,8 +98,14 @@ static void
 teardown (struct ConnectionFixture *fixture,
           gconstpointer             unused)
 {
-  g_object_unref (fixture->tmpdir);
+  /* Remove temp dir */
+  g_assert (g_file_delete (fixture->endpoint_file, NULL, NULL));
+  g_object_unref (fixture->endpoint_file);
+  g_file_delete (fixture->fingerprint_file, NULL, NULL); /* ignore error */
   g_object_unref (fixture->fingerprint_file);
+  g_assert (g_file_delete (fixture->tmpdir, NULL, NULL));
+  g_object_unref (fixture->tmpdir);
+
   g_object_unref (fixture->test_object);
 }
 
@@ -144,17 +157,11 @@ static void
 test_connection_makes_correct_send_call (struct ConnectionFixture *fixture,
                                          gconstpointer             unused)
 {
-  GFile *endpoint_file = g_file_get_child (fixture->tmpdir, "endpoint.json");
-  g_assert (g_file_replace_contents (endpoint_file, MOCK_ENDPOINT_FILE_CONTENTS,
-                                     strlen (MOCK_ENDPOINT_FILE_CONTENTS), NULL,
-                                     FALSE, G_FILE_CREATE_REPLACE_DESTINATION,
-                                     NULL, NULL, NULL));
-
   g_object_unref (fixture->test_object);
   fixture->test_object = g_object_new (EMTR_TYPE_CONNECTION,
                                        "uri-context", "foobar",
                                        "form-param-name", "foobaz",
-                                       "endpoint-config-file", endpoint_file,
+                                       "endpoint-config-file", fixture->endpoint_file,
                                        NULL);
   fixture->test_object->_uuid_gen_func = mock_uuid;
   fixture->test_object->_mac_gen_func = mock_mac;

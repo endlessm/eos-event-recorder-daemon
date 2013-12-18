@@ -21,8 +21,17 @@ tests_run_tests_CPPFLAGS = $(TEST_FLAGS)
 tests_run_tests_LDADD = $(TEST_LIBS)
 
 javascript_tests = \
+	tests/testIntegration.js \
 	$(NULL)
-EXTRA_DIST += $(javascript_tests)
+EXTRA_DIST += \
+	$(javascript_tests) \
+	tests/mockServer.js \
+	jasmine/eos-jasmine-run \
+	jasmine/jasminegjsbootstrap.js \
+	jasmine/EndlessConsoleReporter.js \
+	jasmine/EndlessTimer.js \
+	jasmine/lib/jasmine-core/jasmine.js \
+	$(NULL)
 
 # Run tests when running 'make check'
 TESTS = \
@@ -30,9 +39,10 @@ TESTS = \
 	$(javascript_tests) \
 	$(NULL)
 TEST_EXTENSIONS = .js
-JS_LOG_COMPILER = eos-run-test
+JS_LOG_COMPILER = $(top_srcdir)/jasmine/eos-jasmine-run
 AM_JS_LOG_FLAGS = \
-	--include-path=$(top_srcdir) \
+	--include-path=$(top_srcdir)/jasmine \
+	--include-path=$(top_srcdir)/tests \
 	$(NULL)
 LOG_COMPILER = gtester
 AM_LOG_FLAGS = -k --verbose

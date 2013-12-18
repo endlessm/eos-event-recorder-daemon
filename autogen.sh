@@ -13,10 +13,11 @@ test -f $FILE_MUST_EXIST || {
     exit 1
 }
 
-# Install our commit message script if a git repo
+# Install our commit message script, and update submodules, if a git repo
 if [ -d .git ]; then
     cp commit-msg .git/hooks/commit-msg
     chmod +x .git/hooks/commit-msg
+    git submodule update --init || exit $?
 fi
 
 # NOCONFIGURE is used by gnome-common

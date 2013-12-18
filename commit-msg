@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# move this script to the .git/hooks directory for your repo.
+# make sure to chmod +x .git/hooks/commit-msg
+
+branch=`git rev-parse --abbrev-ref HEAD`
+
+if [[ $branch == issues/* ]]; then
+  link=$(echo $branch | awk -F/ '{ print "[endlessm/eos-sdk#"$2"]" }')
+  echo "issue link: $link"
+  echo $link >> $1
+fi
+
+exit 0

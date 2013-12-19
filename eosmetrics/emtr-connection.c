@@ -4,6 +4,7 @@
 
 #include "emtr-connection.h"
 #include "emtr-mac-private.h"
+#include "emtr-util-private.h"
 #include "emtr-uuid-private.h"
 #include "emtr-web-private.h"
 
@@ -20,8 +21,8 @@
  * @include: eosmetrics/eosmetrics.h
  *
  * Represents a connection to a metrics collection server.
- * Usually you will not have to create this object yourself; the
- * #EmtrSendProcess will create one with default values.
+ * Usually you will not have to create this object yourself; the #EmtrSender
+ * will create one with default values.
  */
 
 #define DEFAULT_ENDPOINT "http://localhost:3000"
@@ -64,10 +65,7 @@ emtr_connection_constructed (GObject *object)
   /* Set default values for GObject construct-only properties */
   if (priv->endpoint_config_file == NULL || priv->fingerprint_file == NULL)
     {
-      const gchar *user = g_get_user_data_dir ();
-      GFile *user_dir = g_file_new_for_path (user);
-      GFile *eos_metrics_dir = g_file_get_child (user_dir, "eosmetrics");
-      g_object_unref (user_dir);
+      GFile *eos_metrics_dir = emtr_get_data_dir ();
 
       if (priv->endpoint_config_file == NULL)
         priv->endpoint_config_file = g_file_get_child (eos_metrics_dir,

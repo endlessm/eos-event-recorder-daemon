@@ -11,7 +11,9 @@ G_BEGIN_DECLS
 
 /* Pull in other header files */
 #include "emtr-types.h"
+#include "emtr-util.h"
 #include "emtr-connection.h"
+#include "emtr-sender.h"
 
 #undef _EMTR_INSIDE_EOSMETRICS_H
 

@@ -14,6 +14,8 @@ tests_run_tests_SOURCES = \
 	tests/test-osversion.c \
 	tests/test-uuid.c \
 	tests/test-web.c \
+	tests/test-sender.c \
+	tests/test-util.c \
 	$(NULL)
 tests_run_tests_CPPFLAGS = $(TEST_FLAGS)
 tests_run_tests_LDADD = $(TEST_LIBS)

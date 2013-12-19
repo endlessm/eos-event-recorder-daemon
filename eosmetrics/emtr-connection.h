@@ -69,15 +69,35 @@ struct _EmtrConnection
    */
   gint64 (*_mac_gen_func) (void);
   /**
-   * _web_send_func: (skip)
+   * _web_send_sync_func: (skip)
    *
    * For testing only.
    */
-  gboolean (*_web_send_func) (const gchar *uri,
-                              const gchar *data,
-                              const gchar *user,
-                              const gchar *pass,
-                              GError **error);
+  gboolean (*_web_send_sync_func) (const gchar  *uri,
+                                   const gchar  *data,
+                                   const gchar  *user,
+                                   const gchar  *pass,
+                                   GCancellable *cancellable,
+                                   GError      **error);
+  /**
+   * _web_send_async_func: (skip)
+   *
+   * For testing only.
+   */
+  void (*_web_send_async_func) (const gchar        *uri,
+                                const gchar        *data,
+                                const gchar        *user,
+                                const gchar        *pass,
+                                GCancellable       *cancellable,
+                                GAsyncReadyCallback callback,
+                                gpointer            callback_data);
+  /**
+   * _web_send_func_finish: (skip)
+   *
+   * For testing only.
+   */
+  gboolean (*_web_send_finish_func) (GAsyncResult *result,
+                                     GError      **error);
 };
 
 struct _EmtrConnectionClass
@@ -93,30 +113,43 @@ EMTR_ALL_API_VERSIONS
 GType           emtr_connection_get_type                 (void) G_GNUC_CONST;
 
 EMTR_ALL_API_VERSIONS
-EmtrConnection *emtr_connection_new                      (const gchar    *uri_context,
-                                                          const gchar    *form_param_name,
-                                                          GFile          *endpoint_config_file,
-                                                          GFile          *fingerprint_file);
+EmtrConnection *emtr_connection_new                      (const gchar        *uri_context,
+                                                          const gchar        *form_param_name,
+                                                          GFile              *endpoint_config_file,
+                                                          GFile              *fingerprint_file);
 
 EMTR_ALL_API_VERSIONS
-const gchar    *emtr_connection_get_uri_context          (EmtrConnection *self);
+const gchar    *emtr_connection_get_uri_context          (EmtrConnection     *self);
 
 EMTR_ALL_API_VERSIONS
-const gchar    *emtr_connection_get_form_param_name      (EmtrConnection *self);
+const gchar    *emtr_connection_get_form_param_name      (EmtrConnection     *self);
 
 EMTR_ALL_API_VERSIONS
-GFile          *emtr_connection_get_endpoint_config_file (EmtrConnection *self);
+GFile          *emtr_connection_get_endpoint_config_file (EmtrConnection     *self);
 
 EMTR_ALL_API_VERSIONS
-GFile          *emtr_connection_get_fingerprint_file     (EmtrConnection *self);
+GFile          *emtr_connection_get_fingerprint_file     (EmtrConnection     *self);
 
 EMTR_ALL_API_VERSIONS
-const gchar    *emtr_connection_get_endpoint             (EmtrConnection *self);
+const gchar    *emtr_connection_get_endpoint             (EmtrConnection     *self);
 
 EMTR_ALL_API_VERSIONS
-gboolean        emtr_connection_send                     (EmtrConnection *self,
-                                                          GVariant       *payload,
-                                                          GError        **error);
+gboolean        emtr_connection_send_sync                (EmtrConnection     *self,
+                                                          GVariant           *payload,
+                                                          GCancellable       *cancellable,
+                                                          GError            **error);
+
+EMTR_ALL_API_VERSIONS
+void            emtr_connection_send                     (EmtrConnection     *self,
+                                                          GVariant           *payload,
+                                                          GCancellable       *cancellable,
+                                                          GAsyncReadyCallback callback,
+                                                          gpointer            user_data);
+
+EMTR_ALL_API_VERSIONS
+gboolean        emtr_connection_send_finish              (EmtrConnection     *self,
+                                                          GAsyncResult       *result,
+                                                          GError            **error);
 
 G_END_DECLS
 

@@ -6,24 +6,59 @@
 #include "run-tests.h"
 
 gboolean
-mock_web_send (const gchar *uri,
-               const gchar *data,
-               const gchar *username,
-               const gchar *password,
-               GError     **error)
+mock_web_send_sync (const gchar  *uri,
+                    const gchar  *data,
+                    const gchar  *username,
+                    const gchar  *password,
+                    GCancellable *cancellable,
+                    GError      **error)
 {
   return TRUE;
 }
 
+void
+mock_web_send_async (const gchar        *uri,
+                     const gchar        *data,
+                     const gchar        *username,
+                     const gchar        *password,
+                     GCancellable       *cancellable,
+                     GAsyncReadyCallback callback,
+                     gpointer            callback_data)
+{
+  GTask *task = g_task_new (NULL, NULL, callback, callback_data);
+  g_task_return_boolean (task, TRUE);
+}
+
 gboolean
-mock_web_send_exception (const gchar *uri,
-                         const gchar *data,
-                         const gchar *username,
-                         const gchar *password,
-                         GError     **error)
+mock_web_send_finish (GAsyncResult *result,
+                      GError      **error)
+{
+  return g_task_propagate_boolean (G_TASK (result), error);
+}
+
+gboolean
+mock_web_send_exception_sync (const gchar  *uri,
+                              const gchar  *data,
+                              const gchar  *username,
+                              const gchar  *password,
+                              GCancellable *cancellable,
+                              GError      **error)
 {
   g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "Mock message");
   return FALSE;
+}
+
+void
+mock_web_send_exception_async (const gchar        *uri,
+                               const gchar        *data,
+                               const gchar        *username,
+                               const gchar        *password,
+                               GCancellable       *cancellable,
+                               GAsyncReadyCallback callback,
+                               gpointer            callback_data)
+{
+  GTask *task = g_task_new (NULL, NULL, callback, callback_data);
+  g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_FAILED, "Mock message");
 }
 
 /* Returns a GVariant with a floating reference */

@@ -16,6 +16,8 @@ EmtrConnectionClass
 emtr_connection_new
 <SUBSECTION Methods>
 emtr_connection_send
+emtr_connection_send_finish
+emtr_connection_send_sync
 <SUBSECTION Getters>
 emtr_connection_get_endpoint
 emtr_connection_get_endpoint_config_file
@@ -40,6 +42,8 @@ EmtrSenderClass
 emtr_sender_new
 <SUBSECTION Methods>
 emtr_sender_send_data
+emtr_sender_send_data_finish
+emtr_sender_send_data_sync
 <SUBSECTION Getters>
 emtr_sender_get_connection
 emtr_sender_get_storage_file

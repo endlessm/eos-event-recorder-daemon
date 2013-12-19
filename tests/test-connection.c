@@ -193,6 +193,7 @@ test_connection_makes_correct_send_call (struct ConnectionFixture *fixture,
                                        "uri-context", "foobar",
                                        "form-param-name", "foobaz",
                                        "endpoint-config-file", endpoint_file,
+                                       "fingerprint-file", fixture->fingerprint_file,
                                        NULL);
   fixture->test_object->_uuid_gen_func = mock_uuid;
   fixture->test_object->_mac_gen_func = mock_mac;

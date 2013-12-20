@@ -183,6 +183,7 @@ test_sender_invoking_send_data (struct SenderFixture *fixture,
   GVariant *payload = create_payload ("foo bar", 1001, FALSE);
 
   fixture->connection->_web_send_sync_func = mock_web_send_assert_data_sync;
+  fixture->connection->_web_send_async_func = mock_web_send_assert_data_async;
 
   g_assert (emtr_sender_send_data_sync (fixture->test_object, payload,
                                         NULL, &error));
@@ -205,6 +206,7 @@ test_sender_on_failure_save_payload_to_file (struct SenderFixture *fixture,
   GVariant *fourth = create_payload ("baz", 2004, FALSE);
 
   fixture->connection->_web_send_sync_func = mock_web_send_sometimes_fail_sync;
+  fixture->connection->_web_send_async_func = mock_web_send_sometimes_fail_async;
 
   g_assert (emtr_sender_send_data_sync (fixture->test_object, first,
                                         NULL, &error));
@@ -237,6 +239,7 @@ test_sender_cancel_send (struct SenderFixture *fixture,
   GCancellable *cancellable = g_cancellable_new ();
 
   fixture->connection->_web_send_sync_func = mock_web_send_exception_sync;
+  fixture->connection->_web_send_async_func = mock_web_send_exception_async;
 
   g_cancellable_cancel (cancellable);
   gboolean success = emtr_sender_send_data_sync (fixture->test_object, payload,
@@ -266,7 +269,7 @@ static void
 test_sender_async_invoking_send_data (struct SenderFixture *fixture,
                                       gconstpointer         unused)
 {
-
+  fixture->connection->_web_send_sync_func = mock_web_send_assert_data_sync;
   fixture->connection->_web_send_async_func = mock_web_send_assert_data_async;
 
   GVariant *payload = create_payload ("foo bar", 1001, FALSE);
@@ -303,6 +306,7 @@ test_sender_async_on_failure_save_payload_to_file (struct SenderFixture *fixture
   GVariant *third = create_payload ("biz", 2003, TRUE);
   GVariant *fourth = create_payload ("baz", 2004, FALSE);
 
+  fixture->connection->_web_send_sync_func = mock_web_send_sometimes_fail_sync;
   fixture->connection->_web_send_async_func = mock_web_send_sometimes_fail_async;
 
   emtr_sender_send_data (fixture->test_object, first, NULL,
@@ -352,6 +356,7 @@ test_sender_async_cancel_send (struct SenderFixture *fixture,
 {
   GCancellable *cancellable = g_cancellable_new ();
 
+  fixture->connection->_web_send_sync_func = mock_web_send_exception_sync;
   fixture->connection->_web_send_async_func = mock_web_send_exception_async;
 
   GVariant *payload = create_payload ("foo", 1234, TRUE);

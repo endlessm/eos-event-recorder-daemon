@@ -13,6 +13,7 @@
 #define TMP_FILE_TEMPLATE "metricssendprocesstestXXXXXX.json"
 #define EXPECTED_RELATIVE_FILENAME "metricssendprocesstest.json"
 #define EXPECTED_DATA_QUEUE "[{\"message\":\"bar\",\"timestamp\":2002,\"bug\":false},{\"message\":\"biz\",\"timestamp\":2003,\"bug\":true}]"
+#define MOCK_QUEUE "[{\"test1\":\"foo\"},{\"test2\":\"bar\"}]"
 
 static gboolean mock_web_send_assert_data_called = FALSE;
 
@@ -78,6 +79,15 @@ mock_web_send_assert_data_async (const gchar        *uri,
   mock_web_send_assert_data_sync (uri, data, username, password, NULL, NULL);
   mock_web_send_async (uri, data, username, password,
                        NULL, callback, callback_data);
+}
+
+static void
+ensure_mock_queue (GFile *queue_file)
+{
+  g_assert (g_file_replace_contents (queue_file, MOCK_QUEUE,
+                                     strlen (MOCK_QUEUE), NULL, FALSE,
+                                     G_FILE_CREATE_REPLACE_DESTINATION, NULL,
+                                     NULL, NULL));
 }
 
 struct SenderFixture {
@@ -253,6 +263,43 @@ test_sender_cancel_send (struct SenderFixture *fixture,
 }
 
 static void
+test_sender_sync_sends_all_data_in_queue (struct SenderFixture *fixture,
+                                          gconstpointer         unused)
+{
+  ensure_mock_queue (fixture->storage_file);
+
+  GError *error = NULL;
+  gboolean success = emtr_sender_send_queued_data_sync (fixture->test_object,
+                                                        NULL, &error);
+
+  g_assert (success);
+  g_assert_no_error (error);
+  gchar *loaded_queue = get_payload_from_file (fixture->test_object);
+  g_assert_cmpstr (loaded_queue, ==, "[]");
+  g_free (loaded_queue);
+}
+
+static void
+test_sender_sync_requeues_data_that_still_cant_be_sent (struct SenderFixture *fixture,
+                                                        gconstpointer         unused)
+{
+  ensure_mock_queue (fixture->storage_file);
+  fixture->connection->_web_send_sync_func = mock_web_send_exception_sync;
+  fixture->connection->_web_send_async_func = mock_web_send_exception_async;
+
+  GError *error = NULL;
+  gboolean success = emtr_sender_send_queued_data_sync (fixture->test_object,
+                                                        NULL, &error);
+
+  g_assert (success);
+  g_assert_no_error (error);
+  gchar *loaded_queue = get_payload_from_file (fixture->test_object);
+  /* Again, a bit iffy because the order of the queue is not guaranteed */
+  g_assert_cmpstr (loaded_queue, ==, MOCK_QUEUE);
+  g_free (loaded_queue);
+}
+
+static void
 async_invoking_send_data_done (EmtrSender           *sender,
                                GAsyncResult         *result,
                                struct SenderFixture *fixture)
@@ -370,6 +417,54 @@ test_sender_async_cancel_send (struct SenderFixture *fixture,
   g_object_unref (cancellable);
 }
 
+static void
+async_send_queue_done (EmtrSender           *sender,
+                       GAsyncResult         *result,
+                       struct SenderFixture *fixture)
+{
+  GError *error = NULL;
+  gboolean success = emtr_sender_send_queued_data_finish (fixture->test_object,
+                                                          result, &error);
+  g_assert (success);
+  g_assert_no_error (error);
+
+  g_main_loop_quit (fixture->mainloop);
+}
+
+static void
+test_sender_async_sends_all_data_in_queue (struct SenderFixture *fixture,
+                                           gconstpointer         unused)
+{
+  ensure_mock_queue (fixture->storage_file);
+  emtr_sender_send_queued_data (fixture->test_object, NULL,
+                                (GAsyncReadyCallback)async_send_queue_done,
+                                fixture);
+  g_main_loop_run (fixture->mainloop);
+
+  gchar *loaded_queue = get_payload_from_file (fixture->test_object);
+  g_assert_cmpstr (loaded_queue, ==, "[]");
+  g_free (loaded_queue);
+}
+
+static void
+test_sender_async_requeues_data_that_still_cant_be_sent (struct SenderFixture *fixture,
+                                                         gconstpointer         unused)
+{
+  ensure_mock_queue (fixture->storage_file);
+  fixture->connection->_web_send_sync_func = mock_web_send_exception_sync;
+  fixture->connection->_web_send_async_func = mock_web_send_exception_async;
+
+  emtr_sender_send_queued_data (fixture->test_object, NULL,
+                                (GAsyncReadyCallback)async_send_queue_done,
+                                fixture);
+  g_main_loop_run (fixture->mainloop);
+
+  gchar *loaded_queue = get_payload_from_file (fixture->test_object);
+  /* Again, a bit iffy because the order of the queue is not guaranteed */
+  g_assert_cmpstr (loaded_queue, ==, MOCK_QUEUE);
+  g_free (loaded_queue);
+}
+
 void
 add_sender_tests (void)
 {
@@ -386,12 +481,20 @@ add_sender_tests (void)
   ADD_SENDER_TEST_FUNC ("/sender/sync/on-failure-save-payload-to-file",
                         test_sender_on_failure_save_payload_to_file);
   ADD_SENDER_TEST_FUNC ("/sender/sync/cancel-send", test_sender_cancel_send);
+  ADD_SENDER_TEST_FUNC ("/sender/sync/sends-all-data-in-queue",
+                        test_sender_sync_sends_all_data_in_queue);
+  ADD_SENDER_TEST_FUNC ("/sender/sync/requeues-data-that-still-cant-be-sent",
+                        test_sender_sync_requeues_data_that_still_cant_be_sent);
   ADD_SENDER_TEST_FUNC ("/sender/async/invoking-send-data",
                         test_sender_async_invoking_send_data);
   ADD_SENDER_TEST_FUNC ("/sender/async/on-failure-save-payload-to-file",
                         test_sender_async_on_failure_save_payload_to_file);
   ADD_SENDER_TEST_FUNC ("/sender/async/cancel-send",
                         test_sender_async_cancel_send);
+  ADD_SENDER_TEST_FUNC ("/sender/async/sends-all-data-in-queue",
+                        test_sender_async_sends_all_data_in_queue);
+  ADD_SENDER_TEST_FUNC ("/sender/async/requeues-data-that-still-cant-be-sent",
+                        test_sender_async_requeues_data_that_still_cant_be_sent);
 
 #undef ADD_SENDER_TEST_FUNC
 }

@@ -5,12 +5,13 @@
 const EosMetrics = imports.gi.EosMetrics;
 const Gio = imports.gi.Gio;
 const GLib = imports.gi.GLib;
+const Mainloop = imports.mainloop;
 
 const MockServer = imports.mockServer.MockServer;
 
 const MOCK_SERVER_PORT = 8123;
 const MOCK_ENDPOINT = 'http://localhost:' + MOCK_SERVER_PORT;
-const MAX_MS_WAIT = 1000;
+const MAX_SEC_WAIT = 5;
 
 describe('Testing the whole metrics kit against a mock server', function () {
     let endpointFile, tmpFile, fingerprintFile, storageFile, sender, server;
@@ -43,6 +44,9 @@ describe('Testing the whole metrics kit against a mock server', function () {
             storage_file: storageFile
         });
 
+        // Sanity check
+        expect(sender.connection.endpoint).toBe(MOCK_ENDPOINT);
+
         // Dummy strings to put in metrics data
         payloadData = ['foo', 'bar', 'biz', 'baz'];
     });
@@ -64,6 +68,10 @@ describe('Testing the whole metrics kit against a mock server', function () {
         });
 
         _sendPayloadsThenQuit(2);
+        printerr('running server async');
+        server.run_async();
+        printerr('running main loop');
+        Mainloop.run();
 
         let data = server.messagesReceived;
         expect(data).toEqual([{
@@ -82,8 +90,7 @@ describe('Testing the whole metrics kit against a mock server', function () {
         }]);
         expect(data[0].formParam.fingerprint)
             .toEqual(data[1].formParam.fingerprint);
-        expect(data[0].formParam.machine)
-            .toEqual(data[1].formParam.machine);
+        expect(data[0].formParam.machine).toEqual(data[1].formParam.machine);
     });
 
     it('queues all data when the server is down', function () {
@@ -92,6 +99,8 @@ describe('Testing the whole metrics kit against a mock server', function () {
         });
 
         _sendPayloadsThenQuit(2);
+        server.run_async();
+        Mainloop.run();
 
         expect(server.messagesReceived).toEqual([]);
         expect(_getQueuedData()).toEqual([
@@ -106,6 +115,8 @@ describe('Testing the whole metrics kit against a mock server', function () {
         });
 
         _sendPayloadsThenQuit(4);
+        server.run_async();
+        Mainloop.run();
 
         let data = server.messagesReceived;
         expect(data).toEqual([{
@@ -135,19 +146,29 @@ describe('Testing the whole metrics kit against a mock server', function () {
 
     // hurray for avoiding callback hell
     function _sendPayloadsThenQuit(num) {
+        printerr('send then quit');
         let payload = new GLib.Variant('a{sv}', {
             test: new GLib.Variant('s', payloadData[0])
         });
         payloadData.push(payloadData.shift());
 
         sender.send_data(payload, null, function (obj, res) {
-            sender.send_data_finish(res);
-            if (num > 1)
+            printerr('callback');
+            if (sender.send_data_finish(res) && num > 1)
                 _sendPayloadsThenQuit(num - 1);
-            else
+            else {
                 server.disconnect();
+                Mainloop.quit();
+            }
         });
-        server.run();
+
+        printerr('installing timeout');
+        // Abort the test if it's taking too long
+        GLib.timeout_add_seconds(GLib.PRIORITY_HIGH, MAX_SEC_WAIT, function () {
+            server.disconnect();
+            Mainloop.quit();
+        });
+        printerr('done with function');
     }
 
     function _getQueuedData() {

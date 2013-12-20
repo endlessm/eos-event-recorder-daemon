@@ -53,15 +53,18 @@ const MockServer = new Lang.Class({
             this.add_handler('/' + this.URI_CONTEXT, Lang.bind(this,
                 this._acceptHandler));
         }
+        printerr('done constructing server');
     },
 
     _acceptHandler: function (server, message, path, query, client) {
+        printerr('accept handler');
         let data = JSON.parse(message.request_body.flatten().get_data());
         this.messagesReceived.push(data);
         message.set_status(200);
     },
 
     _rejectHandler: function (server, message, path, query, client) {
+        printerr('reject handler');
         message.set_status(404);
     },
 
@@ -75,6 +78,7 @@ const MockServer = new Lang.Class({
     },
 
     _authorizeCallback: function (domain, message, user, pass) {
+        printerr('authorize callback');
         return (user === this.EXPECTED_USERNAME &&
             pass === this.EXPECTED_PASSWORD);
     },

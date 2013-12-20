@@ -465,7 +465,9 @@ emtr_sender_send_data_sync (EmtrSender   *self,
                             GError      **error)
 {
   g_return_val_if_fail (self != NULL && EMTR_IS_SENDER (self), FALSE);
-  g_return_val_if_fail (payload != NULL, FALSE);
+  g_return_val_if_fail (payload != NULL
+                        && g_variant_is_of_type (payload, G_VARIANT_TYPE_VARDICT),
+                        FALSE);
   g_return_val_if_fail (cancellable == NULL || G_IS_CANCELLABLE (cancellable),
                         FALSE);
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
@@ -521,7 +523,8 @@ emtr_sender_send_data (EmtrSender         *self,
                        gpointer            user_data)
 {
   g_return_if_fail (self != NULL && EMTR_IS_SENDER (self));
-  g_return_if_fail (payload != NULL);
+  g_return_if_fail (payload != NULL
+                    && g_variant_is_of_type (payload, G_VARIANT_TYPE_VARDICT));
   g_return_if_fail (cancellable == NULL || G_IS_CANCELLABLE (cancellable));
   g_return_if_fail (callback != NULL);
 
@@ -554,7 +557,8 @@ emtr_sender_send_data_finish (EmtrSender   *self,
                               GError      **error)
 {
   g_return_val_if_fail (self != NULL && EMTR_IS_SENDER (self), FALSE);
-  g_return_val_if_fail (result != NULL && G_IS_ASYNC_RESULT (result), FALSE);
+  g_return_val_if_fail (result != NULL && g_task_is_valid (result, self),
+                        FALSE);
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
   return g_task_propagate_boolean (G_TASK (result), error);

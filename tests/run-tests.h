@@ -7,6 +7,15 @@
 #include <gio/gio.h>
 
 #define TEST_LOG_DOMAIN "EosMetrics"
+#define MOCK_VERSION_FILE_ENVVAR "_MOCK_ENDLESSOS_VERSION_FILE"
+#define MOCK_VERSION_FILE_CONTENTS \
+  "<endlessos-version>\n" \
+  "  <platform>1</platform>\n" \
+  "  <minor>2</minor>\n" \
+  "  <micro>0</micro>\n" \
+  "  <distributor>Endless Mobile</distributor>\n" \
+  "  <date>2013-11-27</date>\n" \
+  "</endlessos-version>"
 
 /* Common code for tests */
 
@@ -47,6 +56,8 @@ void      mock_web_send_exception_async (const gchar        *uri,
 GVariant *create_payload                (const gchar       *message,
                                          gint64             timestamp,
                                          gboolean           is_bug);
+
+void      set_up_mock_version_file      (const gchar       *contents);
 
 /* Each module adds its own test cases: */
 

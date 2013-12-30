@@ -65,42 +65,14 @@ emtr_sender_get_property (GObject    *object,
     }
 }
 
-/* Helper function: the output is a GFile with an absolute path that this code
-holds exactly one reference to (given that this code held zero references to the
-passed-in file.) If it is a relative path, interpret it as being relative to the
-default metrics storage directory. */
-static GFile *
-ensure_absolute_path_and_reference_or_null (GFile *file)
-{
-  if (file == NULL)
-    return NULL;
-
-  GFile *root = g_file_new_for_path ("/");
-  if (g_file_has_prefix (file, root))
-    {
-      g_object_ref (file);
-      g_object_unref (root);
-      return file;
-    }
-
-  GFile *default_storage_dir = emtr_get_default_storage_dir ();
-  gchar *default_storage_path = g_file_get_path (default_storage_dir);
-  g_object_unref (default_storage_dir);
-  GFile *absolute = g_file_resolve_relative_path (file, default_storage_path);
-  g_free(default_storage_path);
-  return absolute;
-}
-
 static void
 set_storage_file (EmtrSender *self,
                   GFile      *file)
 {
-  file = ensure_absolute_path_and_reference_or_null (file);
-
   EmtrSenderPrivate *priv = emtr_sender_get_instance_private (self);
   if (priv->storage_file != NULL)
     g_object_unref (priv->storage_file);
-  priv->storage_file = file;
+  priv->storage_file = g_object_ref (file);
 }
 
 
@@ -153,9 +125,8 @@ emtr_sender_class_init (EmtrSenderClass *klass)
    *
    * The file where the data is to be stored temporarily if it can't be sent
    * immediately.
-   * If the #GFile is a handle to a relative path, it is considered to be
-   * relative to the default directory for storing metrics (see
-   * emtr_get_default_storage_dir().)
+   * You should generally put the file in the default directory for storing
+   * metrics (see emtr_get_default_storage_dir().)
    */
   emtr_sender_props[PROP_STORAGE_FILE] =
     g_param_spec_object ("storage-file", "Storage file",

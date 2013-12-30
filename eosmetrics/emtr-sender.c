@@ -386,6 +386,76 @@ emtr_sender_new (GFile *storage_file)
 }
 
 /**
+ * emtr_sender_new_for_session_metrics:
+ *
+ * Creates an #EmtrSender configured to send session-wide metrics data, for
+ * example the time spent in the session.
+ *
+ * Returns: (transfer full): a new #EmtrSender.
+ * Free with g_object_unref() when done.
+ */
+EmtrSender *
+emtr_sender_new_for_session_metrics (void)
+{
+  GFile *storage_dir = emtr_get_default_storage_dir ();
+  GFile *file = g_file_get_child (storage_dir, "os_time_metrics.json");
+  g_object_unref (storage_dir);
+  EmtrSender *retval = g_object_new (EMTR_TYPE_SENDER,
+                                     "storage-file", file,
+                                     NULL);
+  g_object_unref (file);
+  return retval;
+}
+
+/**
+ * emtr_sender_new_for_app_usage_metrics:
+ *
+ * Creates an #EmtrSender configured to send application usage data, for example
+ * the time spent in an application.
+ *
+ * Returns: (transfer full): a new #EmtrSender.
+ * Free with g_object_unref() when done.
+ */
+EmtrSender *
+emtr_sender_new_for_app_usage_metrics (void)
+{
+  GFile *storage_dir = emtr_get_default_storage_dir ();
+  GFile *file = g_file_get_child (storage_dir, "app_time_metrics.json");
+  g_object_unref (storage_dir);
+  EmtrSender *retval = g_object_new (EMTR_TYPE_SENDER,
+                                     "storage-file", file,
+                                     NULL);
+  g_object_unref (file);
+  return retval;
+}
+
+/**
+ * emtr_sender_new_for_feedback:
+ *
+ * Creates an #EmtrSender configured to send feedback suggestions about the OS.
+ *
+ * Returns: (transfer full): a new #EmtrSender.
+ * Free with g_object_unref() when done.
+ */
+EmtrSender *
+emtr_sender_new_for_feedback (void)
+{
+  GFile *storage_dir = emtr_get_default_storage_dir ();
+  GFile *file = g_file_get_child (storage_dir, "feedback.json");
+  g_object_unref (storage_dir);
+  EmtrConnection *connection = g_object_new (EMTR_TYPE_CONNECTION,
+                                             "uri-context", "feedbacks",
+                                             "form-param-name", "feedback",
+                                             NULL);
+  EmtrSender *retval = g_object_new (EMTR_TYPE_SENDER,
+                                     "connection", connection,
+                                     "storage-file", file,
+                                     NULL);
+  g_object_unref (file);
+  return retval;
+}
+
+/**
  * emtr_sender_get_storage_file:
  * @self: the send process
  *

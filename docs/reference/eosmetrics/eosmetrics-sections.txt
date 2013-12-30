@@ -40,6 +40,9 @@ emtr_connection_get_type
 EmtrSender
 EmtrSenderClass
 emtr_sender_new
+emtr_sender_new_for_session_metrics
+emtr_sender_new_for_app_usage_metrics
+emtr_sender_new_for_feedback
 <SUBSECTION Methods>
 emtr_sender_send_data
 emtr_sender_send_data_finish

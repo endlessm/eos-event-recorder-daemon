@@ -68,54 +68,63 @@ struct _EmtrSenderClass
 };
 
 EMTR_ALL_API_VERSIONS
-GType           emtr_sender_get_type                (void) G_GNUC_CONST;
+GType           emtr_sender_get_type                  (void) G_GNUC_CONST;
 
 EMTR_ALL_API_VERSIONS
-EmtrSender     *emtr_sender_new                     (GFile              *storage_file);
+EmtrSender     *emtr_sender_new                       (GFile              *storage_file);
 
 EMTR_ALL_API_VERSIONS
-GFile          *emtr_sender_get_storage_file        (EmtrSender         *self);
+EmtrSender     *emtr_sender_new_for_session_metrics   (void);
 
 EMTR_ALL_API_VERSIONS
-EmtrConnection *emtr_sender_get_connection          (EmtrSender         *self);
+EmtrSender     *emtr_sender_new_for_app_usage_metrics (void);
 
 EMTR_ALL_API_VERSIONS
-void            emtr_sender_set_connection          (EmtrSender         *self,
-                                                     EmtrConnection     *connection);
+EmtrSender     *emtr_sender_new_for_feedback          (void);
 
 EMTR_ALL_API_VERSIONS
-gboolean        emtr_sender_send_data_sync          (EmtrSender         *self,
-                                                     GVariant           *payload,
-                                                     GCancellable       *cancellable,
-                                                     GError            **error);
+GFile          *emtr_sender_get_storage_file          (EmtrSender         *self);
 
 EMTR_ALL_API_VERSIONS
-void            emtr_sender_send_data               (EmtrSender         *self,
-                                                     GVariant           *payload,
-                                                     GCancellable       *cancellable,
-                                                     GAsyncReadyCallback callback,
-                                                     gpointer            user_data);
+EmtrConnection *emtr_sender_get_connection            (EmtrSender         *self);
 
 EMTR_ALL_API_VERSIONS
-gboolean        emtr_sender_send_data_finish        (EmtrSender         *self,
-                                                     GAsyncResult       *result,
-                                                     GError            **error);
+void            emtr_sender_set_connection            (EmtrSender         *self,
+                                                       EmtrConnection     *connection);
 
 EMTR_ALL_API_VERSIONS
-void            emtr_sender_send_queued_data        (EmtrSender         *self,
-                                                     GCancellable       *cancellable,
-                                                     GAsyncReadyCallback callback,
-                                                     gpointer            user_data);
+gboolean        emtr_sender_send_data_sync            (EmtrSender         *self,
+                                                       GVariant           *payload,
+                                                       GCancellable       *cancellable,
+                                                       GError            **error);
 
 EMTR_ALL_API_VERSIONS
-gboolean        emtr_sender_send_queued_data_finish (EmtrSender         *self,
-                                                     GAsyncResult       *result,
-                                                     GError            **error);
+void            emtr_sender_send_data                 (EmtrSender         *self,
+                                                       GVariant           *payload,
+                                                       GCancellable       *cancellable,
+                                                       GAsyncReadyCallback callback,
+                                                       gpointer            user_data);
 
 EMTR_ALL_API_VERSIONS
-gboolean        emtr_sender_send_queued_data_sync   (EmtrSender         *self,
-                                                     GCancellable       *cancellable,
-                                                     GError            **error);
+gboolean        emtr_sender_send_data_finish          (EmtrSender         *self,
+                                                       GAsyncResult       *result,
+                                                       GError            **error);
+
+EMTR_ALL_API_VERSIONS
+void            emtr_sender_send_queued_data          (EmtrSender         *self,
+                                                       GCancellable       *cancellable,
+                                                       GAsyncReadyCallback callback,
+                                                       gpointer            user_data);
+
+EMTR_ALL_API_VERSIONS
+gboolean        emtr_sender_send_queued_data_finish   (EmtrSender         *self,
+                                                       GAsyncResult       *result,
+                                                       GError            **error);
+
+EMTR_ALL_API_VERSIONS
+gboolean        emtr_sender_send_queued_data_sync     (EmtrSender         *self,
+                                                       GCancellable       *cancellable,
+                                                       GError            **error);
 
 G_END_DECLS
 

@@ -7,6 +7,7 @@
 
 #include <eosmetrics/emtr-sender.h>
 #include <eosmetrics/emtr-connection.h>
+#include <eosmetrics/emtr-util.h>
 #include "run-tests.h"
 
 #define TMP_DIRECTORY_TEMPLATE "/tmp/metricssendprocesstestXXXXXX"
@@ -88,6 +89,35 @@ ensure_mock_queue (GFile *queue_file)
                                      strlen (MOCK_QUEUE), NULL, FALSE,
                                      G_FILE_CREATE_REPLACE_DESTINATION, NULL,
                                      NULL, NULL));
+}
+
+static gboolean
+mock_web_send_assert_feedback_sync (const gchar  *uri,
+                                    const gchar  *data,
+                                    const gchar  *username,
+                                    const gchar  *password,
+                                    GCancellable *cancellable,
+                                    GError      **error)
+{
+  mock_web_send_assert_data_called = TRUE;
+  g_assert (g_str_has_prefix (data, "{\"feedback\":{"));
+  g_assert (g_str_has_suffix (uri, "/feedbacks"));
+  return TRUE;
+}
+
+static void
+mock_web_send_assert_feedback_async (const gchar        *uri,
+                                     const gchar        *data,
+                                     const gchar        *username,
+                                     const gchar        *password,
+                                     GCancellable       *cancellable,
+                                     GAsyncReadyCallback callback,
+                                     gpointer            callback_data)
+{
+  mock_web_send_assert_feedback_sync (uri, data, username, password,
+                                      NULL, NULL);
+  mock_web_send_async (uri, data, username, password,
+                       NULL, callback, callback_data);
 }
 
 struct SenderFixture {
@@ -183,6 +213,29 @@ test_sender_relative_storage_path_is_interpreted (void)
   g_assert (g_path_is_absolute (path));
 
   g_free (path);
+}
+
+static void
+test_sender_new_session_metrics_succeeds (void)
+{
+  EmtrSender *sender = emtr_sender_new_for_session_metrics ();
+  g_assert (sender != NULL);
+  g_assert (EMTR_IS_SENDER (sender));
+}
+
+static void
+test_sender_new_app_metrics_succeeds (void)
+{
+  EmtrSender *sender = emtr_sender_new_for_app_usage_metrics ();
+  g_assert (sender != NULL);
+  g_assert (EMTR_IS_SENDER (sender));}
+
+static void
+test_sender_new_feedback_succeeds (void)
+{
+  EmtrSender *sender = emtr_sender_new_for_feedback ();
+  g_assert (sender != NULL);
+  g_assert (EMTR_IS_SENDER (sender));
 }
 
 static void
@@ -465,6 +518,32 @@ test_sender_async_requeues_data_that_still_cant_be_sent (struct SenderFixture *f
   g_free (loaded_queue);
 }
 
+static void
+test_sender_feedback_sends_correct_format (struct SenderFixture *fixture,
+                                           gconstpointer         unused)
+{
+  /* Put a different object into the test fixture */
+  g_object_unref (fixture->test_object);
+  g_object_unref (fixture->connection);
+  fixture->test_object = emtr_sender_new_for_feedback ();
+  g_object_get (fixture->test_object,
+                "connection", &fixture->connection,
+                NULL);
+
+  fixture->connection->_web_send_sync_func = mock_web_send_assert_feedback_sync;
+  fixture->connection->_web_send_async_func =
+    mock_web_send_assert_feedback_async;
+  fixture->connection->_web_send_finish_func = mock_web_send_finish;
+
+  GVariant *payload = create_payload ("foo", 1234, TRUE);
+  g_assert (emtr_sender_send_data_sync (fixture->test_object, payload,
+                                        NULL, NULL));
+  g_assert (mock_web_send_assert_data_called);
+  g_variant_unref (payload);
+
+  /* More assertions in mock_web_send_assert_feedback_sync() */
+}
+
 void
 add_sender_tests (void)
 {
@@ -472,6 +551,12 @@ add_sender_tests (void)
                    test_sender_absolute_storage_path_is_unchanged);
   g_test_add_func ("/sender/relative-storage-path-is-interpreted",
                    test_sender_relative_storage_path_is_interpreted);
+  g_test_add_func ("/sender/new-session-metrics-succeeds",
+                   test_sender_new_session_metrics_succeeds);
+  g_test_add_func ("/sender/new-app-metrics-succeeds",
+                   test_sender_new_app_metrics_succeeds);
+  g_test_add_func ("/sender/new-feedback-succeeds",
+                   test_sender_new_feedback_succeeds);
 
 #define ADD_SENDER_TEST_FUNC(path, func) \
   g_test_add ((path), struct SenderFixture, NULL, setup, (func), teardown)
@@ -495,6 +580,8 @@ add_sender_tests (void)
                         test_sender_async_sends_all_data_in_queue);
   ADD_SENDER_TEST_FUNC ("/sender/async/requeues-data-that-still-cant-be-sent",
                         test_sender_async_requeues_data_that_still_cant_be_sent);
+  ADD_SENDER_TEST_FUNC ("/sender/feedback-sends-correct-format",
+                        test_sender_feedback_sends_correct_format);
 
 #undef ADD_SENDER_TEST_FUNC
 }

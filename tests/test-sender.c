@@ -15,6 +15,7 @@
 #define EXPECTED_RELATIVE_FILENAME "metricssendprocesstest.json"
 #define EXPECTED_DATA_QUEUE "[{\"message\":\"bar\",\"timestamp\":2002,\"bug\":false},{\"message\":\"biz\",\"timestamp\":2003,\"bug\":true}]"
 #define MOCK_QUEUE "[{\"test1\":\"foo\"},{\"test2\":\"bar\"}]"
+#define EXPECTED_CREATED_QUEUE "[{\"message\":\"foo\",\"timestamp\":2001,\"bug\":true}]"
 
 static gboolean mock_web_send_assert_data_called = FALSE;
 
@@ -89,6 +90,16 @@ ensure_mock_queue (GFile *queue_file)
                                      strlen (MOCK_QUEUE), NULL, FALSE,
                                      G_FILE_CREATE_REPLACE_DESTINATION, NULL,
                                      NULL, NULL));
+}
+
+static void
+ensure_queue_dir_doesnt_exist (GFile *queue_dir)
+{
+  GError *error = NULL;
+  gboolean success = g_file_delete (queue_dir, NULL, &error);
+  g_assert (success
+            || g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND));
+  g_clear_error (&error);
 }
 
 static gboolean
@@ -353,6 +364,42 @@ test_sender_sync_requeues_data_that_still_cant_be_sent (struct SenderFixture *fi
 }
 
 static void
+test_sender_sync_send_data_deals_with_nonexistent_queue_dir (struct SenderFixture *fixture,
+                                                             gconstpointer         unused)
+{
+  ensure_queue_dir_doesnt_exist (fixture->tmpdir);
+
+  GError *error = NULL;
+  GVariant *payload = create_payload ("foo", 2001, TRUE);
+
+  fixture->connection->_web_send_sync_func = mock_web_send_exception_sync;
+  fixture->connection->_web_send_async_func = mock_web_send_exception_async;
+
+  g_assert (emtr_sender_send_data_sync (fixture->test_object, payload,
+                                        NULL, &error));
+  g_assert_no_error (error);
+  g_variant_unref (payload);
+
+  gchar *loaded_queue = get_payload_from_file (fixture->test_object);
+  g_assert_cmpstr (loaded_queue, ==, EXPECTED_CREATED_QUEUE);
+  g_free (loaded_queue);
+}
+
+static void
+test_sender_sync_send_queued_data_deals_with_nonexistent_queue_dir (struct SenderFixture *fixture,
+                                                                    gconstpointer         unused)
+{
+  ensure_queue_dir_doesnt_exist (fixture->tmpdir);
+
+  GError *error = NULL;
+  gboolean success = emtr_sender_send_queued_data_sync (fixture->test_object,
+                                                        NULL, &error);
+
+  g_assert (success);
+  g_assert_no_error (error);
+}
+
+static void
 async_invoking_send_data_done (EmtrSender           *sender,
                                GAsyncResult         *result,
                                struct SenderFixture *fixture)
@@ -519,6 +566,60 @@ test_sender_async_requeues_data_that_still_cant_be_sent (struct SenderFixture *f
 }
 
 static void
+async_send_data_done (EmtrSender           *sender,
+                      GAsyncResult         *result,
+                      struct SenderFixture *fixture)
+{
+  GError *error = NULL;
+  gboolean success = emtr_sender_send_data_finish (fixture->test_object,
+                                                   result, &error);
+  g_assert (success);
+  g_assert_no_error (error);
+
+  g_main_loop_quit (fixture->mainloop);
+}
+
+static void
+test_sender_async_send_data_deals_with_nonexistent_queue_dir (struct SenderFixture *fixture,
+                                                              gconstpointer         unused)
+{
+  ensure_queue_dir_doesnt_exist (fixture->tmpdir);
+
+  GVariant *payload = create_payload ("foo", 2001, TRUE);
+
+  fixture->connection->_web_send_sync_func = mock_web_send_exception_sync;
+  fixture->connection->_web_send_async_func = mock_web_send_exception_async;
+
+  emtr_sender_send_data (fixture->test_object, payload, NULL,
+                         (GAsyncReadyCallback)async_send_data_done,
+                         fixture);
+
+  g_main_loop_run (fixture->mainloop);
+
+  /* Asserts success in async_send_data_done() */
+
+  g_variant_unref (payload);
+
+  gchar *loaded_queue = get_payload_from_file (fixture->test_object);
+  g_assert_cmpstr (loaded_queue, ==, EXPECTED_CREATED_QUEUE);
+  g_free (loaded_queue);
+}
+
+static void
+test_sender_async_send_queued_data_deals_with_nonexistent_queue_dir (struct SenderFixture *fixture,
+                                                                     gconstpointer         unused)
+{
+  ensure_queue_dir_doesnt_exist (fixture->tmpdir);
+
+  emtr_sender_send_queued_data (fixture->test_object, NULL,
+                                (GAsyncReadyCallback)async_send_queue_done,
+                                fixture);
+  g_main_loop_run (fixture->mainloop);
+
+  /* Asserts success in async_send_queue_done() */
+}
+
+static void
 test_sender_feedback_sends_correct_format (struct SenderFixture *fixture,
                                            gconstpointer         unused)
 {
@@ -570,6 +671,10 @@ add_sender_tests (void)
                         test_sender_sync_sends_all_data_in_queue);
   ADD_SENDER_TEST_FUNC ("/sender/sync/requeues-data-that-still-cant-be-sent",
                         test_sender_sync_requeues_data_that_still_cant_be_sent);
+  ADD_SENDER_TEST_FUNC ("/sender/sync/send-data-deals-with-nonexistent-queue-dir",
+                        test_sender_sync_send_data_deals_with_nonexistent_queue_dir);
+  ADD_SENDER_TEST_FUNC ("/sender/sync/send-queued-data-deals-with-nonexistent-queue-dir",
+                        test_sender_sync_send_queued_data_deals_with_nonexistent_queue_dir);
   ADD_SENDER_TEST_FUNC ("/sender/async/invoking-send-data",
                         test_sender_async_invoking_send_data);
   ADD_SENDER_TEST_FUNC ("/sender/async/on-failure-save-payload-to-file",
@@ -580,6 +685,10 @@ add_sender_tests (void)
                         test_sender_async_sends_all_data_in_queue);
   ADD_SENDER_TEST_FUNC ("/sender/async/requeues-data-that-still-cant-be-sent",
                         test_sender_async_requeues_data_that_still_cant_be_sent);
+  ADD_SENDER_TEST_FUNC ("/sender/async/send-data-deals-with-nonexistent-queue-dir",
+                        test_sender_async_send_data_deals_with_nonexistent_queue_dir);
+  ADD_SENDER_TEST_FUNC ("/sender/async/send-queued-data-deals-with-nonexistent-queue-dir",
+                        test_sender_async_send_queued_data_deals_with_nonexistent_queue_dir);
   ADD_SENDER_TEST_FUNC ("/sender/feedback-sends-correct-format",
                         test_sender_feedback_sends_correct_format);
 

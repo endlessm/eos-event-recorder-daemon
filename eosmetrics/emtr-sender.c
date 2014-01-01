@@ -787,6 +787,18 @@ emtr_sender_send_queued_data_sync (EmtrSender   *self,
     }
   JsonArray *old_queue = json_node_get_array (old_queue_node);
 
+  GFile *storage_parent_dir = g_file_get_parent (priv->storage_file);
+  if (!g_file_make_directory_with_parents (storage_parent_dir,
+                                           cancellable, &inner_error)
+      && !g_error_matches (inner_error, G_IO_ERROR, G_IO_ERROR_EXISTS))
+    {
+      g_object_unref (storage_parent_dir);
+      g_propagate_prefixed_error (error, inner_error,
+                                  "Error ensuring storage directory exists: ");
+      return FALSE;
+    }
+  g_object_unref (storage_parent_dir);
+
   if (!g_file_replace_contents (priv->storage_file, EMPTY_QUEUE,
                                 strlen (EMPTY_QUEUE), NULL /* etag */,
                                 FALSE /* backup */,

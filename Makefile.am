@@ -130,7 +130,7 @@ endif
 
 # # # METRICS TOOLS # # #
 
-# include $(top_srcdir)/tools/Makefile.am.inc
+include $(top_srcdir)/tools/Makefile.am.inc
 
 # # # TESTS # # #
 

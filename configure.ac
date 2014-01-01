@@ -190,6 +190,7 @@ AC_CONFIG_FILES([
     Makefile
     docs/reference/eosmetrics/Makefile
     docs/reference/eosmetrics/version.xml
+    tools/eos-send-metrics
     $EMTR_API_NAME.pc
 ])
 AC_CONFIG_HEADERS([config.h])  dnl Header with system-dependent #defines

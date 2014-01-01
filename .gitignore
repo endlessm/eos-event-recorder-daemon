@@ -4,6 +4,7 @@
 /EosMetrics-0.gir
 /EosMetrics-0.typelib
 /docs/reference/eosmetrics/version.xml
+/tools/eos-send-metrics
 
 # Test productes
 *.log

@@ -16,7 +16,21 @@
 G_BEGIN_DECLS
 
 EMTR_ALL_API_VERSIONS
-GFile *emtr_get_default_storage_dir (void);
+GFile    *emtr_get_default_storage_dir      (void);
+
+EMTR_ALL_API_VERSIONS
+GVariant *emtr_create_session_time_payload  (gint64       elapsed_time);
+
+EMTR_ALL_API_VERSIONS
+GVariant *emtr_create_app_usage_payload     (const gchar *activity_name,
+                                             gint64       elapsed_time);
+
+EMTR_ALL_API_VERSIONS
+GVariant *emtr_aggregate_app_usage_payloads (GVariant   **payloads);
+
+EMTR_ALL_API_VERSIONS
+GVariant *emtr_create_feedback_payload      (const gchar *message,
+                                             gboolean     is_bug);
 
 G_END_DECLS
 

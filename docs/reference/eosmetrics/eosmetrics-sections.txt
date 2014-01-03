@@ -2,6 +2,10 @@
 <FILE>emtr-util</FILE>
 <TITLE>General</TITLE>
 emtr_get_default_storage_dir
+emtr_create_session_time_payload
+emtr_create_app_usage_payload
+emtr_aggregate_app_usage_payloads
+emtr_create_feedback_payload
 <SUBSECTION Private>
 EMTR_ALL_API_VERSIONS
 EMTR_DEFINE_ENUM_TYPE

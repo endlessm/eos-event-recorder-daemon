@@ -6,6 +6,7 @@
 #include "emtr-connection.h"
 #include "emtr-util.h"
 
+#include <string.h>
 #include <glib.h>
 #include <gio/gio.h>
 #include <json-glib/json-glib.h>
@@ -22,6 +23,8 @@
  * about it anymore; the sender assumes the responsibility for making sure it
  * gets to its destination.
  */
+
+ #define EMPTY_QUEUE "[]"
 
 typedef struct
 {
@@ -62,42 +65,14 @@ emtr_sender_get_property (GObject    *object,
     }
 }
 
-/* Helper function: the output is a GFile with an absolute path that this code
-holds exactly one reference to (given that this code held zero references to the
-passed-in file.) If it is a relative path, interpret it as being relative to the
-default metrics storage directory. */
-static GFile *
-ensure_absolute_path_and_reference_or_null (GFile *file)
-{
-  if (file == NULL)
-    return NULL;
-
-  GFile *root = g_file_new_for_path ("/");
-  if (g_file_has_prefix (file, root))
-    {
-      g_object_ref (file);
-      g_object_unref (root);
-      return file;
-    }
-
-  GFile *default_storage_dir = emtr_get_default_storage_dir ();
-  gchar *default_storage_path = g_file_get_path (default_storage_dir);
-  g_object_unref (default_storage_dir);
-  GFile *absolute = g_file_resolve_relative_path (file, default_storage_path);
-  g_free(default_storage_path);
-  return absolute;
-}
-
 static void
 set_storage_file (EmtrSender *self,
                   GFile      *file)
 {
-  file = ensure_absolute_path_and_reference_or_null (file);
-
   EmtrSenderPrivate *priv = emtr_sender_get_instance_private (self);
   if (priv->storage_file != NULL)
     g_object_unref (priv->storage_file);
-  priv->storage_file = file;
+  priv->storage_file = g_object_ref (file);
 }
 
 
@@ -150,9 +125,8 @@ emtr_sender_class_init (EmtrSenderClass *klass)
    *
    * The file where the data is to be stored temporarily if it can't be sent
    * immediately.
-   * If the #GFile is a handle to a relative path, it is considered to be
-   * relative to the default directory for storing metrics (see
-   * emtr_get_default_storage_dir().)
+   * You should generally put the file in the default directory for storing
+   * metrics (see emtr_get_default_storage_dir().)
    */
   emtr_sender_props[PROP_STORAGE_FILE] =
     g_param_spec_object ("storage-file", "Storage file",
@@ -339,6 +313,57 @@ send_async_callback (EmtrConnection *connection,
   g_task_return_error (task, error);
 }
 
+struct SendQueuedData {
+  gboolean success;
+  GCancellable *cancellable;
+  GError **error;  /* struct does not own it */
+  EmtrSender *self;
+};
+
+static void
+foreach_payload_in_queue_sync (JsonArray             *old_queue,
+                               guint                  ix,
+                               JsonNode              *element_node,
+                               struct SendQueuedData *data)
+{
+  if (!data->success)
+    return;
+  /* NB. setting data->success = FALSE and returning is equivalent to
+  "break"-ing out of the foreach loop, of which this function is the loop body;
+  since there's no way to interrupt the loop with a boolean return value */
+
+  GError *error = NULL;
+  GVariant *payload = json_gvariant_deserialize (element_node, "a{sv}", &error);
+  if (payload == NULL)
+    {
+      data->success = FALSE;
+      g_propagate_prefixed_error (data->error, error,
+                                  "Error converting JSON, data may have been dropped: ");
+      return;  /* i.e. "break" */
+    }
+  data->success = emtr_sender_send_data_sync (data->self, payload,
+                                              data->cancellable, &error);
+  g_variant_unref (payload);
+  if (!data->success)
+    g_propagate_prefixed_error (data->error, error, "Data was dropped: ");
+}
+
+static void
+send_queued_data_sync_thread (GTask        *task,
+                              EmtrSender   *self,
+                              gpointer      unused,
+                              GCancellable *cancellable)
+{
+  GError *error = NULL;
+  if (!emtr_sender_send_queued_data_sync (self, cancellable, &error))
+    {
+      g_task_return_error (task, error);
+      return;
+    }
+  g_task_return_boolean (task, TRUE);
+  return;
+}
+
 /* PUBLIC API */
 
 /**
@@ -358,6 +383,76 @@ emtr_sender_new (GFile *storage_file)
   return g_object_new (EMTR_TYPE_SENDER,
                        "storage-file", storage_file,
                        NULL);
+}
+
+/**
+ * emtr_sender_new_for_session_metrics:
+ *
+ * Creates an #EmtrSender configured to send session-wide metrics data, for
+ * example the time spent in the session.
+ *
+ * Returns: (transfer full): a new #EmtrSender.
+ * Free with g_object_unref() when done.
+ */
+EmtrSender *
+emtr_sender_new_for_session_metrics (void)
+{
+  GFile *storage_dir = emtr_get_default_storage_dir ();
+  GFile *file = g_file_get_child (storage_dir, "os_time_metrics.json");
+  g_object_unref (storage_dir);
+  EmtrSender *retval = g_object_new (EMTR_TYPE_SENDER,
+                                     "storage-file", file,
+                                     NULL);
+  g_object_unref (file);
+  return retval;
+}
+
+/**
+ * emtr_sender_new_for_app_usage_metrics:
+ *
+ * Creates an #EmtrSender configured to send application usage data, for example
+ * the time spent in an application.
+ *
+ * Returns: (transfer full): a new #EmtrSender.
+ * Free with g_object_unref() when done.
+ */
+EmtrSender *
+emtr_sender_new_for_app_usage_metrics (void)
+{
+  GFile *storage_dir = emtr_get_default_storage_dir ();
+  GFile *file = g_file_get_child (storage_dir, "app_time_metrics.json");
+  g_object_unref (storage_dir);
+  EmtrSender *retval = g_object_new (EMTR_TYPE_SENDER,
+                                     "storage-file", file,
+                                     NULL);
+  g_object_unref (file);
+  return retval;
+}
+
+/**
+ * emtr_sender_new_for_feedback:
+ *
+ * Creates an #EmtrSender configured to send feedback suggestions about the OS.
+ *
+ * Returns: (transfer full): a new #EmtrSender.
+ * Free with g_object_unref() when done.
+ */
+EmtrSender *
+emtr_sender_new_for_feedback (void)
+{
+  GFile *storage_dir = emtr_get_default_storage_dir ();
+  GFile *file = g_file_get_child (storage_dir, "feedback.json");
+  g_object_unref (storage_dir);
+  EmtrConnection *connection = g_object_new (EMTR_TYPE_CONNECTION,
+                                             "uri-context", "feedbacks",
+                                             "form-param-name", "feedback",
+                                             NULL);
+  EmtrSender *retval = g_object_new (EMTR_TYPE_SENDER,
+                                     "connection", connection,
+                                     "storage-file", file,
+                                     NULL);
+  g_object_unref (file);
+  return retval;
 }
 
 /**
@@ -465,7 +560,9 @@ emtr_sender_send_data_sync (EmtrSender   *self,
                             GError      **error)
 {
   g_return_val_if_fail (self != NULL && EMTR_IS_SENDER (self), FALSE);
-  g_return_val_if_fail (payload != NULL, FALSE);
+  g_return_val_if_fail (payload != NULL
+                        && g_variant_is_of_type (payload, G_VARIANT_TYPE_VARDICT),
+                        FALSE);
   g_return_val_if_fail (cancellable == NULL || G_IS_CANCELLABLE (cancellable),
                         FALSE);
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
@@ -521,7 +618,8 @@ emtr_sender_send_data (EmtrSender         *self,
                        gpointer            user_data)
 {
   g_return_if_fail (self != NULL && EMTR_IS_SENDER (self));
-  g_return_if_fail (payload != NULL);
+  g_return_if_fail (payload != NULL
+                    && g_variant_is_of_type (payload, G_VARIANT_TYPE_VARDICT));
   g_return_if_fail (cancellable == NULL || G_IS_CANCELLABLE (cancellable));
   g_return_if_fail (callback != NULL);
 
@@ -554,8 +652,174 @@ emtr_sender_send_data_finish (EmtrSender   *self,
                               GError      **error)
 {
   g_return_val_if_fail (self != NULL && EMTR_IS_SENDER (self), FALSE);
-  g_return_val_if_fail (result != NULL && G_IS_ASYNC_RESULT (result), FALSE);
+  g_return_val_if_fail (result != NULL && g_task_is_valid (result, self),
+                        FALSE);
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
   return g_task_propagate_boolean (G_TASK (result), error);
+}
+
+/**
+ * emtr_sender_send_queued_data:
+ * @self: the send process
+ * @cancellable: (allow-none): a #GCancellable, or %NULL to ignore
+ * @callback: (scope async): function to call when the operation is finished
+ * @user_data: (closure): extra parameter to pass to @callback
+ *
+ * Attempts to post the metrics data stored in this sender's queue (if there is
+ * any) to a metrics server (see #EmtrSender:connection for how to specify which
+ * one.)
+ *
+ * To cancel the operation, pass a non-%NULL #GCancellable object to
+ * @cancellable and trigger it from another thread.
+ * If this operation is cancelled, then emtr_sender_send_queued_data_finish()
+ * will return %FALSE with the error %G_IO_ERROR_CANCELLED.
+ *
+ * Note that you cannot get information about what is in the queue.
+ * In fact, all the data may still be in the queue when the operation is done,
+ * if it still couldn't be sent.
+ *
+ * When the operation has completed, @callback will be called and @user_data
+ * will be passed to it.
+ * Inside @callback, you must finalize the operation with
+ * emtr_sender_send_data_finish().
+ *
+ * An example use of this function would be at the beginning and end of an
+ * application.
+ */
+void
+emtr_sender_send_queued_data (EmtrSender         *self,
+                              GCancellable       *cancellable,
+                              GAsyncReadyCallback callback,
+                              gpointer            user_data)
+{
+  g_return_if_fail (self != NULL && EMTR_IS_SENDER (self));
+  g_return_if_fail (cancellable == NULL || G_IS_CANCELLABLE (cancellable));
+  g_return_if_fail (callback != NULL);
+
+  GTask *task = g_task_new (self, cancellable, callback, user_data);
+
+  /* We do the sync operation in a worker thread here, since it consists of many
+  blocking operations and a clean threaded implementation is less likely to be
+  buggy than a callback hell implementation */
+  g_task_run_in_thread (task, (GTaskThreadFunc)send_queued_data_sync_thread);
+}
+
+/**
+ * emtr_sender_send_queued_data_finish:
+ * @self: the send process
+ * @result: a #GAsyncResult
+ * @error: return location for a #GError, or %NULL
+ *
+ * Finishes an operation begun by emtr_sender_send_queued_data().
+ *
+ * Note that the return value from this function does not tell you whether
+ * emptying the queue was successful.
+ * The data may still be in the queue if it couldn't be sent.
+ *
+ * Returns: %TRUE if the operation was successful, %FALSE otherwise, in which
+ * case @error is set.
+ */
+gboolean
+emtr_sender_send_queued_data_finish (EmtrSender   *self,
+                                     GAsyncResult *result,
+                                     GError      **error)
+{
+  g_return_val_if_fail (self != NULL && EMTR_IS_SENDER (self), FALSE);
+  g_return_val_if_fail (result != NULL && g_task_is_valid (result, self),
+                        FALSE);
+  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+  return g_task_propagate_boolean (G_TASK (result), error);
+}
+
+/**
+ * emtr_sender_send_queued_data_sync:
+ * @self: the send process
+ * @cancellable: (allow-none): a #GCancellable, or %NULL to ignore
+ * @error: return location for an error, or %NULL
+ *
+ * Attempts to post the metrics data stored in this sender's queue (if there is
+ * any) to a metrics server (see #EmtrSender:connection for how to specify which
+ * one.)
+ * This function waits until the attempt is finished.
+ *
+ * To cancel the operation, pass a non-%NULL #GCancellable object to
+ * @cancellable and trigger it from another thread.
+ * If this operation is cancelled, then this will return %FALSE with the error
+ * %G_IO_ERROR_CANCELLED.
+ * Note that cancelling may cause you to lose unsent metrics data, or to have
+ * metrics data still in the queue that has also been sent to the server.
+ *
+ * Note that you cannot get information about what is in the queue.
+ * In fact, all the data may still be in the queue when the operation is done,
+ * if it still couldn't be sent.
+ *
+ * <note><para>
+ *   This a synchronous version of emtr_sender_send_queued_data().
+ *   It may block if the operation takes a long time.
+ *   Use emtr_sender_send_queued_data() unless you know what you're doing.
+ * </para></note>
+ *
+ * Returns: %TRUE if the data was processed, %FALSE otherwise, in which case
+ * @error is set.
+ */
+gboolean
+emtr_sender_send_queued_data_sync (EmtrSender   *self,
+                                   GCancellable *cancellable,
+                                   GError      **error)
+{
+  g_return_val_if_fail (self != NULL && EMTR_IS_SENDER (self), FALSE);
+  g_return_val_if_fail (cancellable == NULL || G_IS_CANCELLABLE (cancellable),
+                        FALSE);
+  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+  EmtrSenderPrivate *priv = emtr_sender_get_instance_private (self);
+  GError *inner_error = NULL;
+
+  JsonNode *old_queue_node = get_data_from_file (priv->storage_file,
+                                                 cancellable, &inner_error);
+  if (old_queue_node == NULL)
+    {
+      g_propagate_prefixed_error (error, inner_error,
+                                  "Error reading queued file: ");
+      return FALSE;
+    }
+  JsonArray *old_queue = json_node_get_array (old_queue_node);
+
+  GFile *storage_parent_dir = g_file_get_parent (priv->storage_file);
+  if (!g_file_make_directory_with_parents (storage_parent_dir,
+                                           cancellable, &inner_error)
+      && !g_error_matches (inner_error, G_IO_ERROR, G_IO_ERROR_EXISTS))
+    {
+      g_object_unref (storage_parent_dir);
+      g_propagate_prefixed_error (error, inner_error,
+                                  "Error ensuring storage directory exists: ");
+      return FALSE;
+    }
+  g_object_unref (storage_parent_dir);
+
+  if (!g_file_replace_contents (priv->storage_file, EMPTY_QUEUE,
+                                strlen (EMPTY_QUEUE), NULL /* etag */,
+                                FALSE /* backup */,
+                                G_FILE_CREATE_REPLACE_DESTINATION,
+                                NULL /* new etag */, cancellable, &inner_error))
+    {
+      g_propagate_prefixed_error (error, inner_error, "Error clearing queue: ");
+      return FALSE;
+    }
+
+  struct SendQueuedData data = {
+    .success = TRUE,
+    .cancellable = cancellable,
+    .error = error,
+    .self = self
+  };
+
+  json_array_foreach_element (old_queue,
+                              (JsonArrayForeach)foreach_payload_in_queue_sync,
+                              &data);
+
+  json_node_free (old_queue_node);
+  return data.success;
 }

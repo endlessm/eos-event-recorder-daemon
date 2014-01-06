@@ -1,0 +1,92 @@
+#!/usr/bin/gjs
+// Copyright 2013 Endless Mobile, Inc.
+
+const EosMetrics = imports.gi.EosMetrics;
+const Format = imports.format;
+const Gio = imports.gi.Gio;
+const System = imports.system;
+
+String.prototype.format = Format.format;
+
+const PACKAGE_VERSION = '@PACKAGE_VERSION@';
+
+let verbose = false;
+
+function usage() {
+    print('Try to re-send any session, app usage, or feedback data that is\n\
+queued and waiting to be sent.\n\n\
+Usage:\n\
+    %s [options]\n\n\
+Options:\n\
+    --help         This help message\n\
+    --version      Print program version\n\
+    -v, --verbose  Explain what is going on behind the scenes'
+    .format(System.programInvocationName));
+}
+
+function version() {
+    print('%s %s'.format(System.programInvocationName, PACKAGE_VERSION));
+}
+
+function file_size(file) {
+    let info = file.query_info('standard::size', Gio.FileQueryInfoFlags.NONE,
+        null);
+    return info.get_size();
+}
+
+function send_queue(sender) {
+    if (verbose) {
+        print('Using storage file %s'.format(sender.storage_file.get_path()));
+        if (sender.storage_file.query_exists(null))
+            print('%d bytes queued'.format(file_size(sender.storage_file)));
+        else
+            print('File does not exist, nothing to do');
+    }
+
+    try {
+        sender.send_queued_data_sync(null);
+    } catch (e) {
+        if (verbose)
+            print('Failed, reason: %s'.format(e.message));
+        System.exit(1);
+    }
+    print('Succeeded');
+}
+
+ARGV.forEach(function (argument) {
+    switch (argument) {
+    case '--help':
+        usage();
+        System.exit(0);
+        break;  // for linter
+    case '--version':
+        version();
+        System.exit(0);
+        break;  // for linter
+    case '--verbose':
+    case '-v':
+        verbose = true;
+        break;
+    default:
+        usage();
+        System.exit(1);
+    }
+});
+
+if (verbose)
+    print('Sending session data');
+
+send_queue(EosMetrics.Sender.new_for_session_metrics());
+
+if (verbose)
+    print('Sending app usage data');
+
+send_queue(EosMetrics.Sender.new_for_app_usage_metrics());
+
+if (verbose)
+    print('Sending feedback');
+
+send_queue(EosMetrics.Sender.new_for_feedback());
+
+if (verbose)
+    print('All done!');

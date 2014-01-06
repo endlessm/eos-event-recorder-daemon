@@ -40,10 +40,16 @@ emtr_connection_get_type
 EmtrSender
 EmtrSenderClass
 emtr_sender_new
+emtr_sender_new_for_session_metrics
+emtr_sender_new_for_app_usage_metrics
+emtr_sender_new_for_feedback
 <SUBSECTION Methods>
 emtr_sender_send_data
 emtr_sender_send_data_finish
 emtr_sender_send_data_sync
+emtr_sender_send_queued_data
+emtr_sender_send_queued_data_finish
+emtr_sender_send_queued_data_sync
 <SUBSECTION Getters>
 emtr_sender_get_connection
 emtr_sender_get_storage_file

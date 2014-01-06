@@ -166,6 +166,7 @@ test_connection_returns_error_if_data_not_sent_successfully (struct ConnectionFi
 {
   GError *error = NULL;
   fixture->test_object->_web_send_sync_func = mock_web_send_exception_sync;
+  fixture->test_object->_web_send_async_func = mock_web_send_exception_async;
   GVariant *payload = create_payload ("foo", 1234, TRUE);
   gboolean success = emtr_connection_send_sync (fixture->test_object, payload,
                                                 NULL, &error);
@@ -205,6 +206,7 @@ test_connection_makes_correct_send_call (struct ConnectionFixture *fixture,
   fixture->test_object->_uuid_gen_func = mock_uuid;
   fixture->test_object->_mac_gen_func = mock_mac;
   fixture->test_object->_web_send_sync_func = mock_web_send_assert_sync;
+  fixture->test_object->_web_send_async_func = mock_web_send_assert_async;
 
   GVariant *payload = create_payload ("foo", 1234, TRUE);
   g_assert (emtr_connection_send_sync (fixture->test_object, payload,
@@ -225,6 +227,7 @@ test_connection_get_fingerprint_returns_contents_of_file (struct ConnectionFixtu
                                      NULL, NULL));
   GVariant *payload = create_payload ("foo", 1234, TRUE);
   fixture->test_object->_web_send_sync_func = mock_web_send_assert_fingerprint_sync;
+  fixture->test_object->_web_send_async_func = mock_web_send_assert_fingerprint_async;
   g_assert (emtr_connection_send_sync (fixture->test_object, payload,
                                        NULL, NULL));
   g_variant_unref (payload);
@@ -305,6 +308,7 @@ static void
 test_connection_async_returns_error_if_data_not_sent_successfully (struct ConnectionFixture *fixture,
                                                                    gconstpointer             unused)
 {
+  fixture->test_object->_web_send_sync_func = mock_web_send_exception_sync;
   fixture->test_object->_web_send_async_func = mock_web_send_exception_async;
   GVariant *payload = create_payload ("foo", 1234, TRUE);
   emtr_connection_send (fixture->test_object, payload, NULL,
@@ -336,6 +340,7 @@ test_connection_async_makes_correct_send_call (struct ConnectionFixture *fixture
                                        NULL);
   fixture->test_object->_uuid_gen_func = mock_uuid;
   fixture->test_object->_mac_gen_func = mock_mac;
+  fixture->test_object->_web_send_sync_func = mock_web_send_assert_sync;
   fixture->test_object->_web_send_async_func = mock_web_send_assert_async;
 
   GVariant *payload = create_payload ("foo", 1234, TRUE);
@@ -345,7 +350,7 @@ test_connection_async_makes_correct_send_call (struct ConnectionFixture *fixture
   g_main_loop_run (fixture->mainloop);
   g_variant_unref (payload);
 
-  /* Other assertions in mock_web_send_assert_async() */
+  /* Other assertions in mock_web_send_assert_[a]sync() */
 }
 
 static void
@@ -358,6 +363,7 @@ test_connection_async_get_fingerprint_returns_contents_of_file (struct Connectio
                                      G_FILE_CREATE_REPLACE_DESTINATION, NULL,
                                      NULL, NULL));
   GVariant *payload = create_payload ("foo", 1234, TRUE);
+  fixture->test_object->_web_send_sync_func = mock_web_send_assert_fingerprint_sync;
   fixture->test_object->_web_send_async_func = mock_web_send_assert_fingerprint_async;
   emtr_connection_send (fixture->test_object, payload, NULL,
                         (GAsyncReadyCallback)test_connection_async_generic_callback,
@@ -365,7 +371,7 @@ test_connection_async_get_fingerprint_returns_contents_of_file (struct Connectio
   g_main_loop_run (fixture->mainloop);
   g_variant_unref (payload);
 
-  /* Other assertions in mock_web_send_assert_fingerprint_async() */
+  /* Other assertions in mock_web_send_assert_fingerprint_[a]sync() */
 }
 
 static void

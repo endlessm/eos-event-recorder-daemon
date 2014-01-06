@@ -8,24 +8,10 @@
 #include <eosmetrics/emtr-osversion-private.h>
 #include "run-tests.h"
 
-#define MOCK_FILE_ENVVAR "_MOCK_ENDLESSOS_VERSION_FILE"
-#define MOCK_FILE_CONTENTS \
-  "<endlessos-version>\n" \
-  "  <platform>1</platform>\n" \
-  "  <minor>2</minor>\n" \
-  "  <micro>0</micro>\n" \
-  "  <distributor>Endless Mobile</distributor>\n" \
-  "  <date>2013-11-27</date>\n" \
-  "</endlessos-version>"
-
 static void
 test_osversion_returns_version (void)
 {
-  /* Set up mock version file */
-  const gchar *version_filename = g_getenv (MOCK_FILE_ENVVAR);
-
-  g_assert (g_file_set_contents (version_filename, MOCK_FILE_CONTENTS, -1,
-                                 NULL));
+  set_up_mock_version_file (MOCK_VERSION_FILE_CONTENTS);
 
   gchar *version = emtr_get_os_version ();
   g_assert (version != NULL);
@@ -36,8 +22,7 @@ test_osversion_returns_version (void)
 static void
 test_osversion_returns_null_on_error (void)
 {
-  const gchar *version_filename = g_getenv (MOCK_FILE_ENVVAR);
-  g_assert (g_file_set_contents (version_filename, "", 0, NULL));
+  set_up_mock_version_file ("");
   /* Version file is empty here, so the call should return NULL to indicate an
   error, and print a critical message */
   g_test_trap_subprocess ("/osversion/returns-null-on-error/subprocess", 0, 0);
@@ -55,7 +40,7 @@ void
 add_osversion_tests (void)
 {
   /* Don't perform these tests on the real version file */
-  if (g_getenv (MOCK_FILE_ENVVAR))
+  if (g_getenv (MOCK_VERSION_FILE_ENVVAR))
     {
       g_test_add_func ("/osversion/returns-version",
                        test_osversion_returns_version);

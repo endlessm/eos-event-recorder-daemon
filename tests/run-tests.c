@@ -78,6 +78,13 @@ create_payload (const gchar *message,
   return g_variant_builder_end (&builder);
 }
 
+void
+set_up_mock_version_file (const gchar *contents)
+{
+  const gchar *version_filename = g_getenv (MOCK_VERSION_FILE_ENVVAR);
+  g_assert (g_file_set_contents (version_filename, contents, -1, NULL));
+}
+
 int
 main (int    argc,
       char **argv)

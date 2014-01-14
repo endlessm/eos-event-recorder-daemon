@@ -1,0 +1,4 @@
+usr/include/eosmetrics*/*
+usr/lib/libeosmetrics*.so
+usr/lib/pkgconfig/eosmetrics*.pc
+usr/share/gir-1.0/EosMetrics*.gir

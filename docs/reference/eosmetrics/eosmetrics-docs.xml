@@ -15,6 +15,8 @@
     </releaseinfo>
   </bookinfo>
 
+  <xi:include href="xml/overview.xml"/>
+
   <chapter>
     <title>EOS Metrics Reference Manual (C API)</title>
     <xi:include href="xml/emtr-util.xml"/>

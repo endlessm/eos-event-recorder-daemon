@@ -318,21 +318,45 @@ emtr_connection_class_init (EmtrConnectionClass *klass)
   /**
    * EmtrConnection:uri-context:
    *
-   * FIXME
+   * This is a URI component, relative to the root of the metrics server
+   * endpoint, to which the metrics data is posted.
+   * For example, if the #EmtrConnection:endpoint is
+   * <uri>http://example.com</uri> and the #EmtrConnection:uri-context is set to
+   * <code>"metrics"</code>, then the metrics data is posted to
+   * <uri>http://example.com/metrics</uri>.
    */
   emtr_connection_props[PROP_URI_CONTEXT] =
     g_param_spec_string ("uri-context", "URI context",
-                         "Need description FIXME",
+                         "URI relative to the metrics server to post to",
                          "metrics",
                          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
   /**
    * EmtrConnection:form-param-name:
    *
-   * FIXME
+   * This is a valid JavaScript property name under which the payload is
+   * inserted into the HTTP POST message body when posting the data to the
+   * metrics server.
+   * For example, when sending the following payload with a
+   * #EmtrConnection:form-param-name of <code>"data"</code>,
+   * |[
+   * {
+   *     "clicks": 5,
+   *     "timestamp": 1234
+   * }
+   * ]|
+   * the resulting HTTP message body will look like this:
+   * |[
+   * {
+   *     "data": {
+   *         "clicks": 5,
+   *         "timestamp": 1234
+   *     }
+   * }
+   * ]|
    */
   emtr_connection_props[PROP_FORM_PARAM_NAME] =
     g_param_spec_string ("form-param-name", "Form param name",
-                         "Need description FIXME",
+                         "Property name under which to insert the payload into the HTTP POST data",
                          "data",
                          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
   /**
@@ -362,11 +386,11 @@ emtr_connection_class_init (EmtrConnectionClass *klass)
   /**
    * EmtrConnection:fingerprint-file:
    *
-   * A #GFile handle to a file containing this machine's fingerprint.
+   * A #GFile handle to a file containing this installation's fingerprint.
    *
    * If the file does not exist, a new fingerprint will be created and written
    * to the file.
-   * The fingerprint should be unique to the machine.
+   * The fingerprint should be unique to the operating system installation.
    *
    * Setting this property to %NULL will use the default file location of
    * <filename><varname>$XDG_DATA_HOME</varname>/eosmetrics/fingerprint</filename>.

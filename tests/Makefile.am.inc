@@ -44,3 +44,5 @@ TESTS_ENVIRONMENT = \
 	export LD_LIBRARY_PATH="$(top_builddir)/.libs$${LD_LIBRARY_PATH:+:$$LD_LIBRARY_PATH}"; \
 	export _MOCK_ENDLESSOS_VERSION_FILE=`mktemp`; \
 	$(NULL)
+
+EXTRA_DIST += tests/smoke-tests/smoke.js

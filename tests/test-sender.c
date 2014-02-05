@@ -142,6 +142,12 @@ struct SenderFixture {
   GMainLoop *mainloop; /* For async tests */
 };
 
+static gint64
+mock_mac (void)
+{
+  return MOCK_MAC_VALUE;
+}
+
 static void
 setup (struct SenderFixture *fixture,
        gconstpointer         unused)
@@ -156,6 +162,7 @@ setup (struct SenderFixture *fixture,
   fixture->connection = g_object_new (EMTR_TYPE_CONNECTION,
                                       "fingerprint-file", fixture->fingerprint_file,
                                       NULL);
+  fixture->connection->_mac_gen_func = mock_mac;
   fixture->connection->_web_send_sync_func = mock_web_send_sync;
   fixture->connection->_web_send_async_func = mock_web_send_async;
   fixture->connection->_web_send_finish_func = mock_web_send_finish;

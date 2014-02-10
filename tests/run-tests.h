@@ -16,6 +16,7 @@
   "  <distributor>Endless Mobile</distributor>\n" \
   "  <date>2013-11-27</date>\n" \
   "</endlessos-version>"
+#define MOCK_MAC_VALUE ((gint64)321)
 
 /* Common code for tests */
 

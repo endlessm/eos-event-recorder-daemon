@@ -120,7 +120,7 @@ emtr_mac_gen (void)
                                                            NULL, &error);
   if (interfaces == NULL)
     {
-      g_warning ("Could not determine MAC address: %s", error->message);
+      g_debug ("Could not determine MAC address: %s", error->message);
       g_error_free (error);
       g_free (sysfs_interfaces_dir);
       goto fail;
@@ -168,7 +168,7 @@ emtr_mac_gen (void)
 
   if (error != NULL)
     {
-      g_warning ("Could not determine MAC address: %s", error->message);
+      g_debug ("Could not determine MAC address: %s", error->message);
       g_error_free (error);
       goto fail;
     }
@@ -188,7 +188,7 @@ emtr_mac_gen (void)
   return cached_mac_address;
 
 fail:
-  g_warning ("Using fake MAC address\n");
+  g_debug ("Using fake MAC address\n");
   cached_mac_address = fake_mac_address ();
   return cached_mac_address;
 }

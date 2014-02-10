@@ -10,7 +10,6 @@
 
 #define TMP_DIRECTORY_TEMPLATE "/tmp/metricsconnectiontestXXXXXX"
 #define MOCK_UUID_VALUE "123"
-#define MOCK_MAC_VALUE ((gint64)321)
 #define MOCK_JSON_PAYLOAD "{\"message\":\"foo\",\"timestamp\":12345,\"bug\":true}"
 #define MOCK_USERNAME "user"
 #define MOCK_PASSWORD "pass"

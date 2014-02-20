@@ -98,6 +98,7 @@ main (int    argc,
   add_web_tests ();
   add_connection_tests ();
   add_sender_tests ();
+  add_event_recorder_tests ();
 
   return g_test_run ();
 }

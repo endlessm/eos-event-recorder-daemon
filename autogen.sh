@@ -13,12 +13,6 @@ test -f $FILE_MUST_EXIST || {
     exit 1
 }
 
-# Install our commit message script if a git repo
-if [ -d .git ]; then
-    cp commit-msg .git/hooks/commit-msg
-    chmod +x .git/hooks/commit-msg
-fi
-
 # NOCONFIGURE is used by gnome-common
 if test -z "$NOCONFIGURE"; then
     echo "This script will run ./configure automatically. If you wish to pass "

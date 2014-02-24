@@ -122,7 +122,7 @@ emtr_mac_gen (void)
     {
       g_debug ("Could not determine MAC address: %s", error->message);
       g_error_free (error);
-      g_free (sysfs_interfaces_dir);
+      g_object_unref (sysfs_interfaces_dir);
       goto fail;
     }
 

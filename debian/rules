@@ -17,4 +17,4 @@ override_dh_auto_configure:
 	dh_auto_configure -- --enable-gtk-doc --enable-gir-doc
 
 override_dh_auto_test:
-	dh_auto_test || find . -name '*.log' | xargs cat && false
+	dh_auto_test || ( find . -name '*.log' | xargs cat; false )

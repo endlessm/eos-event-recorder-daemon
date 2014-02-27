@@ -22,6 +22,7 @@
     <xi:include href="xml/emtr-util.xml"/>
     <xi:include href="xml/emtr-connection.xml"/>
     <xi:include href="xml/emtr-sender.xml"/>
+    <xi:include href="xml/emtr-event-recorder.xml"/>
   </chapter>
 
   <chapter id="object-tree">

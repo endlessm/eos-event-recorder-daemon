@@ -68,3 +68,22 @@ EMTR_SENDER_GET_CLASS
 EMTR_TYPE_SENDER
 emtr_sender_get_type
 </SECTION>
+
+<SECTION>
+<FILE>emtr-event-recorder</FILE>
+<TITLE>EmtrEventRecorder</TITLE>
+EmtrEventRecorder
+EmtrEventRecorderClass
+emtr_event_recorder_new
+<SUBSECTION Methods>
+emtr_event_recorder_record_event
+emtr_event_recorder_record_events
+<SUBSECTION Standard>
+EMTR_EVENT_RECORDER
+EMTR_EVENT_RECORDER_CLASS
+EMTR_EVENT_RECORDER_GET_CLASS
+EMTR_IS_EVENT_RECORDER
+EMTR_IS_EVENT_RECORDER_CLASS
+EMTR_TYPE_EVENT_RECORDER
+emtr_event_recorder_get_type
+</SECTION>

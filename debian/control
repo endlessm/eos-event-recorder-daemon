@@ -4,7 +4,7 @@ Maintainer: Philip Chimento <philip@endlessm.com>
 Build-Depends: autotools-dev,
                debhelper (>= 8.0.0),
                gobject-introspection,
-               gtk-doc-tools (>= 1.18),
+               gtk-doc-tools (>= 1.19),
                libgirepository1.0-dev,
                libglib2.0-dev (>= 2.38),
                libjson-glib-dev (>= 0.16),

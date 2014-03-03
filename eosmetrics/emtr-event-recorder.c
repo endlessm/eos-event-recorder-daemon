@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2013 Endless Mobile, Inc. */
+/* Copyright 2014 Endless Mobile, Inc. */
 
 #include "emtr-event-recorder.h"
 
@@ -19,9 +19,10 @@
  * |[
  * const EosMetrics = imports.gi.EosMetrics;
  * const GLib = imports.gi.GLib;
- * const MEANINGLESS_EVENT = 12;
- * const MEANINGLESS_AGGREGATED_EVENT = 7;
- * const MEANINGLESS_EVENT_WITH_AUX_DATA = 8;
+ * const MEANINGLESS_EVENT = "fb59199e-5384-472e-af1e-00b7a419d5c2";
+ * const MEANINGLESS_AGGREGATED_EVENT = "01ddd9ad-255a-413d-8c8c-9495d810a90f";
+ * const MEANINGLESS_EVENT_WITH_AUX_DATA =
+ *   "9f26029e-8085-42a7-903e-10fcd1815e03";
  *
  * let eventRecorder = EosMetrics.EventRecorder.new();
  *
@@ -92,8 +93,9 @@ emtr_event_recorder_new (void)
 /**
  * emtr_event_recorder_record_event:
  * @self: the event recorder
- * @event_id: the type of event that took place
- * @auxiliary_payload: miscellaneous data to associate with the event
+ * @event_id: an RFC 4122 UUID representing the type of event that took place
+ * @auxiliary_payload: (allow-none): miscellaneous data to associate with the
+ * event
  *
  * Make a best-effort to record the fact that an event of type @event_id
  * happened at the current time. Optionally, associate arbitrary data,
@@ -116,7 +118,7 @@ emtr_event_recorder_new (void)
 // TODO: Add link to mapping of event IDs to human-readable event descriptions.
 void
 emtr_event_recorder_record_event (EmtrEventRecorder *self,
-                                  int                event_id,
+                                  const gchar       *event_id,
                                   GVariant          *auxiliary_payload)
 {
   // TODO: Implement.
@@ -125,9 +127,10 @@ emtr_event_recorder_record_event (EmtrEventRecorder *self,
 /**
  * emtr_event_recorder_record_events:
  * @self: the event recorder
- * @event_id: the type of events that took place
+ * @event_id: an RFC 4122 UUID representing the type of event that took place
  * @num_events: the number of times the event type took place
- * @auxiliary_payload: miscellaneous data to associate with the events
+ * @auxiliary_payload: (allow-none): miscellaneous data to associate with the
+ * events
  *
  * Make a best-effort to record the fact that @num_events events of type
  * @event_id happened between the current time and the previous such recording.
@@ -152,9 +155,76 @@ emtr_event_recorder_record_event (EmtrEventRecorder *self,
 // TODO: Add link to mapping of event IDs to human-readable event descriptions.
 void
 emtr_event_recorder_record_events (EmtrEventRecorder *self,
-                                   int                event_id,
-                                   signed long long   num_events,
+                                   const gchar       *event_id,
+                                   gint64             num_events,
                                    GVariant          *auxiliary_payload)
+{
+  // TODO: Implement.
+}
+
+/**
+ * emtr_event_recorder_record_start:
+ * @self: the event recorder
+ * @event_id: an RFC 4122 UUID representing the type of event that took place
+ * @key: (allow-none): the identifier used to associate the start of the event
+ * with the stop
+ * @auxiliary_payload: (allow-none): miscellaneous data to associate with the
+ * events
+ *
+ * Make a best-effort to record the fact that an event of type @event_id
+ * started at the current time. If starts and stops of events of type @event_id
+ * can be nested, then @key should be used to disambiguate the stop that
+ * corresponds to this start. For example, if one were recording how long
+ * processes remained open, process IDs would be a suitable choice for the @key.
+ * Within the lifetime of each process, process IDs are unique within the scope
+ * of PROCESS_OPEN events. If starts and stops of events of type @event_id can
+ * not be nested, then @key can be %NULL.
+ *
+ * Optionally, associate arbitrary data, @auxiliary_payload, with this
+ * particular instance of the event. Under no circumstances should
+ * personally-identifiable information be included in the @auxiliary_payload or
+ * @event_id. Large auxiliary payloads dominate the size of the event and should
+ * therefore be used sparingly. Events for which precise timing information is
+ * not required should instead be recorded using
+ * emtr_event_recorder_record_events() to conserve bandwidth.
+ *
+ * At the discretion of the metrics system, the event may be discarded before
+ * being reported to the metrics server. The event may take arbitrarily long to
+ * reach the server and may be persisted unencrypted on the client for
+ * arbitrarily long. There is no guarantee that the event is delivered via the
+ * network; for example, it may instead be delivered manually on a USB drive.
+ * No indication of successful or failed delivery is provided, and no
+ * application should rely on successful delivery. The event will not be
+ * aggregated with other events before reaching the server.
+ */
+// TODO: Add link to mapping of event IDs to human-readable event descriptions.
+void
+emtr_event_recorder_record_start (EmtrEventRecorder *self,
+                                  const gchar       *event_id,
+                                  GVariant          *key,
+                                  GVariant          *auxiliary_payload)
+{
+  // TODO: Implement.
+}
+
+/**
+ * emtr_event_recorder_record_stop:
+ * @self: the event recorder
+ * @event_id: an RFC 4122 UUID representing the type of event that took place
+ * @key: (allow-none): the identifier used to associate the stop of the event
+ * with the start
+ * @auxiliary_payload: (allow-none): miscellaneous data to associate with the
+ * events
+ *
+ * Make a best-effort to record the fact that an event of type @event_id
+ * stopped at the current time. Behaves like emtr_event_recorder_record_start().
+ */
+// TODO: Add link to mapping of event IDs to human-readable event descriptions.
+void
+emtr_event_recorder_record_stop (EmtrEventRecorder *self,
+                                 const gchar       *event_id,
+                                 GVariant          *key,
+                                 GVariant          *auxiliary_payload)
 {
   // TODO: Implement.
 }

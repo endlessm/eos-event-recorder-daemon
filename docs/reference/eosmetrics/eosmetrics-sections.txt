@@ -78,6 +78,8 @@ emtr_event_recorder_new
 <SUBSECTION Methods>
 emtr_event_recorder_record_event
 emtr_event_recorder_record_events
+emtr_event_recorder_record_start
+emtr_event_recorder_record_stop
 <SUBSECTION Standard>
 EMTR_EVENT_RECORDER
 EMTR_EVENT_RECORDER_CLASS

@@ -46,4 +46,7 @@ TESTS_ENVIRONMENT = \
 	export _MOCK_ENDLESSOS_VERSION_FILE=`mktemp`; \
 	$(NULL)
 
-EXTRA_DIST += tests/smoke-tests/smoke.js
+EXTRA_DIST += \
+	tests/smoke-tests/smoke.js \
+	tests/smoke-tests/event-types.js \
+	$(NULL)

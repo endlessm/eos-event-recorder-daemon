@@ -98,12 +98,13 @@ emtr_event_recorder_new (void)
  * event
  *
  * Make a best-effort to record the fact that an event of type @event_id
- * happened at the current time. Optionally, associate arbitrary data,
- * @auxiliary_payload, with this particular instance of the event. Under no
- * circumstances should personally-identifiable information be included in the
- * @auxiliary_payload or @event_id. Large auxiliary payloads dominate the size
- * of the event and should therefore be used sparingly. Events for which precise
- * timing information is not required should instead be recorded using
+ * happened at the current time. emtr-event-types.h is the registry for event
+ * IDs. Optionally, associate arbitrary data, @auxiliary_payload, with this
+ * particular instance of the event. Under no circumstances should
+ * personally-identifiable information be included in the @auxiliary_payload or
+ * @event_id. Large auxiliary payloads dominate the size of the event and should
+ * therefore be used sparingly. Events for which precise timing information is
+ * not required should instead be recorded using
  * emtr_event_recorder_record_events() to conserve bandwidth.
  *
  * At the discretion of the metrics system, the event may be discarded before
@@ -115,7 +116,6 @@ emtr_event_recorder_new (void)
  * application should rely on successful delivery. The event will not be
  * aggregated with other events before reaching the server.
  */
-// TODO: Add link to mapping of event IDs to human-readable event descriptions.
 void
 emtr_event_recorder_record_event (EmtrEventRecorder *self,
                                   const gchar       *event_id,
@@ -134,13 +134,13 @@ emtr_event_recorder_record_event (EmtrEventRecorder *self,
  *
  * Make a best-effort to record the fact that @num_events events of type
  * @event_id happened between the current time and the previous such recording.
- * Optionally, associate arbitrary data, @auxiliary_payload, with these
- * particular instances of the event. Under no circumstances should
- * personally-identifiable information be included in the @auxiliary_payload,
- * the @event_id, or @num_events. Large auxiliary payloads dominate the size of
- * the event and should therefore be used sparingly. Events for which precise
- * timing information is required should instead be recorded using
- * emtr_event_recorder_record_event().
+ * emtr-event-types.h is the registry for event IDs. Optionally, associate
+ * arbitrary data, @auxiliary_payload, with these particular instances of the
+ * event. Under no circumstances should personally-identifiable information be
+ * included in the @auxiliary_payload, the @event_id, or @num_events. Large
+ * auxiliary payloads dominate the size of the event and should therefore be
+ * used sparingly. Events for which precise timing information is required
+ * should instead be recorded using emtr_event_recorder_record_event().
  *
  * At the discretion of the metrics system, the events may be discarded before
  * being reported to the metrics server. The events may take arbitrarily long to
@@ -152,7 +152,6 @@ emtr_event_recorder_record_event (EmtrEventRecorder *self,
  * events may be aggregated in a lossy fashion with other events with the same
  * @event_id before reaching the server.
  */
-// TODO: Add link to mapping of event IDs to human-readable event descriptions.
 void
 emtr_event_recorder_record_events (EmtrEventRecorder *self,
                                    const gchar       *event_id,
@@ -172,13 +171,13 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
  * events
  *
  * Make a best-effort to record the fact that an event of type @event_id
- * started at the current time. If starts and stops of events of type @event_id
- * can be nested, then @key should be used to disambiguate the stop that
- * corresponds to this start. For example, if one were recording how long
- * processes remained open, process IDs would be a suitable choice for the @key.
- * Within the lifetime of each process, process IDs are unique within the scope
- * of PROCESS_OPEN events. If starts and stops of events of type @event_id can
- * not be nested, then @key can be %NULL.
+ * started at the current time. emtr-event-types.h is the registry for event
+ * IDs. If starts and stops of events of type @event_id can be nested, then @key
+ * should be used to disambiguate the stop that corresponds to this start. For
+ * example, if one were recording how long processes remained open, process IDs
+ * would be a suitable choice for the @key. Within the lifetime of each process,
+ * process IDs are unique within the scope of PROCESS_OPEN events. If starts and
+ * stops of events of type @event_id can not be nested, then @key can be %NULL.
  *
  * Optionally, associate arbitrary data, @auxiliary_payload, with this
  * particular instance of the event. Under no circumstances should
@@ -197,7 +196,6 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
  * application should rely on successful delivery. The event will not be
  * aggregated with other events before reaching the server.
  */
-// TODO: Add link to mapping of event IDs to human-readable event descriptions.
 void
 emtr_event_recorder_record_start (EmtrEventRecorder *self,
                                   const gchar       *event_id,
@@ -219,7 +217,6 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
  * Make a best-effort to record the fact that an event of type @event_id
  * stopped at the current time. Behaves like emtr_event_recorder_record_start().
  */
-// TODO: Add link to mapping of event IDs to human-readable event descriptions.
 void
 emtr_event_recorder_record_stop (EmtrEventRecorder *self,
                                  const gchar       *event_id,

@@ -22,6 +22,7 @@ Section: non-free/libdevel
 Architecture: any
 Depends: libeosmetrics-0-0 (= ${binary:Version}),
          libjson-glib-dev (>= 0.16),
+         libsoup2.4-dev (>= 2.42),
          ${misc:Depends}
 Description: Files needed for developing using the EndlessOS Metrics Kit
  Install this package if you are compiling C programs that use the EndlessOS

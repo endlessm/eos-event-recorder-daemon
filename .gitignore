@@ -6,7 +6,7 @@
 /docs/reference/eosmetrics/version.xml
 /tools/eos-send-metrics
 
-# Test productes
+# Test products
 *.log
 *.trs
 

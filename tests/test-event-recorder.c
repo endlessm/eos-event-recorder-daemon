@@ -41,6 +41,15 @@ test_event_recorder_record_start (void)
 }
 
 static void
+test_event_recorder_record_progress (void)
+{
+  EmtrEventRecorder *event_recorder = emtr_event_recorder_new ();
+  emtr_event_recorder_record_progress (event_recorder, MEANINGLESS_EVENT, NULL,
+                                       NULL);
+  // TODO: Test functionality once implemented.
+}
+
+static void
 test_event_recorder_record_stop (void)
 {
   EmtrEventRecorder *event_recorder = emtr_event_recorder_new ();
@@ -59,6 +68,8 @@ add_event_recorder_tests (void)
                    test_event_recorder_record_events);
   g_test_add_func ("/event-recorder/record-start",
                    test_event_recorder_record_start);
+  g_test_add_func ("/event-recorder/record-progress",
+                   test_event_recorder_record_progress);
   g_test_add_func ("/event-recorder/record-stop",
                    test_event_recorder_record_stop);
 }

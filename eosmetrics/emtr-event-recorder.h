@@ -64,33 +64,39 @@ struct _EmtrEventRecorderClass
 };
 
 EMTR_ALL_API_VERSIONS
-GType              emtr_event_recorder_get_type      (void) G_GNUC_CONST;
+GType              emtr_event_recorder_get_type        (void) G_GNUC_CONST;
 
 EMTR_ALL_API_VERSIONS
-EmtrEventRecorder *emtr_event_recorder_new           (void);
+EmtrEventRecorder *emtr_event_recorder_new             (void);
 
 EMTR_ALL_API_VERSIONS
-void               emtr_event_recorder_record_event  (EmtrEventRecorder *self,
-                                                      const gchar       *event_id,
-                                                      GVariant          *auxiliary_payload);
+void               emtr_event_recorder_record_event    (EmtrEventRecorder *self,
+                                                        const gchar       *event_id,
+                                                        GVariant          *auxiliary_payload);
 
 EMTR_ALL_API_VERSIONS
-void               emtr_event_recorder_record_events (EmtrEventRecorder *self,
-                                                      const gchar       *event_id,
-                                                      gint64             num_events,
-                                                      GVariant          *auxiliary_payload);
+void               emtr_event_recorder_record_events   (EmtrEventRecorder *self,
+                                                        const gchar       *event_id,
+                                                        gint64             num_events,
+                                                        GVariant          *auxiliary_payload);
 
 EMTR_ALL_API_VERSIONS
-void               emtr_event_recorder_record_start  (EmtrEventRecorder *self,
-                                                      const gchar       *event_id,
-                                                      GVariant          *key,
-                                                      GVariant          *auxiliary_payload);
+void               emtr_event_recorder_record_start    (EmtrEventRecorder *self,
+                                                        const gchar       *event_id,
+                                                        GVariant          *key,
+                                                        GVariant          *auxiliary_payload);
 
 EMTR_ALL_API_VERSIONS
-void               emtr_event_recorder_record_stop   (EmtrEventRecorder *self,
-                                                      const gchar       *event_id,
-                                                      GVariant          *key,
-                                                      GVariant          *auxiliary_payload);
+void               emtr_event_recorder_record_progress (EmtrEventRecorder *self,
+                                                        const gchar       *event_id,
+                                                        GVariant          *key,
+                                                        GVariant          *auxiliary_payload);
+
+EMTR_ALL_API_VERSIONS
+void               emtr_event_recorder_record_stop     (EmtrEventRecorder *self,
+                                                        const gchar       *event_id,
+                                                        GVariant          *key,
+                                                        GVariant          *auxiliary_payload);
 
 G_END_DECLS
 

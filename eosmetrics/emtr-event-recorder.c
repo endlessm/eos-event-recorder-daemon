@@ -171,9 +171,11 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
  * events
  *
  * Make a best-effort to record the fact that an event of type @event_id
- * started at the current time. emtr-event-types.h is the registry for event
- * IDs. If starts and stops of events of type @event_id can be nested, then @key
- * should be used to disambiguate the stop that corresponds to this start. For
+ * started at the current time. The event's stop must be reported using
+ * emtr_event_recorder_record_stop() or memory will be leaked.
+ * emtr-event-types.h is the registry for event IDs. If starts and stops of
+ * events of type @event_id can be nested, then @key should be used to
+ * disambiguate the stop and any progress that corresponds to this start. For
  * example, if one were recording how long processes remained open, process IDs
  * would be a suitable choice for the @key. Within the lifetime of each process,
  * process IDs are unique within the scope of PROCESS_OPEN events. If starts and
@@ -188,19 +190,44 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
  * emtr_event_recorder_record_events() to conserve bandwidth.
  *
  * At the discretion of the metrics system, the event may be discarded before
- * being reported to the metrics server. The event may take arbitrarily long to
- * reach the server and may be persisted unencrypted on the client for
- * arbitrarily long. There is no guarantee that the event is delivered via the
- * network; for example, it may instead be delivered manually on a USB drive.
- * No indication of successful or failed delivery is provided, and no
- * application should rely on successful delivery. The event will not be
- * aggregated with other events before reaching the server.
+ * being reported to the metrics server. However, an event start, the
+ * corresponding stop, and any corresponding progress either will be delivered or
+ * dropped atomically. The event may take arbitrarily long to reach the server
+ * and may be persisted unencrypted on the client for arbitrarily long. There is
+ * no guarantee that the event is delivered via the network; for example, it may
+ * instead be delivered manually on a USB drive. No indication of successful or
+ * failed delivery is provided, and no application should rely on successful
+ * delivery. The event will not be aggregated with other events before reaching
+ * the server.
  */
 void
 emtr_event_recorder_record_start (EmtrEventRecorder *self,
                                   const gchar       *event_id,
                                   GVariant          *key,
                                   GVariant          *auxiliary_payload)
+{
+  // TODO: Implement.
+}
+
+/**
+ * emtr_event_recorder_record_progress:
+ * @self: the event recorder
+ * @event_id: an RFC 4122 UUID representing the type of event that took place
+ * @key: (allow-none): the identifier used to associate the stop of the event
+ * with the start and any progress
+ * @auxiliary_payload: (allow-none): miscellaneous data to associate with the
+ * events
+ *
+ * Make a best-effort to record the fact that an event of type @event_id
+ * progressed at the current time. May be called arbitrarily many times between
+ * a corresponding start and stop. Behaves like
+ * emtr_event_recorder_record_start().
+ */
+void
+emtr_event_recorder_record_progress (EmtrEventRecorder *self,
+                                     const gchar       *event_id,
+                                     GVariant          *key,
+                                     GVariant          *auxiliary_payload)
 {
   // TODO: Implement.
 }

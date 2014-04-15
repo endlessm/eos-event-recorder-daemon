@@ -44,6 +44,7 @@ Makefile.in
 /m4/serial-tests.m4
 .dirstamp
 /test-driver
+*.tar.gz
 
 # Gtk-doc
 /gtk-doc.make

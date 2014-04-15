@@ -40,6 +40,9 @@ AM_LOG_FLAGS = -k --verbose
 
 # Use locally built versions of EosMetrics-0.gir and libraries; this may need to
 # be changed to AM_TESTS_ENVIRONMENT in a future version of Automake
+# TODO: Consider an alternative to _MOCK_ENDLESSOS_VERSION_FILE since its use
+# implies a need to set an environment variable by this name when running
+# run-tests directly (as opposed to via make check).
 TESTS_ENVIRONMENT = \
 	export GI_TYPELIB_PATH="$(top_builddir)$${GI_TYPELIB_PATH:+:$$GI_TYPELIB_PATH}"; \
 	export LD_LIBRARY_PATH="$(top_builddir)/.libs$${LD_LIBRARY_PATH:+:$$LD_LIBRARY_PATH}"; \

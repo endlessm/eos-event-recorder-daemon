@@ -4,7 +4,8 @@
 
 #include "run-tests.h"
 
-#include <eosmetrics/emtr-event-recorder.h>
+#include "eosmetrics/emtr-event-recorder.h"
+
 #include <glib.h>
 
 #define MEANINGLESS_EVENT "350ac4ff-3026-4c25-9e7e-e8103b4fd5d8"
@@ -93,7 +94,7 @@ test_event_recorder_record_progress_with_key (void)
   g_object_unref (event_recorder);
 }
 
-    static void
+static void
 test_event_recorder_record_start_stop_with_floating_key (void)
 {
   EmtrEventRecorder *event_recorder = emtr_event_recorder_new ();
@@ -118,7 +119,7 @@ test_event_recorder_record_progress_with_floating_key (void)
 }
 
 static void
-test_event_recorder_record_auxiliary_data (void)
+test_event_recorder_record_auxiliary_payload (void)
 {
   EmtrEventRecorder *event_recorder = emtr_event_recorder_new ();
   emtr_event_recorder_record_event (event_recorder, MEANINGLESS_EVENT,
@@ -155,8 +156,8 @@ test_event_recorder_record_multiple_metric_sequences (void)
                                    NULL);
   emtr_event_recorder_record_stop (event_recorder, MEANINGLESS_EVENT, key,
                                    NULL);
-  g_object_unref (event_recorder);
   g_variant_unref (key);
+  g_object_unref (event_recorder);
 }
 
 void
@@ -180,8 +181,8 @@ add_event_recorder_tests (void)
                    test_event_recorder_record_start_stop_with_floating_key);
   g_test_add_func ("/event-recorder/record-progress-with-floating-key",
                    test_event_recorder_record_progress_with_floating_key);
-  g_test_add_func ("/event-recorder/record-auxiliary-data",
-                   test_event_recorder_record_auxiliary_data);
+  g_test_add_func ("/event-recorder/record-auxiliary-payload",
+                   test_event_recorder_record_auxiliary_payload);
   g_test_add_func ("/event-recorder/record-multiple-metric-sequences",
                    test_event_recorder_record_multiple_metric_sequences);
 }

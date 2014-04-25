@@ -35,7 +35,7 @@ G_BEGIN_DECLS
 
 #define EMTR_EVENT_RECORDER_GET_CLASS(obj) \
   (G_TYPE_INSTANCE_GET_CLASS ((obj), \
-  EMTR_TYPE_EVENT_RECORDER, EventRecorderClass))
+  EMTR_TYPE_EVENT_RECORDER, EmtrEventRecorderClass))
 
 /**
  * EmtrEventRecorder:

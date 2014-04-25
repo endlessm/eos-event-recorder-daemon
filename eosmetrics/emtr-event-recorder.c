@@ -74,11 +74,13 @@
 // The number of nanoseconds in one second.
 #define NANOSECONDS_PER_SECOND 1000000000L
 
+// TODO: Once we have a production proxy server, update this constant
+// accordingly.
 // The URI of the metrics production proxy server.
-#define PROXY_PROD_SERVER_URI "https://localhost:8080/"
+#define PROXY_PROD_SERVER_URI "http://metrics-test.endlessm-sf.com:8080/"
 
 // The URI of the metrics test proxy server.
-#define PROXY_TEST_SERVER_URI "https://localhost:8080/"
+#define PROXY_TEST_SERVER_URI "http://metrics-test.endlessm-sf.com:8080/"
 
 /*
  * True if client_id has been successfully populated with the contents of

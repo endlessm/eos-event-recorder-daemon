@@ -96,4 +96,5 @@ emtr_event_recorder_get_type
 <TITLE>EmtrEventTypes</TITLE>
 <SUBSECTION Constants>
 EMTR_EVENT_USER_LOGGED_IN
+EMTR_EVENT_NETWORK_STATUS_CHANGED
 </SECTION>

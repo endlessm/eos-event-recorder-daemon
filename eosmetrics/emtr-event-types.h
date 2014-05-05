@@ -66,6 +66,22 @@ G_BEGIN_DECLS
  * This is started when the social bar is visible and stopped when hidden.
  */
 #define EMTR_EVENT_SOCIAL_BAR_IS_VISIBLE "9c33a734-7ed8-4348-9e39-3c27f4dc2e62"
+ 
+/**
+ * EMTR_EVENT_SHELL_APP_ADDED:
+ *
+ * Occurs when an application is installed, aka is added to the desktop's app grid.
+ */
+#define EMTR_EVENT_SHELL_APP_ADDED "51640a4e-79aa-47ac-b7e2-d3106a06e129"
+
+/**
+ * EMTR_EVENT_SHELL_APP_REMOVED:
+ *
+ * Occurs when an application is uninstalled, aka is removed from the desktop's app 
+ * grid. This can happen via uninstalling in the app store or dragging / dropping an app to the
+ * trash.
+ */
+#define EMTR_EVENT_SHELL_APP_REMOVED "683b40a7-cac0-4f9a-994c-4b274693a0a0"
 
 G_END_DECLS
 

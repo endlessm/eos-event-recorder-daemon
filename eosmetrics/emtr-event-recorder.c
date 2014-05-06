@@ -11,11 +11,11 @@
 #include <glib.h>
 #include <glib-object.h>
 #include <glib/gprintf.h>
+#include <glib/gstdio.h>
 #include <libsoup/soup.h>
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/file.h>
 #include <uuid/uuid.h>
 
 /*
@@ -26,11 +26,22 @@
 #define CLIENT_VERSION 0
 
 /*
- * Filepath at which the random UUID that persistently identifies this device is
- * stored. In order to protect the anonymity of our users, the ID stored in this
- * file must be randomly generated and not traceable back to the user's device.
+ * Filepath at which the random UUID that persistently identifies this machine
+ * is stored.
+ * In order to protect the anonymity of our users, the ID stored in this file
+ * must be randomly generated and not traceable back to the user's device.
+ * See http://www.freedesktop.org/software/systemd/man/machine-id.html for more
+ * details.
  */
-#define CLIENT_ID_FILEPATH "/etc/metric_client_uuid"
+#define MACHINE_ID_FILEPATH "/etc/machine-id"
+
+/*
+ * The expected size in bytes of the file located at MACHINE_ID_FILEPATH.
+ * According to http://www.freedesktop.org/software/systemd/man/machine-id.html
+ * the file should be 32 lower-case hexadecimal characters followed by a
+ * newline character.
+ */
+#define MACHINE_ID_FILE_SIZE 33
 
 /*
  * Specifies whether the metrics come from regular users in production,
@@ -83,19 +94,15 @@
 #define PROXY_TEST_SERVER_URI "http://metrics-test.endlessm-sf.com:8080/"
 
 /*
- * True if client_id has been successfully populated with the contents of
- * CLIENT_ID_FILEPATH; false otherwise.
- */
-static volatile gboolean client_id_is_set = FALSE;
-
-/*
  * Caches a random UUID stored in a file that persistently identifies this
- * device. In order to protect the anonymity of our users, this ID must be
+ * machine. In order to protect the anonymity of our users, this ID must be
  * randomly generated and not traceable back to the user's device.
  */
-static uuid_t client_id;
+static uuid_t machine_id;
 
-G_LOCK_DEFINE_STATIC (client_id);
+// TODO: Re-evaluate whether this is necessary, or a GOnce (or nothing) would be
+// more appropriate.
+G_LOCK_DEFINE_STATIC (machine_id);
 
 /**
  * SECTION:emtr-event-recorder
@@ -193,6 +200,8 @@ typedef struct EmtrEventRecorderPrivate
 
   SoupSession *http_session;
 
+  gboolean recording_enabled;
+
   guint upload_events_timeout_source_id;
 } EmtrEventRecorderPrivate;
 
@@ -226,133 +235,44 @@ static void
 emtr_event_recorder_finalize (GObject *object)
 {
   EmtrEventRecorder *self = EMTR_EVENT_RECORDER (object);
-  EmtrEventRecorderPrivate *private_state =
+  EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
-  g_assert (g_source_remove (private_state->upload_events_timeout_source_id));
 
-  Event *event_buffer = private_state->event_buffer;
-  gint num_events = private_state->num_events_buffered;
-  for (gint i = 0; i < num_events; ++i)
-    free_event (event_buffer + i);
+  if (priv->recording_enabled)
+    {
+      g_source_remove (priv->upload_events_timeout_source_id);
 
-  g_free (event_buffer);
-  g_mutex_clear (&(private_state->event_buffer_lock));
+      Event *event_buffer = priv->event_buffer;
+      gint num_events = priv->num_events_buffered;
+      for (gint i = 0; i < num_events; ++i)
+        free_event (event_buffer + i);
 
-  Aggregate *aggregate_buffer = private_state->aggregate_buffer;
-  gint num_aggregates = private_state->num_aggregates_buffered;
-  for (gint i = 0; i < num_aggregates; ++i)
-    free_event (&(aggregate_buffer[i].event));
+      g_free (event_buffer);
+      g_mutex_clear (&(priv->event_buffer_lock));
 
-  g_free (aggregate_buffer);
-  g_mutex_clear (&(private_state->aggregate_buffer_lock));
+      Aggregate *aggregate_buffer = priv->aggregate_buffer;
+      gint num_aggregates = priv->num_aggregates_buffered;
+      for (gint i = 0; i < num_aggregates; ++i)
+        free_event (&(aggregate_buffer[i].event));
 
-  EventSequence *event_sequence_buffer = private_state->event_sequence_buffer;
-  gint num_event_sequences = private_state->num_event_sequences_buffered;
-  for (gint i = 0; i < num_event_sequences; ++i)
-    free_event_sequence (event_sequence_buffer + i);
+      g_free (aggregate_buffer);
+      g_mutex_clear (&(priv->aggregate_buffer_lock));
 
-  g_free (event_sequence_buffer);
-  g_mutex_clear (&(private_state->event_sequence_buffer_lock));
+      EventSequence *event_sequence_buffer = priv->event_sequence_buffer;
+      gint num_event_sequences = priv->num_event_sequences_buffered;
+      for (gint i = 0; i < num_event_sequences; ++i)
+        free_event_sequence (event_sequence_buffer + i);
 
-  g_hash_table_destroy (private_state->events_by_id_with_key);
-  g_mutex_clear (&(private_state->events_by_id_with_key_lock));
+      g_free (event_sequence_buffer);
+      g_mutex_clear (&(priv->event_sequence_buffer_lock));
 
-  g_object_unref (private_state->http_session);
+      g_hash_table_destroy (priv->events_by_id_with_key);
+      g_mutex_clear (&(priv->events_by_id_with_key_lock));
+
+      g_object_unref (priv->http_session);
+    }
 
   G_OBJECT_CLASS (emtr_event_recorder_parent_class)->finalize (object);
-}
-
-static gboolean
-set_client_id (void)
-{
-  G_LOCK (client_id);
-
-  if (G_LIKELY (client_id_is_set))
-    {
-      G_UNLOCK (client_id);
-      return TRUE;
-    }
-
-  FILE *client_id_file = fopen (CLIENT_ID_FILEPATH, "ab+");
-
-  if (G_UNLIKELY (client_id_file == NULL))
-    {
-      int error_code = errno;
-      g_critical ("Could not open client ID file: %s. Error code: %d.\n",
-                  CLIENT_ID_FILEPATH, error_code);
-      G_UNLOCK (client_id);
-      return FALSE;
-    }
-
-  int client_id_file_number = fileno (client_id_file);
-  if (G_UNLIKELY (client_id_file_number < 0))
-    {
-      int error_code = errno;
-      g_critical ("Could not get file number of client ID file: %s. Error "
-                  "code: %d.\n", CLIENT_ID_FILEPATH, error_code);
-      fclose (client_id_file);
-      G_UNLOCK (client_id);
-      return FALSE;
-    }
-
-  if (G_UNLIKELY (flock (client_id_file_number, LOCK_EX) != 0))
-    {
-      int error_code = errno;
-      g_critical ("Could not acquire exclusive lock on client ID file: %s."
-                  "Error code: %d.\n", CLIENT_ID_FILEPATH, error_code);
-      fclose (client_id_file);
-      G_UNLOCK (client_id);
-      return FALSE;
-    }
-
-  size_t num_elems_read = fread (client_id, sizeof (guchar), UUID_LENGTH,
-                                 client_id_file);
-
-  if (G_UNLIKELY (ferror (client_id_file)) != 0)
-    {
-      g_critical ("Could not read client ID file: %s.\n", CLIENT_ID_FILEPATH);
-      fclose (client_id_file);
-      G_UNLOCK (client_id);
-      return FALSE;
-    }
-
-  if (G_UNLIKELY (num_elems_read == 0))
-    {
-      uuid_generate_random (client_id);
-      size_t num_elems_written = fwrite (client_id, sizeof (guchar),
-                                         UUID_LENGTH, client_id_file);
-      if (G_UNLIKELY ((ferror (client_id_file) != 0) ||
-                      (num_elems_written != UUID_LENGTH)))
-        {
-          g_critical ("Could not write client ID file: %s.\n",
-                      CLIENT_ID_FILEPATH);
-          fclose (client_id_file);
-          G_UNLOCK (client_id);
-          return FALSE;
-        }
-    }
-  else if (G_UNLIKELY (num_elems_read != UUID_LENGTH))
-    {
-      g_critical ("Found too few bytes in client ID file: %s. Expected exactly "
-                  "%d bytes; found %u bytes.\n", CLIENT_ID_FILEPATH,
-                  UUID_LENGTH, num_elems_read);
-      fclose (client_id_file);
-      G_UNLOCK (client_id);
-      return FALSE;
-    }
-
-  if (G_UNLIKELY (fclose (client_id_file) != 0))
-    {
-      g_critical ("Could not close client ID file: %s.\n", CLIENT_ID_FILEPATH);
-      G_UNLOCK (client_id);
-      return FALSE;
-    }
-
-  client_id_is_set = TRUE;
-
-  G_UNLOCK (client_id);
-
-  return TRUE;
 }
 
 static void
@@ -459,15 +379,15 @@ get_current_time (clockid_t clock_id, gint64 *current_time)
 }
 
 static void
-get_system_events_builder (EmtrEventRecorderPrivate *private_state,
+get_system_events_builder (EmtrEventRecorderPrivate *priv,
                            GVariantBuilder          *system_events_builder)
 {
   g_variant_builder_init (system_events_builder, G_VARIANT_TYPE ("a(ayxmv)"));
 
-  g_mutex_lock (&(private_state->event_buffer_lock));
+  g_mutex_lock (&(priv->event_buffer_lock));
 
-  Event *event_buffer = private_state->event_buffer;
-  gint num_events = private_state->num_events_buffered;
+  Event *event_buffer = priv->event_buffer;
+  gint num_events = priv->num_events_buffered;
   for (gint i = 0; i < num_events; ++i)
     {
       Event *curr_event = event_buffer + i;
@@ -478,22 +398,22 @@ get_system_events_builder (EmtrEventRecorderPrivate *private_state,
         curr_event->event_value.auxiliary_payload);
       free_event (curr_event);
     }
-  private_state->num_events_buffered = 0;
+  priv->num_events_buffered = 0;
 
-  g_mutex_unlock (&(private_state->event_buffer_lock));
+  g_mutex_unlock (&(priv->event_buffer_lock));
 }
 
 static void
-get_system_aggregates_builder (EmtrEventRecorderPrivate *private_state,
+get_system_aggregates_builder (EmtrEventRecorderPrivate *priv,
                                GVariantBuilder          *system_aggregates_builder)
 {
   g_variant_builder_init (system_aggregates_builder,
                           G_VARIANT_TYPE ("a(ayxxmv)"));
 
-  g_mutex_lock (&(private_state->aggregate_buffer_lock));
+  g_mutex_lock (&(priv->aggregate_buffer_lock));
 
-  Aggregate *aggregate_buffer = private_state->aggregate_buffer;
-  gint num_aggregates = private_state->num_aggregates_buffered;
+  Aggregate *aggregate_buffer = priv->aggregate_buffer;
+  gint num_aggregates = priv->num_aggregates_buffered;
   for (gint i = 0; i < num_aggregates; ++i)
     {
       Aggregate *curr_aggregate = aggregate_buffer + i;
@@ -505,22 +425,22 @@ get_system_aggregates_builder (EmtrEventRecorderPrivate *private_state,
         curr_aggregate->event.event_value.auxiliary_payload);
       free_event (&(curr_aggregate->event));
     }
-  private_state->num_aggregates_buffered = 0;
+  priv->num_aggregates_buffered = 0;
 
-  g_mutex_unlock (&(private_state->aggregate_buffer_lock));
+  g_mutex_unlock (&(priv->aggregate_buffer_lock));
 }
 
 static void
-get_system_event_sequences_builder (EmtrEventRecorderPrivate *private_state,
+get_system_event_sequences_builder (EmtrEventRecorderPrivate *priv,
                                     GVariantBuilder          *system_event_sequences_builder)
 {
   g_variant_builder_init (system_event_sequences_builder,
                           G_VARIANT_TYPE ("a(aya(xmv))"));
 
-  g_mutex_lock (&(private_state->event_sequence_buffer_lock));
+  g_mutex_lock (&(priv->event_sequence_buffer_lock));
 
-  EventSequence *event_sequence_buffer = private_state->event_sequence_buffer;
-  gint num_event_sequences = private_state->num_event_sequences_buffered;
+  EventSequence *event_sequence_buffer = priv->event_sequence_buffer;
+  gint num_event_sequences = priv->num_event_sequences_buffered;
   for (gint i = 0; i < num_event_sequences; ++i)
     {
       EventSequence *curr_event_sequence = event_sequence_buffer + i;
@@ -540,19 +460,19 @@ get_system_event_sequences_builder (EmtrEventRecorderPrivate *private_state,
         &event_id_builder, &event_values_builder);
       free_event_sequence (curr_event_sequence);
     }
-  private_state->num_event_sequences_buffered = 0;
+  priv->num_event_sequences_buffered = 0;
 
-  g_mutex_unlock (&(private_state->event_sequence_buffer_lock));
+  g_mutex_unlock (&(priv->event_sequence_buffer_lock));
 }
 
 static GVariant *
-create_request_body (EmtrEventRecorderPrivate *private_state)
+create_request_body (EmtrEventRecorderPrivate *priv)
 {
-  if (G_UNLIKELY (!set_client_id ()))
-    return NULL;
+  GVariantBuilder machine_id_builder;
 
-  GVariantBuilder client_id_builder;
-  get_uuid_builder (client_id, &client_id_builder);
+  G_LOCK (machine_id);
+  get_uuid_builder (machine_id, &machine_id_builder);
+  G_UNLOCK (machine_id);
 
   GVariantBuilder user_events_builder;
   g_variant_builder_init (&user_events_builder,
@@ -561,14 +481,13 @@ create_request_body (EmtrEventRecorderPrivate *private_state)
   // system-level.
 
   GVariantBuilder system_events_builder;
-  get_system_events_builder (private_state, &system_events_builder);
+  get_system_events_builder (priv, &system_events_builder);
 
   GVariantBuilder system_aggregates_builder;
-  get_system_aggregates_builder (private_state, &system_aggregates_builder);
+  get_system_aggregates_builder (priv, &system_aggregates_builder);
 
   GVariantBuilder system_event_sequences_builder;
-  get_system_event_sequences_builder (private_state,
-                                      &system_event_sequences_builder);
+  get_system_event_sequences_builder (priv, &system_event_sequences_builder);
 
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.
@@ -580,7 +499,7 @@ create_request_body (EmtrEventRecorderPrivate *private_state)
   GVariant *request_body =
     g_variant_new ("(ixxaysa(aya(ayxmv)a(ayxxmv)a(aya(xmv)))"
                    "a(ayxmv)a(ayxxmv)a(aya(xmv)))", CLIENT_VERSION,
-                   relative_time, absolute_time, &client_id_builder,
+                   relative_time, absolute_time, &machine_id_builder,
                    ENVIRONMENT, &user_events_builder, &system_events_builder,
                    &system_aggregates_builder, &system_event_sequences_builder);
 
@@ -615,14 +534,16 @@ static gboolean
 upload_events (gpointer user_data)
 {
   EmtrEventRecorder *self = (EmtrEventRecorder *) user_data;
+  EmtrEventRecorderPrivate *priv =
+    emtr_event_recorder_get_instance_private (self);
+
+  if (!priv->recording_enabled)
+    return G_SOURCE_CONTINUE;
 
   // Decrease the chances of a race with emtr_event_recorder_finalize.
   g_object_ref (self);
 
-  EmtrEventRecorderPrivate *private_state =
-    emtr_event_recorder_get_instance_private (self);
-
-  GVariant *request_body = create_request_body (private_state);
+  GVariant *request_body = create_request_body (priv);
   if (G_UNLIKELY (request_body == NULL))
     return G_SOURCE_CONTINUE;
 
@@ -634,8 +555,8 @@ upload_events (gpointer user_data)
 
   GError *error = NULL;
   SoupRequestHTTP *https_request =
-    soup_session_request_http (private_state->http_session, "PUT",
-                               https_request_uri, &error);
+    soup_session_request_http (priv->http_session, "PUT", https_request_uri,
+                               &error);
   g_free (https_request_uri);
   if (G_UNLIKELY (https_request == NULL))
     {
@@ -671,33 +592,112 @@ get_user_agent (void)
                           libsoup_minor_version, libsoup_micro_version);
 }
 
+/*
+ * Returns a newly-allocated copy of uuid_sans_hyphens with hyphens inserted at
+ * the appropriate positions as defined by uuid_unparse(3).
+ * uuid_sans_hyphens is expected to be exactly 32 bytes, excluding the terminal
+ * null byte.
+ * Any extra bytes are ignored.
+ * The returned string is guaranteed to be null-terminated.
+ */
+static gchar *
+hyphenate_uuid (gchar *uuid_sans_hyphens)
+{
+  return g_strdup_printf ("%.8s-%.4s-%.4s-%.4s-%.12s", uuid_sans_hyphens,
+                          uuid_sans_hyphens + 8, uuid_sans_hyphens + 12,
+                          uuid_sans_hyphens + 16, uuid_sans_hyphens + 20);
+}
+
+static gboolean
+read_machine_id (void)
+{
+  // The machine ID has already been read from disk; no need to read it again.
+  if (machine_id != NULL)
+    return TRUE;
+
+  gchar *machine_id_sans_hyphens;
+  gsize machine_id_sans_hyphens_length;
+  GError *error = NULL;
+  gboolean read_succeeded =
+    g_file_get_contents (MACHINE_ID_FILEPATH, &machine_id_sans_hyphens,
+                         &machine_id_sans_hyphens_length, &error);
+  if (!read_succeeded)
+    {
+      g_critical ("Failed to read machine ID file (%s). Disabled metric "
+                  "recording.\n", MACHINE_ID_FILEPATH);
+      return FALSE;
+    }
+
+  if (strlen (machine_id_sans_hyphens) != machine_id_sans_hyphens_length)
+    {
+      g_critical ("Machine ID file (%s) contained null byte, but should be "
+                  "hexadecimal. Disabled metric recording.\n",
+                  MACHINE_ID_FILEPATH);
+      return FALSE;
+    }
+
+  if (machine_id_sans_hyphens_length != MACHINE_ID_FILE_SIZE)
+    {
+      g_critical ("Machine ID file (%s) contained %" G_GSIZE_FORMAT " bytes, "
+                  "but expected %d bytes. Disabled metric recording.\n",
+                  MACHINE_ID_FILEPATH, machine_id_sans_hyphens_length,
+                  MACHINE_ID_FILE_SIZE);
+      return FALSE;
+    }
+
+  gchar *hyphenated_machine_id = hyphenate_uuid (machine_id_sans_hyphens);
+  g_free (machine_id_sans_hyphens);
+
+  G_LOCK (machine_id);
+  int parse_failed = uuid_parse (hyphenated_machine_id, machine_id);
+  G_UNLOCK (machine_id);
+
+  g_free (hyphenated_machine_id);
+
+  if (parse_failed != 0)
+    {
+      g_critical ("Machine ID file (%s) did not contain UUID. Disabled metric "
+                  "recording.\n", MACHINE_ID_FILEPATH);
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
 static void
 emtr_event_recorder_init (EmtrEventRecorder *self)
 {
-  EmtrEventRecorderPrivate *private_state =
+  EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
-  private_state->event_buffer = g_new (Event, EVENT_BUFFER_LENGTH);
-  private_state->num_events_buffered = 0;
-  g_mutex_init (&(private_state->event_buffer_lock));
+  /*
+   * If we can't read the machine ID, mark self a no-op event recorder, and
+   * don't even initialize the rest of the private state.
+   */
+  priv->recording_enabled = read_machine_id ();
+  if (!priv->recording_enabled)
+    return;
 
-  private_state->aggregate_buffer = g_new (Aggregate, AGGREGATE_BUFFER_LENGTH);
-  private_state->num_aggregates_buffered = 0;
-  g_mutex_init (&(private_state->aggregate_buffer_lock));
+  priv->event_buffer = g_new (Event, EVENT_BUFFER_LENGTH);
+  priv->num_events_buffered = 0;
+  g_mutex_init (&(priv->event_buffer_lock));
 
-  private_state->event_sequence_buffer = g_new (EventSequence,
-                                                SEQUENCE_BUFFER_LENGTH);
-  private_state->num_event_sequences_buffered = 0;
-  g_mutex_init (&(private_state->event_sequence_buffer_lock));
+  priv->aggregate_buffer = g_new (Aggregate, AGGREGATE_BUFFER_LENGTH);
+  priv->num_aggregates_buffered = 0;
+  g_mutex_init (&(priv->aggregate_buffer_lock));
 
-  private_state->events_by_id_with_key =
+  priv->event_sequence_buffer = g_new (EventSequence, SEQUENCE_BUFFER_LENGTH);
+  priv->num_event_sequences_buffered = 0;
+  g_mutex_init (&(priv->event_sequence_buffer_lock));
+
+  priv->events_by_id_with_key =
     g_hash_table_new_full (general_variant_hash, g_variant_equal,
                            (GDestroyNotify) g_variant_unref,
                            (GDestroyNotify) g_array_unref);
-  g_mutex_init (&(private_state->events_by_id_with_key_lock));
+  g_mutex_init (&(priv->events_by_id_with_key_lock));
 
   gchar *user_agent = get_user_agent ();
-  private_state->http_session =
+  priv->http_session =
     soup_session_new_with_options (SOUP_SESSION_MAX_CONNS, 1,
                                    SOUP_SESSION_MAX_CONNS_PER_HOST, 1,
                                    SOUP_SESSION_USER_AGENT, user_agent,
@@ -708,7 +708,7 @@ emtr_event_recorder_init (EmtrEventRecorder *self)
                                    NULL);
   g_free (user_agent);
 
-  private_state->upload_events_timeout_source_id =
+  priv->upload_events_timeout_source_id =
     g_timeout_add_seconds (NETWORK_SEND_INTERVAL_SECONDS, upload_events, self);
 }
 
@@ -790,18 +790,16 @@ append_event_value (GArray   *event_values,
 }
 
 static void
-append_event_sequence_to_buffer (EmtrEventRecorderPrivate *private_state,
+append_event_sequence_to_buffer (EmtrEventRecorderPrivate *priv,
                                  GVariant                 *event_id_with_key,
                                  GArray                   *event_values)
 {
-  g_mutex_lock (&(private_state->event_sequence_buffer_lock));
-  if (G_LIKELY (private_state->num_event_sequences_buffered <
-                SEQUENCE_BUFFER_LENGTH))
+  g_mutex_lock (&(priv->event_sequence_buffer_lock));
+  if (G_LIKELY (priv->num_event_sequences_buffered < SEQUENCE_BUFFER_LENGTH))
     {
       EventSequence *event_sequence =
-        private_state->event_sequence_buffer +
-        private_state->num_event_sequences_buffered;
-      private_state->num_event_sequences_buffered++;
+        priv->event_sequence_buffer + priv->num_event_sequences_buffered;
+      priv->num_event_sequences_buffered++;
       GVariant *event_id = g_variant_get_child_value (event_id_with_key, 0);
       gsize event_id_length;
       gconstpointer event_id_arr =
@@ -816,7 +814,7 @@ append_event_sequence_to_buffer (EmtrEventRecorderPrivate *private_state,
               event_values->len * sizeof (EventValue));
       event_sequence->num_event_values = event_values->len;
     }
-  g_mutex_unlock (&(private_state->event_sequence_buffer_lock));
+  g_mutex_unlock (&(priv->event_sequence_buffer_lock));
 }
 
 /* PUBLIC API */
@@ -867,22 +865,26 @@ emtr_event_recorder_record_event (EmtrEventRecorder *self,
                                   const gchar       *event_id,
                                   GVariant          *auxiliary_payload)
 {
-  EmtrEventRecorderPrivate *private_state =
+  EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
-  g_mutex_lock (&(private_state->event_buffer_lock));
+
+  if (!priv->recording_enabled)
+    return;
+
+  g_mutex_lock (&(priv->event_buffer_lock));
   uuid_t parsed_event_id;
   gint64 relative_time;
   if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
                                      &relative_time)))
   {
-    g_mutex_unlock (&(private_state->event_buffer_lock));
+    g_mutex_unlock (&(priv->event_buffer_lock));
     return;
   }
 
-  if (G_LIKELY (private_state->num_events_buffered < EVENT_BUFFER_LENGTH))
+  if (G_LIKELY (priv->num_events_buffered < EVENT_BUFFER_LENGTH))
     {
-      Event *event_buffer = private_state->event_buffer;
-      gint num_events_buffered = private_state->num_events_buffered;
+      Event *event_buffer = priv->event_buffer;
+      gint num_events_buffered = priv->num_events_buffered;
 
       if (G_LIKELY (num_events_buffered > 0))
         {
@@ -891,14 +893,14 @@ emtr_event_recorder_record_event (EmtrEventRecorder *self,
         }
 
       Event *event = event_buffer + num_events_buffered;
-      private_state->num_events_buffered++;
+      priv->num_events_buffered++;
       auxiliary_payload = get_normalized_form_of_variant (auxiliary_payload);
       EventValue event_value = {relative_time, auxiliary_payload};
       memcpy (event->event_id, parsed_event_id, UUID_LENGTH * sizeof (guchar));
       event->event_value = event_value;
     }
 
-  g_mutex_unlock (&(private_state->event_buffer_lock));
+  g_mutex_unlock (&(priv->event_buffer_lock));
 }
 
 /**
@@ -936,23 +938,26 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
                                    gint64             num_events,
                                    GVariant          *auxiliary_payload)
 {
-  EmtrEventRecorderPrivate *private_state =
+  EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
-  g_mutex_lock (&(private_state->aggregate_buffer_lock));
+
+  if (!priv->recording_enabled)
+    return;
+
+  g_mutex_lock (&(priv->aggregate_buffer_lock));
   uuid_t parsed_event_id;
   gint64 relative_time;
   if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
                                      &relative_time)))
   {
-    g_mutex_unlock (&(private_state->aggregate_buffer_lock));
+    g_mutex_unlock (&(priv->aggregate_buffer_lock));
     return;
   }
 
-  if (G_LIKELY (private_state->num_aggregates_buffered <
-                AGGREGATE_BUFFER_LENGTH))
+  if (G_LIKELY (priv->num_aggregates_buffered < AGGREGATE_BUFFER_LENGTH))
     {
-      Aggregate *aggregate_buffer = private_state->aggregate_buffer;
-      gint num_aggregates_buffered = private_state->num_aggregates_buffered;
+      Aggregate *aggregate_buffer = priv->aggregate_buffer;
+      gint num_aggregates_buffered = priv->num_aggregates_buffered;
 
       if (G_LIKELY (num_aggregates_buffered > 0))
         {
@@ -963,7 +968,7 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
         }
 
       Aggregate *aggregate = aggregate_buffer + num_aggregates_buffered;
-      private_state->num_aggregates_buffered++;
+      priv->num_aggregates_buffered++;
       auxiliary_payload = get_normalized_form_of_variant (auxiliary_payload);
       EventValue event_value = {relative_time, auxiliary_payload};
       Event event;
@@ -973,7 +978,7 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
       aggregate->num_events = num_events;
     }
 
-  g_mutex_unlock (&(private_state->aggregate_buffer_lock));
+  g_mutex_unlock (&(priv->aggregate_buffer_lock));
 }
 
 /**
@@ -1022,15 +1027,19 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
                                   GVariant          *key,
                                   GVariant          *auxiliary_payload)
 {
-  EmtrEventRecorderPrivate *private_state =
+  EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
-  g_mutex_lock (&(private_state->events_by_id_with_key_lock));
+
+  if (!priv->recording_enabled)
+    return;
+
+  g_mutex_lock (&(priv->events_by_id_with_key_lock));
   uuid_t parsed_event_id;
   gint64 relative_time;
   if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
                                      &relative_time)))
   {
-    g_mutex_unlock (&(private_state->events_by_id_with_key_lock));
+    g_mutex_unlock (&(priv->events_by_id_with_key_lock));
     return;
   }
 
@@ -1046,10 +1055,10 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
                                             2);
   g_array_append_val (event_values, start_event_value);
 
-  if (G_UNLIKELY (!g_hash_table_insert (private_state->events_by_id_with_key,
+  if (G_UNLIKELY (!g_hash_table_insert (priv->events_by_id_with_key,
                                         event_id_with_key, event_values)))
     {
-      g_mutex_unlock (&(private_state->events_by_id_with_key_lock));
+      g_mutex_unlock (&(priv->events_by_id_with_key_lock));
       if (G_LIKELY (key != NULL))
         {
           gchar *key_as_string = g_variant_print (key, TRUE);
@@ -1077,7 +1086,7 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
   if (G_LIKELY (key != NULL))
     g_variant_unref (key);
 
-  g_mutex_unlock (&(private_state->events_by_id_with_key_lock));
+  g_mutex_unlock (&(priv->events_by_id_with_key_lock));
 }
 
 /**
@@ -1101,15 +1110,19 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
                                      GVariant          *key,
                                      GVariant          *auxiliary_payload)
 {
-  EmtrEventRecorderPrivate *private_state =
+  EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
-  g_mutex_lock (&(private_state->events_by_id_with_key_lock));
+
+  if (!priv->recording_enabled)
+    return;
+
+  g_mutex_lock (&(priv->events_by_id_with_key_lock));
   uuid_t parsed_event_id;
   gint64 relative_time;
   if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
                                      &relative_time)))
   {
-    g_mutex_unlock (&(private_state->events_by_id_with_key_lock));
+    g_mutex_unlock (&(priv->events_by_id_with_key_lock));
     return;
   }
 
@@ -1119,12 +1132,11 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
                                                            key);
 
   GArray *event_values =
-    g_hash_table_lookup (private_state->events_by_id_with_key,
-                         event_id_with_key);
+    g_hash_table_lookup (priv->events_by_id_with_key, event_id_with_key);
   g_variant_unref (event_id_with_key);
   if (G_UNLIKELY (event_values == NULL))
     {
-      g_mutex_unlock (&(private_state->events_by_id_with_key_lock));
+      g_mutex_unlock (&(priv->events_by_id_with_key_lock));
       if (G_LIKELY (key != NULL))
         {
           gchar *key_as_string = g_variant_print (key, TRUE);
@@ -1155,7 +1167,7 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
   auxiliary_payload = get_normalized_form_of_variant (auxiliary_payload);
 
   append_event_value (event_values, relative_time, auxiliary_payload);
-  g_mutex_unlock (&(private_state->events_by_id_with_key_lock));
+  g_mutex_unlock (&(priv->events_by_id_with_key_lock));
 }
 
 /**
@@ -1177,15 +1189,19 @@ emtr_event_recorder_record_stop (EmtrEventRecorder *self,
                                  GVariant          *key,
                                  GVariant          *auxiliary_payload)
 {
-  EmtrEventRecorderPrivate *private_state =
+  EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
-  g_mutex_lock (&(private_state->events_by_id_with_key_lock));
+
+  if (!priv->recording_enabled)
+    return;
+
+  g_mutex_lock (&(priv->events_by_id_with_key_lock));
   uuid_t parsed_event_id;
   gint64 relative_time;
   if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
                                      &relative_time)))
   {
-    g_mutex_unlock (&(private_state->events_by_id_with_key_lock));
+    g_mutex_unlock (&(priv->events_by_id_with_key_lock));
     return;
   }
 
@@ -1195,12 +1211,11 @@ emtr_event_recorder_record_stop (EmtrEventRecorder *self,
                                                            key);
 
   GArray *event_values =
-    g_hash_table_lookup (private_state->events_by_id_with_key,
-                         event_id_with_key);
+    g_hash_table_lookup (priv->events_by_id_with_key, event_id_with_key);
 
   if (G_UNLIKELY (event_values == NULL))
     {
-      g_mutex_unlock (&(private_state->events_by_id_with_key_lock));
+      g_mutex_unlock (&(priv->events_by_id_with_key_lock));
       g_variant_unref (event_id_with_key);
       if (G_LIKELY (key != NULL))
         {
@@ -1232,9 +1247,8 @@ emtr_event_recorder_record_stop (EmtrEventRecorder *self,
   auxiliary_payload = get_normalized_form_of_variant (auxiliary_payload);
 
   append_event_value (event_values, relative_time, auxiliary_payload);
-  append_event_sequence_to_buffer (private_state, event_id_with_key,
-                                   event_values);
-  g_assert (g_hash_table_remove (private_state->events_by_id_with_key,
+  append_event_sequence_to_buffer (priv, event_id_with_key, event_values);
+  g_assert (g_hash_table_remove (priv->events_by_id_with_key,
                                  event_id_with_key));
-  g_mutex_unlock (&(private_state->events_by_id_with_key_lock));
+  g_mutex_unlock (&(priv->events_by_id_with_key_lock));
 }

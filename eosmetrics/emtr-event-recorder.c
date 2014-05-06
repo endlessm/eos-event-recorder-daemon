@@ -262,7 +262,7 @@ emtr_event_recorder_finalize (GObject *object)
   G_OBJECT_CLASS (emtr_event_recorder_parent_class)->finalize (object);
 }
 
-static void
+static gboolean
 set_client_id (void)
 {
   G_LOCK (client_id);
@@ -270,7 +270,7 @@ set_client_id (void)
   if (G_LIKELY (client_id_is_set))
     {
       G_UNLOCK (client_id);
-      return;
+      return TRUE;
     }
 
   FILE *client_id_file = fopen (CLIENT_ID_FILEPATH, "ab+");
@@ -281,7 +281,7 @@ set_client_id (void)
       g_critical ("Could not open client ID file: %s. Error code: %d.\n",
                   CLIENT_ID_FILEPATH, error_code);
       G_UNLOCK (client_id);
-      g_assert_not_reached ();
+      return FALSE;
     }
 
   int client_id_file_number = fileno (client_id_file);
@@ -292,7 +292,7 @@ set_client_id (void)
                   "code: %d.\n", CLIENT_ID_FILEPATH, error_code);
       fclose (client_id_file);
       G_UNLOCK (client_id);
-      g_assert_not_reached ();
+      return FALSE;
     }
 
   if (G_UNLIKELY (flock (client_id_file_number, LOCK_EX) != 0))
@@ -302,7 +302,7 @@ set_client_id (void)
                   "Error code: %d.\n", CLIENT_ID_FILEPATH, error_code);
       fclose (client_id_file);
       G_UNLOCK (client_id);
-      g_assert_not_reached ();
+      return FALSE;
     }
 
   size_t num_elems_read = fread (client_id, sizeof (guchar), UUID_LENGTH,
@@ -313,7 +313,7 @@ set_client_id (void)
       g_critical ("Could not read client ID file: %s.\n", CLIENT_ID_FILEPATH);
       fclose (client_id_file);
       G_UNLOCK (client_id);
-      g_assert_not_reached ();
+      return FALSE;
     }
 
   if (G_UNLIKELY (num_elems_read == 0))
@@ -328,7 +328,7 @@ set_client_id (void)
                       CLIENT_ID_FILEPATH);
           fclose (client_id_file);
           G_UNLOCK (client_id);
-          g_assert_not_reached ();
+          return FALSE;
         }
     }
   else if (G_UNLIKELY (num_elems_read != UUID_LENGTH))
@@ -338,19 +338,21 @@ set_client_id (void)
                   UUID_LENGTH, num_elems_read);
       fclose (client_id_file);
       G_UNLOCK (client_id);
-      g_assert_not_reached ();
+      return FALSE;
     }
 
   if (G_UNLIKELY (fclose (client_id_file) != 0))
     {
       g_critical ("Could not close client ID file: %s.\n", CLIENT_ID_FILEPATH);
       G_UNLOCK (client_id);
-      g_assert_not_reached ();
+      return FALSE;
     }
 
   client_id_is_set = TRUE;
 
   G_UNLOCK (client_id);
+
+  return TRUE;
 }
 
 static void
@@ -543,7 +545,9 @@ get_system_event_sequences_builder (EmtrEventRecorderPrivate *private_state,
 static GVariant *
 create_request_body (EmtrEventRecorderPrivate *private_state)
 {
-  set_client_id ();
+  if (G_UNLIKELY (!set_client_id ()))
+    return NULL;
+
   GVariantBuilder client_id_builder;
   get_uuid_builder (client_id, &client_id_builder);
 
@@ -614,6 +618,9 @@ upload_events (gpointer user_data)
     emtr_event_recorder_get_instance_private (self);
 
   GVariant *request_body = create_request_body (private_state);
+  if (G_UNLIKELY (request_body == NULL))
+    return G_SOURCE_CONTINUE;
+
   gconstpointer serialized_request_body = g_variant_get_data (request_body);
   g_assert (serialized_request_body != NULL);
   gsize request_body_length = g_variant_get_size (request_body);

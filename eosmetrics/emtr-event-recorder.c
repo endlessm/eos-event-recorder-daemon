@@ -423,9 +423,11 @@ get_uuid_builder (uuid_t uuid, GVariantBuilder *uuid_builder)
     g_variant_builder_add (uuid_builder, "y", uuid[i]);
 }
 
-static gint64
-get_current_time (clockid_t clock_id)
+static gboolean
+get_current_time (clockid_t clock_id, gint64 *current_time)
 {
+  g_assert (current_time != NULL);
+
   // Get the time before doing anything else because it will change during
   // execution.
   struct timespec ts;
@@ -435,7 +437,7 @@ get_current_time (clockid_t clock_id)
       int error_code = errno;
       g_critical ("Attempt to get current time failed with error code: %d.\n",
                   error_code);
-      g_assert_not_reached ();
+      return FALSE;
     }
 
   // Ensure that the clock provides a time that can be safely represented in a
@@ -451,8 +453,9 @@ get_current_time (clockid_t clock_id)
   g_assert ((ts.tv_sec < (G_MAXINT64 / NANOSECONDS_PER_SECOND)) ||
             (ts.tv_nsec <= (G_MAXINT64 % NANOSECONDS_PER_SECOND)));
 
-  return (NANOSECONDS_PER_SECOND * ((gint64) ts.tv_sec))
+  *current_time = (NANOSECONDS_PER_SECOND * ((gint64) ts.tv_sec))
     + ((gint64) ts.tv_nsec);
+  return TRUE;
 }
 
 static void
@@ -569,8 +572,10 @@ create_request_body (EmtrEventRecorderPrivate *private_state)
 
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.
-  gint64 relative_time = get_current_time (CLOCK_BOOTTIME);
-  gint64 absolute_time = get_current_time (CLOCK_REALTIME);
+  gint64 relative_time, absolute_time;
+  if (G_UNLIKELY (!get_current_time (CLOCK_BOOTTIME, &relative_time)) ||
+      G_UNLIKELY (!get_current_time (CLOCK_REALTIME, &absolute_time)))
+    return NULL;
 
   GVariant *request_body =
     g_variant_new ("(ixxaysa(aya(ayxmv)a(ayxxmv)a(aya(xmv)))"
@@ -715,7 +720,8 @@ inputs_are_valid (EmtrEventRecorder *self,
 {
   // Get the time before doing anything else because it will change during
   // execution.
-  *relative_time = get_current_time (CLOCK_BOOTTIME);
+  if (G_UNLIKELY (!get_current_time (CLOCK_BOOTTIME, relative_time)))
+    return FALSE;
 
   if (G_UNLIKELY (self == NULL))
     {

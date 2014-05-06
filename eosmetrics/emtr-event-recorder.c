@@ -262,7 +262,7 @@ emtr_event_recorder_finalize (GObject *object)
   G_OBJECT_CLASS (emtr_event_recorder_parent_class)->finalize (object);
 }
 
-static void
+static gboolean
 set_client_id (void)
 {
   G_LOCK (client_id);
@@ -270,7 +270,7 @@ set_client_id (void)
   if (G_LIKELY (client_id_is_set))
     {
       G_UNLOCK (client_id);
-      return;
+      return TRUE;
     }
 
   FILE *client_id_file = fopen (CLIENT_ID_FILEPATH, "ab+");
@@ -281,7 +281,7 @@ set_client_id (void)
       g_critical ("Could not open client ID file: %s. Error code: %d.\n",
                   CLIENT_ID_FILEPATH, error_code);
       G_UNLOCK (client_id);
-      g_assert_not_reached ();
+      return FALSE;
     }
 
   int client_id_file_number = fileno (client_id_file);
@@ -292,7 +292,7 @@ set_client_id (void)
                   "code: %d.\n", CLIENT_ID_FILEPATH, error_code);
       fclose (client_id_file);
       G_UNLOCK (client_id);
-      g_assert_not_reached ();
+      return FALSE;
     }
 
   if (G_UNLIKELY (flock (client_id_file_number, LOCK_EX) != 0))
@@ -302,7 +302,7 @@ set_client_id (void)
                   "Error code: %d.\n", CLIENT_ID_FILEPATH, error_code);
       fclose (client_id_file);
       G_UNLOCK (client_id);
-      g_assert_not_reached ();
+      return FALSE;
     }
 
   size_t num_elems_read = fread (client_id, sizeof (guchar), UUID_LENGTH,
@@ -313,7 +313,7 @@ set_client_id (void)
       g_critical ("Could not read client ID file: %s.\n", CLIENT_ID_FILEPATH);
       fclose (client_id_file);
       G_UNLOCK (client_id);
-      g_assert_not_reached ();
+      return FALSE;
     }
 
   if (G_UNLIKELY (num_elems_read == 0))
@@ -328,7 +328,7 @@ set_client_id (void)
                       CLIENT_ID_FILEPATH);
           fclose (client_id_file);
           G_UNLOCK (client_id);
-          g_assert_not_reached ();
+          return FALSE;
         }
     }
   else if (G_UNLIKELY (num_elems_read != UUID_LENGTH))
@@ -338,19 +338,21 @@ set_client_id (void)
                   UUID_LENGTH, num_elems_read);
       fclose (client_id_file);
       G_UNLOCK (client_id);
-      g_assert_not_reached ();
+      return FALSE;
     }
 
   if (G_UNLIKELY (fclose (client_id_file) != 0))
     {
       g_critical ("Could not close client ID file: %s.\n", CLIENT_ID_FILEPATH);
       G_UNLOCK (client_id);
-      g_assert_not_reached ();
+      return FALSE;
     }
 
   client_id_is_set = TRUE;
 
   G_UNLOCK (client_id);
+
+  return TRUE;
 }
 
 static void
@@ -421,9 +423,11 @@ get_uuid_builder (uuid_t uuid, GVariantBuilder *uuid_builder)
     g_variant_builder_add (uuid_builder, "y", uuid[i]);
 }
 
-static gint64
-get_current_time (clockid_t clock_id)
+static gboolean
+get_current_time (clockid_t clock_id, gint64 *current_time)
 {
+  g_assert (current_time != NULL);
+
   // Get the time before doing anything else because it will change during
   // execution.
   struct timespec ts;
@@ -433,7 +437,7 @@ get_current_time (clockid_t clock_id)
       int error_code = errno;
       g_critical ("Attempt to get current time failed with error code: %d.\n",
                   error_code);
-      g_assert_not_reached ();
+      return FALSE;
     }
 
   // Ensure that the clock provides a time that can be safely represented in a
@@ -449,8 +453,9 @@ get_current_time (clockid_t clock_id)
   g_assert ((ts.tv_sec < (G_MAXINT64 / NANOSECONDS_PER_SECOND)) ||
             (ts.tv_nsec <= (G_MAXINT64 % NANOSECONDS_PER_SECOND)));
 
-  return (NANOSECONDS_PER_SECOND * ((gint64) ts.tv_sec))
+  *current_time = (NANOSECONDS_PER_SECOND * ((gint64) ts.tv_sec))
     + ((gint64) ts.tv_nsec);
+  return TRUE;
 }
 
 static void
@@ -543,7 +548,9 @@ get_system_event_sequences_builder (EmtrEventRecorderPrivate *private_state,
 static GVariant *
 create_request_body (EmtrEventRecorderPrivate *private_state)
 {
-  set_client_id ();
+  if (G_UNLIKELY (!set_client_id ()))
+    return NULL;
+
   GVariantBuilder client_id_builder;
   get_uuid_builder (client_id, &client_id_builder);
 
@@ -565,8 +572,10 @@ create_request_body (EmtrEventRecorderPrivate *private_state)
 
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.
-  gint64 relative_time = get_current_time (CLOCK_BOOTTIME);
-  gint64 absolute_time = get_current_time (CLOCK_REALTIME);
+  gint64 relative_time, absolute_time;
+  if (G_UNLIKELY (!get_current_time (CLOCK_BOOTTIME, &relative_time)) ||
+      G_UNLIKELY (!get_current_time (CLOCK_REALTIME, &absolute_time)))
+    return NULL;
 
   GVariant *request_body =
     g_variant_new ("(ixxaysa(aya(ayxmv)a(ayxxmv)a(aya(xmv)))"
@@ -614,6 +623,9 @@ upload_events (gpointer user_data)
     emtr_event_recorder_get_instance_private (self);
 
   GVariant *request_body = create_request_body (private_state);
+  if (G_UNLIKELY (request_body == NULL))
+    return G_SOURCE_CONTINUE;
+
   gconstpointer serialized_request_body = g_variant_get_data (request_body);
   g_assert (serialized_request_body != NULL);
   gsize request_body_length = g_variant_get_size (request_body);
@@ -708,7 +720,8 @@ inputs_are_valid (EmtrEventRecorder *self,
 {
   // Get the time before doing anything else because it will change during
   // execution.
-  *relative_time = get_current_time (CLOCK_BOOTTIME);
+  if (G_UNLIKELY (!get_current_time (CLOCK_BOOTTIME, relative_time)))
+    return FALSE;
 
   if (G_UNLIKELY (self == NULL))
     {

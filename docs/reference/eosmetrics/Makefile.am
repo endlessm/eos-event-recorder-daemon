@@ -54,6 +54,7 @@ IGNORE_HFILES= \
 	emtr-util-private.h \
 	emtr-uuid-private.h \
 	emtr-web-private.h \
+	emtr-persistent-cache-private.h \
 	$(NULL)
 
 # Images to copy into HTML directory.

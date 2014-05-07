@@ -62,13 +62,14 @@ void      set_up_mock_version_file      (const gchar       *contents);
 
 /* Each module adds its own test cases: */
 
-void add_util_tests           (void);
-void add_osversion_tests      (void);
-void add_uuid_tests           (void);
-void add_mac_tests            (void);
-void add_web_tests            (void);
-void add_connection_tests     (void);
-void add_sender_tests         (void);
-void add_event_recorder_tests (void);
+void add_util_tests             (void);
+void add_osversion_tests        (void);
+void add_uuid_tests             (void);
+void add_mac_tests              (void);
+void add_web_tests              (void);
+void add_connection_tests       (void);
+void add_sender_tests           (void);
+void add_event_recorder_tests   (void);
+void add_persistent_cache_tests (void);
 
 #endif /* RUN_TESTS_H */

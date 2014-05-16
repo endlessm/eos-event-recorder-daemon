@@ -6,6 +6,9 @@ eos-metrics-0.0.0
 /EosMetrics-0.typelib
 /docs/reference/eosmetrics/version.xml
 /tools/eos-send-metrics
+/emer-event-recorder-server.[ch]
+/eos-metrics-event-recorder
+/data/eos-metrics-event-recorder.service
 
 # Test products
 *.log

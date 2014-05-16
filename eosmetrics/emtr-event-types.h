@@ -58,8 +58,14 @@ G_BEGIN_DECLS
  * If it is a closing event, the payload is empty. The key used is a pointer to the
  * corresponding ShellApp.
  */
-
 #define EMTR_EVENT_SHELL_APP_IS_OPEN "b5e11a3d-13f8-4219-84fd-c9ba0bf3d1f0"
+
+/**
+ * EMTR_EVENT_SOCIAL_BAR_IS_VISIBLE:
+ *
+ * This is started when the social bar is visible and stopped when hidden.
+ */
+#define EMTR_EVENT_SOCIAL_BAR_IS_VISIBLE "9c33a734-7ed8-4348-9e39-3c27f4dc2e62"
 
 G_END_DECLS
 

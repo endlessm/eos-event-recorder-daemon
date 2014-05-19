@@ -34,7 +34,7 @@ G_BEGIN_DECLS
  *
  * Started when a user logs in and stopped when that user logs out.
  */
-#define EMTR_EVENT_USER_LOGGED_IN "ab839fd2-a927-456c-8c18-f1136722666b"
+#define EMTR_EVENT_USER_IS_LOGGED_IN "ab839fd2-a927-456c-8c18-f1136722666b"
 
 /**
  * EMTR_EVENT_NETWORK_STATUS_CHANGED:

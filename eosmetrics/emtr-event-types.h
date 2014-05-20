@@ -30,7 +30,7 @@ G_BEGIN_DECLS
  */
 
 /**
- * EMTR_EVENT_USER_LOGGED_IN:
+ * EMTR_EVENT_USER_IS_LOGGED_IN:
  *
  * Started when a user logs in and stopped when that user logs out.
  */

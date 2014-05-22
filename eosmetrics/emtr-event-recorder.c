@@ -18,6 +18,9 @@
 #include <string.h>
 #include <uuid/uuid.h>
 
+/* Convenience macro to check that @ptr is a #GVariant */
+#define _IS_VARIANT(ptr) (g_variant_is_of_type ((ptr), G_VARIANT_TYPE_ANY))
+
 /*
  * Must be incremented every time the network protocol is changed so that the
  * proxy server can correctly handle both old and new clients while the updated
@@ -713,28 +716,9 @@ emtr_event_recorder_init (EmtrEventRecorder *self)
 }
 
 static gboolean
-inputs_are_valid (EmtrEventRecorder *self,
-                  const gchar       *unparsed_event_id,
-                  uuid_t             parsed_event_id)
+parse_event_id (const gchar *unparsed_event_id,
+                uuid_t       parsed_event_id)
 {
-  if (G_UNLIKELY (self == NULL))
-    {
-      g_warning ("self should be an instance of EmtrEventRecorder, not NULL.\n");
-      return FALSE;
-    }
-
-  if (G_UNLIKELY (!EMTR_IS_EVENT_RECORDER (self)))
-    {
-      g_warning ("self should be an instance of EmtrEventRecorder.\n");
-      return FALSE;
-    }
-
-  if (G_UNLIKELY (unparsed_event_id == NULL))
-    {
-      g_warning ("event_id should be a non-NULL instance of const gchar *.\n");
-      return FALSE;
-    }
-
   int parse_failed = uuid_parse (unparsed_event_id, parsed_event_id);
   if (G_UNLIKELY (parse_failed != 0))
     {
@@ -868,6 +852,10 @@ emtr_event_recorder_record_event (EmtrEventRecorder *self,
       return;
     }
 
+  g_return_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self));
+  g_return_if_fail (event_id != NULL);
+  g_return_if_fail (auxiliary_payload == NULL || _IS_VARIANT(auxiliary_payload));
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
@@ -875,10 +863,8 @@ emtr_event_recorder_record_event (EmtrEventRecorder *self,
     return;
 
   uuid_t parsed_event_id;
-  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id)))
-  {
+  if (!parse_event_id (event_id, parsed_event_id))
     return;
-  }
 
   g_mutex_lock (&(priv->event_buffer_lock));
 
@@ -948,6 +934,10 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
       return;
     }
 
+  g_return_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self));
+  g_return_if_fail (event_id != NULL);
+  g_return_if_fail (auxiliary_payload == NULL || _IS_VARIANT(auxiliary_payload));
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
@@ -955,10 +945,8 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
     return;
 
   uuid_t parsed_event_id;
-  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id)))
-  {
+  if (!parse_event_id (event_id, parsed_event_id))
     return;
-  }
 
   g_mutex_lock (&(priv->aggregate_buffer_lock));
 
@@ -1044,6 +1032,12 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
       return;
     }
 
+  g_return_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self));
+  g_return_if_fail (event_id != NULL);
+  g_return_if_fail (key == NULL || _IS_VARIANT (key));
+  g_return_if_fail (auxiliary_payload == NULL
+                    || _IS_VARIANT (auxiliary_payload));
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
@@ -1051,10 +1045,8 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
     return;
 
   uuid_t parsed_event_id;
-  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id)))
-  {
+  if (!parse_event_id (event_id, parsed_event_id))
     return;
-  }
 
   key = get_normalized_form_of_variant (key);
 
@@ -1134,6 +1126,12 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
       return;
     }
 
+  g_return_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self));
+  g_return_if_fail (event_id != NULL);
+  g_return_if_fail (key == NULL || _IS_VARIANT (key));
+  g_return_if_fail (auxiliary_payload == NULL
+                    || _IS_VARIANT (auxiliary_payload));
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
@@ -1141,10 +1139,8 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
     return;
 
   uuid_t parsed_event_id;
-  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id)))
-  {
+  if (!parse_event_id (event_id, parsed_event_id))
     return;
-  }
 
   key = get_normalized_form_of_variant (key);
 
@@ -1221,6 +1217,12 @@ emtr_event_recorder_record_stop (EmtrEventRecorder *self,
       return;
     }
 
+  g_return_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self));
+  g_return_if_fail (event_id != NULL);
+  g_return_if_fail (key == NULL || _IS_VARIANT (key));
+  g_return_if_fail (auxiliary_payload == NULL
+                    || _IS_VARIANT (auxiliary_payload));
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
@@ -1228,10 +1230,8 @@ emtr_event_recorder_record_stop (EmtrEventRecorder *self,
     return;
 
   uuid_t parsed_event_id;
-  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id)))
-  {
+  if (!parse_event_id (event_id, parsed_event_id))
     return;
-  }
 
   key = get_normalized_form_of_variant (key);
 

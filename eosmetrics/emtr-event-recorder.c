@@ -871,15 +871,15 @@ emtr_event_recorder_record_event (EmtrEventRecorder *self,
   if (!priv->recording_enabled)
     return;
 
-  g_mutex_lock (&(priv->event_buffer_lock));
   uuid_t parsed_event_id;
   gint64 relative_time;
   if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
                                      &relative_time)))
   {
-    g_mutex_unlock (&(priv->event_buffer_lock));
     return;
   }
+
+  g_mutex_lock (&(priv->event_buffer_lock));
 
   if (G_LIKELY (priv->num_events_buffered < EVENT_BUFFER_LENGTH))
     {
@@ -944,15 +944,15 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
   if (!priv->recording_enabled)
     return;
 
-  g_mutex_lock (&(priv->aggregate_buffer_lock));
   uuid_t parsed_event_id;
   gint64 relative_time;
   if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
                                      &relative_time)))
   {
-    g_mutex_unlock (&(priv->aggregate_buffer_lock));
     return;
   }
+
+  g_mutex_lock (&(priv->aggregate_buffer_lock));
 
   if (G_LIKELY (priv->num_aggregates_buffered < AGGREGATE_BUFFER_LENGTH))
     {
@@ -1033,13 +1033,11 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
   if (!priv->recording_enabled)
     return;
 
-  g_mutex_lock (&(priv->events_by_id_with_key_lock));
   uuid_t parsed_event_id;
   gint64 relative_time;
   if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
                                      &relative_time)))
   {
-    g_mutex_unlock (&(priv->events_by_id_with_key_lock));
     return;
   }
 
@@ -1054,6 +1052,8 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
   GArray *event_values = g_array_sized_new (FALSE, FALSE, sizeof (EventValue),
                                             2);
   g_array_append_val (event_values, start_event_value);
+
+  g_mutex_lock (&(priv->events_by_id_with_key_lock));
 
   if (G_UNLIKELY (!g_hash_table_insert (priv->events_by_id_with_key,
                                         event_id_with_key, event_values)))
@@ -1083,10 +1083,10 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
       return;
     }
 
+  g_mutex_unlock (&(priv->events_by_id_with_key_lock));
+
   if (G_LIKELY (key != NULL))
     g_variant_unref (key);
-
-  g_mutex_unlock (&(priv->events_by_id_with_key_lock));
 }
 
 /**
@@ -1116,13 +1116,11 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
   if (!priv->recording_enabled)
     return;
 
-  g_mutex_lock (&(priv->events_by_id_with_key_lock));
   uuid_t parsed_event_id;
   gint64 relative_time;
   if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
                                      &relative_time)))
   {
-    g_mutex_unlock (&(priv->events_by_id_with_key_lock));
     return;
   }
 
@@ -1130,6 +1128,8 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
 
   GVariant *event_id_with_key = combine_event_id_with_key (parsed_event_id,
                                                            key);
+
+  g_mutex_lock (&(priv->events_by_id_with_key_lock));
 
   GArray *event_values =
     g_hash_table_lookup (priv->events_by_id_with_key, event_id_with_key);
@@ -1161,13 +1161,14 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
       return;
     }
 
+  g_mutex_unlock (&(priv->events_by_id_with_key_lock));
+
   if (G_LIKELY (key != NULL))
     g_variant_unref (key);
 
   auxiliary_payload = get_normalized_form_of_variant (auxiliary_payload);
 
   append_event_value (event_values, relative_time, auxiliary_payload);
-  g_mutex_unlock (&(priv->events_by_id_with_key_lock));
 }
 
 /**
@@ -1195,13 +1196,11 @@ emtr_event_recorder_record_stop (EmtrEventRecorder *self,
   if (!priv->recording_enabled)
     return;
 
-  g_mutex_lock (&(priv->events_by_id_with_key_lock));
   uuid_t parsed_event_id;
   gint64 relative_time;
   if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
                                      &relative_time)))
   {
-    g_mutex_unlock (&(priv->events_by_id_with_key_lock));
     return;
   }
 
@@ -1209,6 +1208,8 @@ emtr_event_recorder_record_stop (EmtrEventRecorder *self,
 
   GVariant *event_id_with_key = combine_event_id_with_key (parsed_event_id,
                                                            key);
+
+  g_mutex_lock (&(priv->events_by_id_with_key_lock));
 
   GArray *event_values =
     g_hash_table_lookup (priv->events_by_id_with_key, event_id_with_key);

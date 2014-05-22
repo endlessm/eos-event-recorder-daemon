@@ -715,14 +715,8 @@ emtr_event_recorder_init (EmtrEventRecorder *self)
 static gboolean
 inputs_are_valid (EmtrEventRecorder *self,
                   const gchar       *unparsed_event_id,
-                  uuid_t             parsed_event_id,
-                  gint64            *relative_time)
+                  uuid_t             parsed_event_id)
 {
-  // Get the time before doing anything else because it will change during
-  // execution.
-  if (G_UNLIKELY (!get_current_time (CLOCK_BOOTTIME, relative_time)))
-    return FALSE;
-
   if (G_UNLIKELY (self == NULL))
     {
       g_warning ("self should be an instance of EmtrEventRecorder, not NULL.\n");
@@ -865,6 +859,15 @@ emtr_event_recorder_record_event (EmtrEventRecorder *self,
                                   const gchar       *event_id,
                                   GVariant          *auxiliary_payload)
 {
+  /* Get the time before doing anything else because it will change during
+  execution. */
+  gint64 relative_time;
+  if (!get_current_time (CLOCK_BOOTTIME, &relative_time))
+    {
+      g_critical ("Getting relative timestamp failed.");
+      return;
+    }
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
@@ -872,9 +875,7 @@ emtr_event_recorder_record_event (EmtrEventRecorder *self,
     return;
 
   uuid_t parsed_event_id;
-  gint64 relative_time;
-  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
-                                     &relative_time)))
+  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id)))
   {
     return;
   }
@@ -938,6 +939,15 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
                                    gint64             num_events,
                                    GVariant          *auxiliary_payload)
 {
+  /* Get the time before doing anything else because it will change during
+  execution. */
+  gint64 relative_time;
+  if (!get_current_time (CLOCK_BOOTTIME, &relative_time))
+    {
+      g_critical ("Getting relative timestamp failed.");
+      return;
+    }
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
@@ -945,9 +955,7 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
     return;
 
   uuid_t parsed_event_id;
-  gint64 relative_time;
-  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
-                                     &relative_time)))
+  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id)))
   {
     return;
   }
@@ -1027,6 +1035,15 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
                                   GVariant          *key,
                                   GVariant          *auxiliary_payload)
 {
+  /* Get the time before doing anything else because it will change during
+  execution. */
+  gint64 relative_time;
+  if (!get_current_time (CLOCK_BOOTTIME, &relative_time))
+    {
+      g_critical ("Getting relative timestamp failed.");
+      return;
+    }
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
@@ -1034,9 +1051,7 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
     return;
 
   uuid_t parsed_event_id;
-  gint64 relative_time;
-  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
-                                     &relative_time)))
+  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id)))
   {
     return;
   }
@@ -1110,6 +1125,15 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
                                      GVariant          *key,
                                      GVariant          *auxiliary_payload)
 {
+  /* Get the time before doing anything else because it will change during
+  execution. */
+  gint64 relative_time;
+  if (!get_current_time (CLOCK_BOOTTIME, &relative_time))
+    {
+      g_critical ("Getting relative timestamp failed.");
+      return;
+    }
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
@@ -1117,9 +1141,7 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
     return;
 
   uuid_t parsed_event_id;
-  gint64 relative_time;
-  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
-                                     &relative_time)))
+  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id)))
   {
     return;
   }
@@ -1190,6 +1212,15 @@ emtr_event_recorder_record_stop (EmtrEventRecorder *self,
                                  GVariant          *key,
                                  GVariant          *auxiliary_payload)
 {
+  /* Get the time before doing anything else because it will change during
+  execution. */
+  gint64 relative_time;
+  if (!get_current_time (CLOCK_BOOTTIME, &relative_time))
+    {
+      g_critical ("Getting relative timestamp failed.");
+      return;
+    }
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
@@ -1197,9 +1228,7 @@ emtr_event_recorder_record_stop (EmtrEventRecorder *self,
     return;
 
   uuid_t parsed_event_id;
-  gint64 relative_time;
-  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
-                                     &relative_time)))
+  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id)))
   {
     return;
   }

@@ -74,7 +74,8 @@ AC_SUBST(EMTR_LT_VERSION_INFO)
 # Required versions of libraries
 # Update these whenever you use a function that requires a certain API version
 GLIB_REQUIREMENT="glib-2.0 >= 2.40"
-GIO_REQUIREMENT="gio-2.0"
+GIO_REQUIREMENT="gio-2.0 >= 2.30
+    gio-unix-2.0"
 GOBJECT_REQUIREMENT="gobject-2.0"
 JSON_REQUIREMENT="json-glib-1.0 >= 0.16"
 SOUP_REQUIREMENT="libsoup-2.4 >= 2.42"
@@ -108,6 +109,10 @@ AC_PATH_PROG([GIRDOCTOOL], [g-ir-doc-tool], [notfound])
 AC_ARG_VAR([GIRDOCTOOL], [Path to g-ir-doc-tool])
 AC_PATH_PROG([YELPBUILD], [yelp-build], [notfound])
 AC_ARG_VAR([YELPBUILD], [Path to yelp-build])
+AC_PATH_PROG([GDBUS_CODEGEN], [gdbus-codegen], [notfound])
+AS_IF([test "x$GDBUS_CODEGEN" = "xnotfound"],
+    [AC_MSG_ERROR([Could not find gdbus-codegen])])
+AC_ARG_VAR([GDBUS_CODEGEN], [Path to gdbus-codegen])
 
 AC_CACHE_SAVE
 
@@ -175,9 +180,22 @@ AM_COND_IF([ENABLE_GIR_DOC], [], [can_make_dist=no])
 AM_CONDITIONAL([CAN_MAKE_DIST], [test "x$can_make_dist" = "xyes"])
 AC_MSG_RESULT([$can_make_dist])
 
+systemdsystemunitdir="$($PKG_CONFIG systemd --variable=systemdsystemunitdir)"
+dnl Allow overriding systemdsystemunitdir during distcheck in order to trick
+dnl Automake into allowing an install outside of $prefix
+AC_ARG_WITH([systemdsystemunitdir],
+    [AS_HELP_STRING([--with-systemdsystemunitdir=PATH], [directory for systemd service files])],
+    [systemdsystemunitdir="$withval"])
+AC_SUBST([systemdsystemunitdir])
+
 # Required libraries
 # ------------------
 PKG_CHECK_MODULES([EOSMETRICS], [
+    $EMTR_REQUIRED_MODULES
+    $EMTR_REQUIRED_MODULES_PRIVATE])
+dnl These requirements are the same for now, until the functionality is
+dnl separated from one into the other
+PKG_CHECK_MODULES([EOSMETRICS_EVENT_RECORDER], [
     $EMTR_REQUIRED_MODULES
     $EMTR_REQUIRED_MODULES_PRIVATE])
 

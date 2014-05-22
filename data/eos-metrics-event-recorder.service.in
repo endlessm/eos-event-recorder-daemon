@@ -1,0 +1,13 @@
+[Unit]
+Description=EndlessOS Metrics Event Recorder Server
+Requires=dbus.service
+After=dbus.service
+
+[Service]
+User=root
+Type=dbus
+BusName=com.endlessm.Metrics
+ExecStart=@libexecdir@/eos-metrics-event-recorder
+
+[Install]
+WantedBy=multi-user.target

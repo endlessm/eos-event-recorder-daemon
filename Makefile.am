@@ -22,15 +22,19 @@ AM_CFLAGS = @STRICT_CFLAGS@
 
 # Make sure to run Gtk-doc tests and build the documentation when doing
 # 'make distcheck'
-DISTCHECK_CONFIGURE_FLAGS = \
+AM_DISTCHECK_CONFIGURE_FLAGS = \
 	--enable-gtk-doc \
 	--enable-gir-doc \
 	--enable-strict-flags \
+	--with-systemdsystemunitdir=$(libdir)/systemd \
 	$(NULL)
 
 # Generated files that 'make clean' should erase
 CLEANFILES =
 DISTCLEANFILES =
+
+# Generated sources that should be built before other sources
+BUILT_SOURCES =
 
 # Make sure that 'make dist' includes documentation
 if CAN_MAKE_DIST
@@ -43,6 +47,10 @@ dist-hook:
 	@echo "***"
 	@false
 endif
+
+# # # DATA # # #
+
+include $(top_srcdir)/data/Makefile.am.inc
 
 # # # LIBRARY # # #
 
@@ -60,6 +68,10 @@ nobase_eosmetricsinclude_HEADERS = \
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = @EMTR_API_NAME@.pc
 DISTCLEANFILES += @EMTR_API_NAME@.pc
+
+# # # DBUS DAEMON ("EVENT RECORDER SERVER") # # #
+
+include $(top_srcdir)/daemon/Makefile.am.inc
 
 # # # INTROSPECTION FILES # # #
 

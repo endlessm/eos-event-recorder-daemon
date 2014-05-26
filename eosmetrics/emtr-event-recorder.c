@@ -506,18 +506,18 @@ create_request_body (EmtrEventRecorderPrivate *priv)
                    ENVIRONMENT, &user_events_builder, &system_events_builder,
                    &system_aggregates_builder, &system_event_sequences_builder);
 
-  GVariant *big_endian_request_body = request_body;
-  if (G_BYTE_ORDER == G_LITTLE_ENDIAN)
+  GVariant *little_endian_request_body = request_body;
+  if (G_BYTE_ORDER == G_BIG_ENDIAN)
     {
-      big_endian_request_body = g_variant_byteswap (request_body);
+      little_endian_request_body = g_variant_byteswap (request_body);
       g_variant_unref (request_body);
     }
   else
     {
-      g_assert (G_BYTE_ORDER == G_BIG_ENDIAN);
+      g_assert (G_BYTE_ORDER == G_LITTLE_ENDIAN);
     }
 
-  return big_endian_request_body;
+  return little_endian_request_body;
 }
 
 static gchar *

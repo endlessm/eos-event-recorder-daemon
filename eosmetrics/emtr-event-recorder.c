@@ -18,6 +18,9 @@
 #include <string.h>
 #include <uuid/uuid.h>
 
+/* Convenience macro to check that @ptr is a #GVariant */
+#define _IS_VARIANT(ptr) (g_variant_is_of_type ((ptr), G_VARIANT_TYPE_ANY))
+
 /*
  * Must be incremented every time the network protocol is changed so that the
  * proxy server can correctly handle both old and new clients while the updated
@@ -713,34 +716,9 @@ emtr_event_recorder_init (EmtrEventRecorder *self)
 }
 
 static gboolean
-inputs_are_valid (EmtrEventRecorder *self,
-                  const gchar       *unparsed_event_id,
-                  uuid_t             parsed_event_id,
-                  gint64            *relative_time)
+parse_event_id (const gchar *unparsed_event_id,
+                uuid_t       parsed_event_id)
 {
-  // Get the time before doing anything else because it will change during
-  // execution.
-  if (G_UNLIKELY (!get_current_time (CLOCK_BOOTTIME, relative_time)))
-    return FALSE;
-
-  if (G_UNLIKELY (self == NULL))
-    {
-      g_warning ("self should be an instance of EmtrEventRecorder, not NULL.\n");
-      return FALSE;
-    }
-
-  if (G_UNLIKELY (!EMTR_IS_EVENT_RECORDER (self)))
-    {
-      g_warning ("self should be an instance of EmtrEventRecorder.\n");
-      return FALSE;
-    }
-
-  if (G_UNLIKELY (unparsed_event_id == NULL))
-    {
-      g_warning ("event_id should be a non-NULL instance of const gchar *.\n");
-      return FALSE;
-    }
-
   int parse_failed = uuid_parse (unparsed_event_id, parsed_event_id);
   if (G_UNLIKELY (parse_failed != 0))
     {
@@ -865,21 +843,30 @@ emtr_event_recorder_record_event (EmtrEventRecorder *self,
                                   const gchar       *event_id,
                                   GVariant          *auxiliary_payload)
 {
+  /* Get the time before doing anything else because it will change during
+  execution. */
+  gint64 relative_time;
+  if (!get_current_time (CLOCK_BOOTTIME, &relative_time))
+    {
+      g_critical ("Getting relative timestamp failed.");
+      return;
+    }
+
+  g_return_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self));
+  g_return_if_fail (event_id != NULL);
+  g_return_if_fail (auxiliary_payload == NULL || _IS_VARIANT(auxiliary_payload));
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
   if (!priv->recording_enabled)
     return;
 
-  g_mutex_lock (&(priv->event_buffer_lock));
   uuid_t parsed_event_id;
-  gint64 relative_time;
-  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
-                                     &relative_time)))
-  {
-    g_mutex_unlock (&(priv->event_buffer_lock));
+  if (!parse_event_id (event_id, parsed_event_id))
     return;
-  }
+
+  g_mutex_lock (&(priv->event_buffer_lock));
 
   if (G_LIKELY (priv->num_events_buffered < EVENT_BUFFER_LENGTH))
     {
@@ -938,21 +925,30 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
                                    gint64             num_events,
                                    GVariant          *auxiliary_payload)
 {
+  /* Get the time before doing anything else because it will change during
+  execution. */
+  gint64 relative_time;
+  if (!get_current_time (CLOCK_BOOTTIME, &relative_time))
+    {
+      g_critical ("Getting relative timestamp failed.");
+      return;
+    }
+
+  g_return_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self));
+  g_return_if_fail (event_id != NULL);
+  g_return_if_fail (auxiliary_payload == NULL || _IS_VARIANT(auxiliary_payload));
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
   if (!priv->recording_enabled)
     return;
 
-  g_mutex_lock (&(priv->aggregate_buffer_lock));
   uuid_t parsed_event_id;
-  gint64 relative_time;
-  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
-                                     &relative_time)))
-  {
-    g_mutex_unlock (&(priv->aggregate_buffer_lock));
+  if (!parse_event_id (event_id, parsed_event_id))
     return;
-  }
+
+  g_mutex_lock (&(priv->aggregate_buffer_lock));
 
   if (G_LIKELY (priv->num_aggregates_buffered < AGGREGATE_BUFFER_LENGTH))
     {
@@ -1027,21 +1023,30 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
                                   GVariant          *key,
                                   GVariant          *auxiliary_payload)
 {
+  /* Get the time before doing anything else because it will change during
+  execution. */
+  gint64 relative_time;
+  if (!get_current_time (CLOCK_BOOTTIME, &relative_time))
+    {
+      g_critical ("Getting relative timestamp failed.");
+      return;
+    }
+
+  g_return_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self));
+  g_return_if_fail (event_id != NULL);
+  g_return_if_fail (key == NULL || _IS_VARIANT (key));
+  g_return_if_fail (auxiliary_payload == NULL
+                    || _IS_VARIANT (auxiliary_payload));
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
   if (!priv->recording_enabled)
     return;
 
-  g_mutex_lock (&(priv->events_by_id_with_key_lock));
   uuid_t parsed_event_id;
-  gint64 relative_time;
-  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
-                                     &relative_time)))
-  {
-    g_mutex_unlock (&(priv->events_by_id_with_key_lock));
+  if (!parse_event_id (event_id, parsed_event_id))
     return;
-  }
 
   key = get_normalized_form_of_variant (key);
 
@@ -1054,6 +1059,8 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
   GArray *event_values = g_array_sized_new (FALSE, FALSE, sizeof (EventValue),
                                             2);
   g_array_append_val (event_values, start_event_value);
+
+  g_mutex_lock (&(priv->events_by_id_with_key_lock));
 
   if (G_UNLIKELY (!g_hash_table_insert (priv->events_by_id_with_key,
                                         event_id_with_key, event_values)))
@@ -1083,10 +1090,10 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
       return;
     }
 
+  g_mutex_unlock (&(priv->events_by_id_with_key_lock));
+
   if (G_LIKELY (key != NULL))
     g_variant_unref (key);
-
-  g_mutex_unlock (&(priv->events_by_id_with_key_lock));
 }
 
 /**
@@ -1110,26 +1117,37 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
                                      GVariant          *key,
                                      GVariant          *auxiliary_payload)
 {
+  /* Get the time before doing anything else because it will change during
+  execution. */
+  gint64 relative_time;
+  if (!get_current_time (CLOCK_BOOTTIME, &relative_time))
+    {
+      g_critical ("Getting relative timestamp failed.");
+      return;
+    }
+
+  g_return_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self));
+  g_return_if_fail (event_id != NULL);
+  g_return_if_fail (key == NULL || _IS_VARIANT (key));
+  g_return_if_fail (auxiliary_payload == NULL
+                    || _IS_VARIANT (auxiliary_payload));
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
   if (!priv->recording_enabled)
     return;
 
-  g_mutex_lock (&(priv->events_by_id_with_key_lock));
   uuid_t parsed_event_id;
-  gint64 relative_time;
-  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
-                                     &relative_time)))
-  {
-    g_mutex_unlock (&(priv->events_by_id_with_key_lock));
+  if (!parse_event_id (event_id, parsed_event_id))
     return;
-  }
 
   key = get_normalized_form_of_variant (key);
 
   GVariant *event_id_with_key = combine_event_id_with_key (parsed_event_id,
                                                            key);
+
+  g_mutex_lock (&(priv->events_by_id_with_key_lock));
 
   GArray *event_values =
     g_hash_table_lookup (priv->events_by_id_with_key, event_id_with_key);
@@ -1161,13 +1179,14 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
       return;
     }
 
+  g_mutex_unlock (&(priv->events_by_id_with_key_lock));
+
   if (G_LIKELY (key != NULL))
     g_variant_unref (key);
 
   auxiliary_payload = get_normalized_form_of_variant (auxiliary_payload);
 
   append_event_value (event_values, relative_time, auxiliary_payload);
-  g_mutex_unlock (&(priv->events_by_id_with_key_lock));
 }
 
 /**
@@ -1189,26 +1208,37 @@ emtr_event_recorder_record_stop (EmtrEventRecorder *self,
                                  GVariant          *key,
                                  GVariant          *auxiliary_payload)
 {
+  /* Get the time before doing anything else because it will change during
+  execution. */
+  gint64 relative_time;
+  if (!get_current_time (CLOCK_BOOTTIME, &relative_time))
+    {
+      g_critical ("Getting relative timestamp failed.");
+      return;
+    }
+
+  g_return_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self));
+  g_return_if_fail (event_id != NULL);
+  g_return_if_fail (key == NULL || _IS_VARIANT (key));
+  g_return_if_fail (auxiliary_payload == NULL
+                    || _IS_VARIANT (auxiliary_payload));
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
   if (!priv->recording_enabled)
     return;
 
-  g_mutex_lock (&(priv->events_by_id_with_key_lock));
   uuid_t parsed_event_id;
-  gint64 relative_time;
-  if (G_UNLIKELY (!inputs_are_valid (self, event_id, parsed_event_id,
-                                     &relative_time)))
-  {
-    g_mutex_unlock (&(priv->events_by_id_with_key_lock));
+  if (!parse_event_id (event_id, parsed_event_id))
     return;
-  }
 
   key = get_normalized_form_of_variant (key);
 
   GVariant *event_id_with_key = combine_event_id_with_key (parsed_event_id,
                                                            key);
+
+  g_mutex_lock (&(priv->events_by_id_with_key_lock));
 
   GArray *event_values =
     g_hash_table_lookup (priv->events_by_id_with_key, event_id_with_key);

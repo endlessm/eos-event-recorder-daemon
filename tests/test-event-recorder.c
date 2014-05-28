@@ -188,7 +188,7 @@ test_event_recorder_record_auxiliary_payload (struct RecorderFixture *fixture,
   emtr_event_recorder_record_start (fixture->recorder, MEANINGLESS_EVENT, NULL,
                                     g_variant_new ("d", 5812.512));
   emtr_event_recorder_record_progress (fixture->recorder, MEANINGLESS_EVENT, NULL,
-                                       g_variant_new ("md", NULL));
+                                       g_variant_new ("d", -12.0));
   emtr_event_recorder_record_stop (fixture->recorder, MEANINGLESS_EVENT, NULL,
                                        g_variant_new ("(xt)",
                                        G_GINT64_CONSTANT (-82),

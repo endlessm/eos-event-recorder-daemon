@@ -16,6 +16,7 @@ eosmetrics_private_installed_headers = \
 	$(NULL)
 
 eosmetrics_library_sources = \
+	emer-event-recorder-server.c emer-event-recorder-server.h \
 	eosmetrics/emtr-connection.c \
 	eosmetrics/emtr-event-recorder.c \
 	eosmetrics/emtr-mac.c eosmetrics/emtr-mac-private.h \

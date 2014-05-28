@@ -11,6 +11,7 @@ tests_run_tests_SOURCES = \
 	tests/run-tests.c tests/run-tests.h \
 	tests/test-connection.c \
 	tests/test-event-recorder.c \
+	tests/test-persistent-cache.c \
 	tests/test-mac.c \
 	tests/test-osversion.c \
 	tests/test-uuid.c \

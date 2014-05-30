@@ -12,8 +12,6 @@ eosmetrics_private_installed_headers = \
 	eosmetrics/emtr-types.h \
 	eosmetrics/emtr-util.h \
 	eosmetrics/emtr-version.h \
-	eosmetrics/emtr-connection.h \
-	eosmetrics/emtr-sender.h \
 	eosmetrics/emtr-machine-id-provider.h \
 	$(NULL)
 

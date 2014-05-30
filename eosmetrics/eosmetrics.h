@@ -16,6 +16,7 @@ G_BEGIN_DECLS
 #include "emtr-sender.h"
 #include "emtr-event-recorder.h"
 #include "emtr-event-types.h"
+#include "emtr-machine-id-provider.h"
 
 #undef _EMTR_INSIDE_EOSMETRICS_H
 

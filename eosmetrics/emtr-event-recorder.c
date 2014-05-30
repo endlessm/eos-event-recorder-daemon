@@ -13,77 +13,13 @@
 #include <glib/gprintf.h>
 #include <glib/gstdio.h>
 #include <libsoup/soup.h>
+#include <uuid/uuid.h>
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
-#include <uuid/uuid.h>
 
 /* Convenience macro to check that @ptr is a #GVariant */
 #define _IS_VARIANT(ptr) (g_variant_is_of_type ((ptr), G_VARIANT_TYPE_ANY))
-
-/*
- * Must be incremented every time the network protocol is changed so that the
- * proxy server can correctly handle both old and new clients while the updated
- * metrics package rolls out to all clients.
- */
-#define CLIENT_VERSION 0
-
-/*
- * Filepath at which the random UUID that persistently identifies this machine
- * is stored.
- * In order to protect the anonymity of our users, the ID stored in this file
- * must be randomly generated and not traceable back to the user's device.
- * See http://www.freedesktop.org/software/systemd/man/machine-id.html for more
- * details.
- */
-#define MACHINE_ID_FILEPATH "/etc/machine-id"
-
-/*
- * The expected size in bytes of the file located at MACHINE_ID_FILEPATH.
- * According to http://www.freedesktop.org/software/systemd/man/machine-id.html
- * the file should be 32 lower-case hexadecimal characters followed by a
- * newline character.
- */
-#define MACHINE_ID_FILE_SIZE 33
-
-/*
- * Specifies whether the metrics come from regular users in production,
- * employees/contractors developing EndlessOS, or automated tests. For now, we
- * consider all metrics to come from a development environment until we build
- * some confidence in the metrics system.
- */
-#define ENVIRONMENT "dev"
-
-/*
- * The maximum frequency with which an attempt to send metrics over the network
- * is made.
- */
-#define NETWORK_SEND_INTERVAL_SECONDS (60 * 60)
-
-/*
- * The number of elements in a uuid_t. uuid_t is assumed to be a fixed-length
- * array of guchar.
- */
-#define UUID_LENGTH (sizeof (uuid_t) / sizeof (guchar))
-
-/*
- * The maximum number of ordinary events that may be stored in RAM in the buffer
- * of events waiting to be sent to the metrics server.
- */
-#define EVENT_BUFFER_LENGTH 2000
-
-/*
- * The maximum number of aggregated events that may be stored in RAM in the
- * buffer of events waiting to be sent to the metrics server.
- */
-#define AGGREGATE_BUFFER_LENGTH 2000
-
-/*
- * The maximum number of event sequences that may be stored in RAM in the buffer
- * of event sequences waiting to be sent to the metrics server. Does not include
- * unstopped event sequences.
- */
-#define SEQUENCE_BUFFER_LENGTH 2000
 
 // The number of nanoseconds in one second.
 #define NANOSECONDS_PER_SECOND 1000000000L
@@ -91,21 +27,15 @@
 // TODO: Once we have a production proxy server, update this constant
 // accordingly.
 // The URI of the metrics production proxy server.
-#define PROXY_PROD_SERVER_URI "http://metrics-test.endlessm-sf.com:8080/"
-
-// The URI of the metrics test proxy server.
-#define PROXY_TEST_SERVER_URI "http://metrics-test.endlessm-sf.com:8080/"
+// Is kept in a #define to prevent testing code from sending metrics to the
+// production server.
+#define PRODUCTION_SERVER_URI "http://metrics-test.endlessm-sf.com:8080/"
 
 /*
- * Caches a random UUID stored in a file that persistently identifies this
- * machine. In order to protect the anonymity of our users, this ID must be
- * randomly generated and not traceable back to the user's device.
+ * The number of elements in a uuid_t. uuid_t is assumed to be a fixed-length
+ * array of guchar.
  */
-static uuid_t machine_id;
-
-// TODO: Re-evaluate whether this is necessary, or a GOnce (or nothing) would be
-// more appropriate.
-G_LOCK_DEFINE_STATIC (machine_id);
+#define UUID_LENGTH (sizeof (uuid_t) / sizeof (guchar))
 
 /**
  * SECTION:emtr-event-recorder
@@ -128,20 +58,20 @@ G_LOCK_DEFINE_STATIC (machine_id);
  * const MEANINGLESS_EVENT_WITH_AUX_DATA =
  *   "9f26029e-8085-42a7-903e-10fcd1815e03";
  *
- * let eventRecorder = EosMetrics.EventRecorder.new();
+ * let eventRecorder = EosMetrics.EventRecorder.get_default();
  *
  * // Records a single instance of MEANINGLESS_EVENT along with the current
  * // time.
- * eventRecorder.prototype.record_event(MEANINGLESS_EVENT, null);
+ * eventRecorder.record_event(MEANINGLESS_EVENT, null);
  *
  * // Records the fact that MEANINGLESS_AGGREGATED_EVENT occurred 23
  * // times since the last time it was recorded.
- * eventRecorder.prototype.record_events(MEANINGLESS_AGGREGATED_EVENT,
+ * eventRecorder.record_events(MEANINGLESS_AGGREGATED_EVENT,
  *   23, null);
  *
  * // Records MEANINGLESS_EVENT_WITH_AUX_DATA along with some auxiliary data and
  * // the current time.
- * eventRecorder.prototype.record_event(MEANINGLESS_EVENT_WITH_AUX_DATA,
+ * eventRecorder.record_event(MEANINGLESS_EVENT_WITH_AUX_DATA,
  *   new GLib.Variant('a{sv}', {
  *     units_of_smoke_ground: new GLib.Variant('u', units),
  *     grinding_time: new GLib.Variant('u', time)
@@ -186,6 +116,20 @@ typedef struct EventSequence
 
 typedef struct EmtrEventRecorderPrivate
 {
+  gint client_version;
+
+  gchar *environment;
+
+  guint network_send_interval_seconds;
+
+  gint individual_buffer_length;
+  gint aggregate_buffer_length;
+  gint sequence_buffer_length;
+
+  gchar *proxy_server_uri;
+
+  EmtrMachineIdProvider *machine_id_provider;
+
   Event * volatile event_buffer;
   volatile gint num_events_buffered;
   GMutex event_buffer_lock;
@@ -240,6 +184,10 @@ emtr_event_recorder_finalize (GObject *object)
   EmtrEventRecorder *self = EMTR_EVENT_RECORDER (object);
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
+  g_free (priv->environment);
+  g_free (priv->proxy_server_uri);
+  if (priv->machine_id_provider != NULL)
+    g_object_unref (priv->machine_id_provider);
 
   if (priv->recording_enabled)
     {
@@ -278,12 +226,7 @@ emtr_event_recorder_finalize (GObject *object)
   G_OBJECT_CLASS (emtr_event_recorder_parent_class)->finalize (object);
 }
 
-static void
-emtr_event_recorder_class_init (EmtrEventRecorderClass *klass)
-{
-  GObjectClass *object_class = G_OBJECT_CLASS (klass);
-  object_class->finalize = emtr_event_recorder_finalize;
-}
+
 
 /*
  * https://developer.gnome.org/glib/2.40/glib-GVariant.html#g-variant-hash
@@ -307,12 +250,6 @@ general_variant_hash (gconstpointer key)
   return hash_value;
 }
 
-static gboolean
-use_prod_server (void)
-{
-  return FALSE;
-}
-
 // Handles HTTP or HTTPS responses.
 static void
 handle_https_response (GObject      *source_object,
@@ -329,7 +266,7 @@ handle_https_response (GObject      *source_object,
 
   if (G_UNLIKELY (response_stream == NULL))
     {
-      g_warning ("Error receiving metric HTTPS response: %s\n", error->message);
+      g_warning ("Error receiving metric HTTPS response: %s", error->message);
       g_error_free (error);
       return;
     }
@@ -358,7 +295,7 @@ get_current_time (clockid_t clock_id, gint64 *current_time)
   if (G_UNLIKELY (gettime_failed != 0))
     {
       int error_code = errno;
-      g_critical ("Attempt to get current time failed with error code: %d.\n",
+      g_critical ("Attempt to get current time failed with error code: %d.",
                   error_code);
       return FALSE;
     }
@@ -472,10 +409,11 @@ static GVariant *
 create_request_body (EmtrEventRecorderPrivate *priv)
 {
   GVariantBuilder machine_id_builder;
-
-  G_LOCK (machine_id);
+  uuid_t machine_id;
+  gboolean read_id = emtr_machine_id_provider_get_id (priv->machine_id_provider, machine_id);
+  if (!read_id)
+    return NULL;
   get_uuid_builder (machine_id, &machine_id_builder);
-  G_UNLOCK (machine_id);
 
   GVariantBuilder user_events_builder;
   g_variant_builder_init (&user_events_builder,
@@ -501,33 +439,33 @@ create_request_body (EmtrEventRecorderPrivate *priv)
 
   GVariant *request_body =
     g_variant_new ("(ixxaysa(aya(ayxmv)a(ayxxmv)a(aya(xmv)))"
-                   "a(ayxmv)a(ayxxmv)a(aya(xmv)))", CLIENT_VERSION,
+                   "a(ayxmv)a(ayxxmv)a(aya(xmv)))", priv->client_version,
                    relative_time, absolute_time, &machine_id_builder,
-                   ENVIRONMENT, &user_events_builder, &system_events_builder,
+                   priv->environment, &user_events_builder, &system_events_builder,
                    &system_aggregates_builder, &system_event_sequences_builder);
 
-  GVariant *big_endian_request_body = request_body;
-  if (G_BYTE_ORDER == G_LITTLE_ENDIAN)
+  GVariant *little_endian_request_body = request_body;
+  if (G_BYTE_ORDER == G_BIG_ENDIAN)
     {
-      big_endian_request_body = g_variant_byteswap (request_body);
+      little_endian_request_body = g_variant_byteswap (request_body);
       g_variant_unref (request_body);
     }
   else
     {
-      g_assert (G_BYTE_ORDER == G_BIG_ENDIAN);
+      g_assert (G_BYTE_ORDER == G_LITTLE_ENDIAN);
     }
 
-  return big_endian_request_body;
+  return little_endian_request_body;
 }
 
 static gchar *
-get_https_request_uri (const guchar *data, gsize length)
+get_https_request_uri (EmtrEventRecorder *self, const guchar *data, gsize length)
 {
-  const gchar *proxy_server_uri = (use_prod_server ()) ?
-    PROXY_PROD_SERVER_URI : PROXY_TEST_SERVER_URI;
   gchar *checksum_string = g_compute_checksum_for_data (G_CHECKSUM_SHA512, data,
                                                         length);
-  gchar *https_request_uri = g_strconcat (proxy_server_uri, checksum_string,
+  EmtrEventRecorderPrivate *priv =
+    emtr_event_recorder_get_instance_private (self);
+  gchar *https_request_uri = g_strconcat (priv->proxy_server_uri, checksum_string,
                                           NULL);
   g_free (checksum_string);
   return https_request_uri;
@@ -547,14 +485,14 @@ upload_events (gpointer user_data)
   g_object_ref (self);
 
   GVariant *request_body = create_request_body (priv);
-  if (G_UNLIKELY (request_body == NULL))
+  if (request_body == NULL)
     return G_SOURCE_CONTINUE;
 
   gconstpointer serialized_request_body = g_variant_get_data (request_body);
   g_assert (serialized_request_body != NULL);
   gsize request_body_length = g_variant_get_size (request_body);
   gchar *https_request_uri =
-    get_https_request_uri (serialized_request_body, request_body_length);
+    get_https_request_uri (self, serialized_request_body, request_body_length);
 
   GError *error = NULL;
   SoupRequestHTTP *https_request =
@@ -563,7 +501,7 @@ upload_events (gpointer user_data)
   g_free (https_request_uri);
   if (G_UNLIKELY (https_request == NULL))
     {
-      g_warning ("Error creating metric HTTPS request: %s\n", error->message);
+      g_warning ("Error creating metric HTTPS request: %s", error->message);
       g_error_free (error);
       return G_SOURCE_CONTINUE;
     }
@@ -595,76 +533,409 @@ get_user_agent (void)
                           libsoup_minor_version, libsoup_micro_version);
 }
 
-/*
- * Returns a newly-allocated copy of uuid_sans_hyphens with hyphens inserted at
- * the appropriate positions as defined by uuid_unparse(3).
- * uuid_sans_hyphens is expected to be exactly 32 bytes, excluding the terminal
- * null byte.
- * Any extra bytes are ignored.
- * The returned string is guaranteed to be null-terminated.
- */
-static gchar *
-hyphenate_uuid (gchar *uuid_sans_hyphens)
+enum {
+  PROP_0,
+  PROP_NETWORK_SEND_INTERVAL,
+  PROP_CLIENT_VERSION_NUMBER,
+  PROP_ENVIRONMENT,
+  PROP_PROXY_SERVER_URI,
+  PROP_INDIVIDUAL_BUFFER_LENGTH,
+  PROP_AGGREGATE_BUFFER_LENGTH,
+  PROP_SEQUENCE_BUFFER_LENGTH,
+  PROP_MACHINE_ID_PROVIDER,
+  NPROPS
+};
+
+static GParamSpec *emtr_event_recorder_props[NPROPS] = { NULL, };
+
+static void 
+set_network_send_interval (EmtrEventRecorder *self,
+                           guint              seconds)
 {
-  return g_strdup_printf ("%.8s-%.4s-%.4s-%.4s-%.12s", uuid_sans_hyphens,
-                          uuid_sans_hyphens + 8, uuid_sans_hyphens + 12,
-                          uuid_sans_hyphens + 16, uuid_sans_hyphens + 20);
+  EmtrEventRecorderPrivate *priv =
+    emtr_event_recorder_get_instance_private (self);
+  priv->network_send_interval_seconds = seconds;
 }
 
-static gboolean
-read_machine_id (void)
+/*
+ * get_network_send_interval:
+ * @self: the event recorder
+ *
+ * See #EmtrEventRecorder:network-send-interval.
+ *
+ * Returns: the number of seconds between network request
+ * send attempts. On invalid input returns 0 instead.
+ */
+static guint
+get_network_send_interval (EmtrEventRecorder *self)
 {
-  // The machine ID has already been read from disk; no need to read it again.
-  if (machine_id != NULL)
-    return TRUE;
+  g_return_val_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self), 0);
+  EmtrEventRecorderPrivate *priv = emtr_event_recorder_get_instance_private (self);
+  return priv->network_send_interval_seconds;
+}
 
-  gchar *machine_id_sans_hyphens;
-  gsize machine_id_sans_hyphens_length;
-  GError *error = NULL;
-  gboolean read_succeeded =
-    g_file_get_contents (MACHINE_ID_FILEPATH, &machine_id_sans_hyphens,
-                         &machine_id_sans_hyphens_length, &error);
-  if (!read_succeeded)
+static void
+set_client_version_number (EmtrEventRecorder *self,
+                           gint               number)
+{
+  EmtrEventRecorderPrivate *priv =
+    emtr_event_recorder_get_instance_private (self);
+  priv->client_version = number;
+}
+
+/*
+ * get_client_version_number:
+ * @self: the event recorder
+ *
+ * Returns: the client version number. On invalid
+ * input, returns -1.
+ */
+static gint
+get_client_version_number (EmtrEventRecorder *self)
+{
+  g_return_val_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self), -1);
+  EmtrEventRecorderPrivate *priv = emtr_event_recorder_get_instance_private (self);
+  return priv->client_version;
+}
+
+static void
+set_environment (EmtrEventRecorder *self,
+                 const gchar       *env)
+{
+  EmtrEventRecorderPrivate *priv =
+    emtr_event_recorder_get_instance_private (self);
+  priv->environment = g_strdup (env);
+}
+
+/*
+ * get_environment:
+ * @self: the event recorder
+ *
+ * See #EmtrEventRecorder:environment.
+ *
+ * Returns: the metric user environment. On invalid input,
+ * will return the empty string.
+ */
+static gchar*
+get_environment (EmtrEventRecorder *self)
+{
+  g_return_val_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self), "");
+  EmtrEventRecorderPrivate *priv = emtr_event_recorder_get_instance_private (self);
+  return priv->environment;
+}
+
+static void
+set_proxy_server_uri (EmtrEventRecorder *self,
+                      const gchar       *uri)
+{
+  EmtrEventRecorderPrivate *priv =
+    emtr_event_recorder_get_instance_private (self);
+  priv->proxy_server_uri = g_strdup (uri);
+}
+
+/*
+ * get_proxy_server_uri:
+ * @self: the event recorder
+ *
+ * See #EmtrEventRecorder:proxy-server-uri.
+ *
+ * Returns: the URI of the proxy server. On invalid input,
+ * will return the empty string.
+ */
+static gchar*
+get_proxy_server_uri (EmtrEventRecorder *self)
+{
+  g_return_val_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self), "");
+  EmtrEventRecorderPrivate *priv = emtr_event_recorder_get_instance_private (self);
+  return priv->proxy_server_uri;
+}
+
+static void
+set_individual_buffer_length (EmtrEventRecorder *self,
+                              gint               length)
+{
+  EmtrEventRecorderPrivate *priv =
+    emtr_event_recorder_get_instance_private (self);
+  priv->individual_buffer_length = length;
+}
+
+/*
+ * get_individual_buffer_length:
+ * @self: the event recorder
+ *
+ * See #EmtrEventRecorder:individual-buffer-length.
+ *
+ * Returns: the number of metrics that may fit in the individual buffer.
+ * On invalid input, returns -1. 
+ */
+static gint
+get_individual_buffer_length (EmtrEventRecorder *self)
+{
+  g_return_val_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self), -1);
+  EmtrEventRecorderPrivate *priv = emtr_event_recorder_get_instance_private (self);
+  return priv->individual_buffer_length;
+}
+
+static void
+set_aggregate_buffer_length (EmtrEventRecorder *self,
+                             gint               length)
+{
+  EmtrEventRecorderPrivate *priv =
+    emtr_event_recorder_get_instance_private (self);
+  priv->aggregate_buffer_length = length;
+}
+
+/*
+ * get_aggregate_buffer_length:
+ * @self: the event recorder
+ *
+ * See #EmtrEventRecorder:aggregate-buffer-length.
+ *
+ * Returns: the number of metrics that may fit in the aggregate buffer.
+ * On invalid input, returns -1.
+ */
+static gint
+get_aggregate_buffer_length (EmtrEventRecorder *self)
+{
+  g_return_val_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self), -1);
+  EmtrEventRecorderPrivate *priv = emtr_event_recorder_get_instance_private (self);
+  return priv->aggregate_buffer_length;
+}
+
+static void
+set_sequence_buffer_length (EmtrEventRecorder *self,
+                            gint               length)
+{
+  EmtrEventRecorderPrivate *priv =
+    emtr_event_recorder_get_instance_private (self);
+  priv->sequence_buffer_length = length;
+}
+
+/*
+ * get_sequence_buffer_length:
+ * @self: the event recorder
+ *
+ * See #EmtrEventRecorder:sequence-buffer-length.
+ *
+ * Returns: the number of metrics that may fit in the sequence buffer.
+ * On invalid input, returns -1.
+ */
+static gint
+get_sequence_buffer_length (EmtrEventRecorder *self)
+{
+  g_return_val_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self), -1);
+  EmtrEventRecorderPrivate *priv = emtr_event_recorder_get_instance_private (self);
+  return priv->sequence_buffer_length;
+}
+
+static void
+set_machine_id_provider (EmtrEventRecorder     *self,
+                         EmtrMachineIdProvider *machine_id_prov)
+{
+  EmtrEventRecorderPrivate *priv =
+    emtr_event_recorder_get_instance_private (self);
+  priv->machine_id_provider = machine_id_prov;
+}
+
+/*
+ * get_machine_id_provider
+ * @self: the event recorder
+ *
+ * See #EmtrEventRecorder:machine-id-provider.
+ *
+ * Returns: the EmtrMachineIdProvider providing a uuid for this object
+ */
+static EmtrMachineIdProvider *
+get_machine_id_provider (EmtrEventRecorder *self)
+{
+  g_return_val_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self), NULL);
+  EmtrEventRecorderPrivate *priv = emtr_event_recorder_get_instance_private (self);
+  return priv->machine_id_provider;
+}
+
+static void
+emtr_event_recorder_set_property (GObject      *object,
+                                  guint         property_id,
+                                  const GValue *value,
+                                  GParamSpec   *pspec)
+{
+  EmtrEventRecorder *self = EMTR_EVENT_RECORDER (object);
+  switch (property_id)
     {
-      g_critical ("Failed to read machine ID file (%s). Disabled metric "
-                  "recording.\n", MACHINE_ID_FILEPATH);
-      return FALSE;
-    }
+    case PROP_NETWORK_SEND_INTERVAL:
+      set_network_send_interval (self, g_value_get_uint (value));
+      break;
 
-  if (strlen (machine_id_sans_hyphens) != machine_id_sans_hyphens_length)
+    case PROP_CLIENT_VERSION_NUMBER:
+      set_client_version_number (self, g_value_get_int (value));
+      break;
+
+    case PROP_ENVIRONMENT:
+      set_environment (self, g_value_get_string (value));
+      break;
+
+    case PROP_PROXY_SERVER_URI:
+      set_proxy_server_uri (self, g_value_get_string (value));
+      break;
+
+    case PROP_INDIVIDUAL_BUFFER_LENGTH:
+      set_individual_buffer_length (self, g_value_get_int (value));
+      break;
+
+    case PROP_AGGREGATE_BUFFER_LENGTH:
+      set_aggregate_buffer_length (self, g_value_get_int (value));
+      break;
+
+    case PROP_SEQUENCE_BUFFER_LENGTH:
+      set_sequence_buffer_length (self, g_value_get_int (value));
+      break;
+
+    case PROP_MACHINE_ID_PROVIDER:
+      set_machine_id_provider (self, g_value_get_object (value));
+      break;
+
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+    }
+}
+
+static void
+emtr_event_recorder_get_property (GObject    *object,
+                                  guint       property_id,
+                                  GValue     *value,
+                                  GParamSpec *pspec)
+{
+  EmtrEventRecorder *self = EMTR_EVENT_RECORDER (object);
+  switch (property_id)
     {
-      g_critical ("Machine ID file (%s) contained null byte, but should be "
-                  "hexadecimal. Disabled metric recording.\n",
-                  MACHINE_ID_FILEPATH);
-      return FALSE;
+    case PROP_NETWORK_SEND_INTERVAL:
+      g_value_set_uint (value, get_network_send_interval (self));
+      break;
+
+    case PROP_CLIENT_VERSION_NUMBER:
+      g_value_set_int (value, get_client_version_number (self));
+      break;
+    
+    case PROP_ENVIRONMENT:
+      g_value_set_string (value, get_environment (self));
+      break;
+
+    case PROP_PROXY_SERVER_URI:
+      g_value_set_string (value, get_proxy_server_uri (self));
+      break;
+
+    case PROP_INDIVIDUAL_BUFFER_LENGTH:
+      g_value_set_int (value, get_individual_buffer_length (self));
+      break;
+
+    case PROP_AGGREGATE_BUFFER_LENGTH:
+      g_value_set_int (value, get_aggregate_buffer_length (self));
+      break;
+
+    case PROP_SEQUENCE_BUFFER_LENGTH:
+      g_value_set_int (value, get_sequence_buffer_length (self));
+      break;
+
+    case PROP_MACHINE_ID_PROVIDER:
+      g_value_set_object (value, get_machine_id_provider (self));
+      break;
+
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
     }
+}
 
-  if (machine_id_sans_hyphens_length != MACHINE_ID_FILE_SIZE)
-    {
-      g_critical ("Machine ID file (%s) contained %" G_GSIZE_FORMAT " bytes, "
-                  "but expected %d bytes. Disabled metric recording.\n",
-                  MACHINE_ID_FILEPATH, machine_id_sans_hyphens_length,
-                  MACHINE_ID_FILE_SIZE);
-      return FALSE;
-    }
+static void
+emtr_event_recorder_class_init (EmtrEventRecorderClass *klass)
+{
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+  object_class->get_property = emtr_event_recorder_get_property;
+  object_class->set_property = emtr_event_recorder_set_property;
+  object_class->finalize = emtr_event_recorder_finalize;
 
-  gchar *hyphenated_machine_id = hyphenate_uuid (machine_id_sans_hyphens);
-  g_free (machine_id_sans_hyphens);
+  /**
+   * EmtrEventRecorder:network-send-interval:
+   *
+   * The frequency with which the client will attempt a network send request, in
+   * seconds.
+   */
+  emtr_event_recorder_props[PROP_NETWORK_SEND_INTERVAL] =
+    g_param_spec_uint ("network-send-interval", "Network Send Interval",
+                       "Number of seconds until a network request is attempted.",
+                       0, G_MAXUINT, (60 * 60), 
+                       G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS);
 
-  G_LOCK (machine_id);
-  int parse_failed = uuid_parse (hyphenated_machine_id, machine_id);
-  G_UNLOCK (machine_id);
+  /**
+   * EmtrEventRecorder:client-version-number:
+   *
+   * Network protocol version of the metrics client.
+   */
+  emtr_event_recorder_props[PROP_CLIENT_VERSION_NUMBER] =
+    g_param_spec_int ("client-version-number", "Client Version Number",
+                      "Client network protocol version.",
+                      -1, G_MAXINT, 0,
+                      G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS);
 
-  g_free (hyphenated_machine_id);
+  /**
+   * EmtrEventRecorder:environment:
+   *
+   * Specifies what kind of user or system the metrics come from, so that data
+   * analysis can exclude metrics from tests or developers' systems.
+   *
+   * Valid values are "dev", "test", and "prod".
+   * The "prod" value, indicating production, should not be used outside of
+   * a production system.
+   */
+  emtr_event_recorder_props[PROP_ENVIRONMENT] =
+    g_param_spec_string ("environment", "Environment",
+                         "Specifies what kind of user the metrics come from.",
+                         "dev",
+                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS);
 
-  if (parse_failed != 0)
-    {
-      g_critical ("Machine ID file (%s) did not contain UUID. Disabled metric "
-                  "recording.\n", MACHINE_ID_FILEPATH);
-      return FALSE;
-    }
+  /* Blurb string is good enough default documentation for this */
+  emtr_event_recorder_props[PROP_PROXY_SERVER_URI] =
+    g_param_spec_string ("proxy-server-uri", "Proxy Server URI",
+                         "The URI to send metrics to.",
+                         PRODUCTION_SERVER_URI,
+                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS);
 
-  return TRUE;
+  /* Blurb string is good enough default documentation for this */
+  emtr_event_recorder_props[PROP_INDIVIDUAL_BUFFER_LENGTH] =
+    g_param_spec_int ("individual-buffer-length", "Buffer Length Individual",
+                       "The number of metrics allowed to be stored in the individual metric buffer.",
+                       -1, G_MAXINT, 2000,
+                       G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS);
+
+  /* Blurb string is good enough default documentation for this */
+  emtr_event_recorder_props[PROP_AGGREGATE_BUFFER_LENGTH] =
+    g_param_spec_int ("aggregate-buffer-length", "Buffer Length Aggregate",
+                      "The number of metrics allowed to be stored in the aggregate metric buffer.",
+                      -1, G_MAXINT, 2000,
+                      G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS);
+
+  /* Blurb string is good enough default documentation for this */
+  emtr_event_recorder_props[PROP_SEQUENCE_BUFFER_LENGTH] =
+    g_param_spec_int ("sequence-buffer-length", "Buffer Length Sequence",
+                      "The number of metrics allowed to be stored in the sequence metric buffer.",
+                      -1, G_MAXINT, 2000,
+                      G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS);
+
+  /**
+   * EmtrEventRecorder:machine-id-provider:
+   *
+   * An #EmtrMachineIdProvider for retrieving the unique UUID of this machine.
+   * If this property is not specified, the default machine ID provider (from
+   * emtr_machine_id_provider_get_default()) will be used.
+   * You should only set this property to something else for testing purposes.
+   */
+  emtr_event_recorder_props[PROP_MACHINE_ID_PROVIDER] = 
+    g_param_spec_object ("machine-id-provider", "Machine ID provider",
+                         "Object providing unique machine ID",
+                         EMTR_TYPE_MACHINE_ID_PROVIDER,
+                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS);
+
+  g_object_class_install_properties (object_class, NPROPS,
+                                     emtr_event_recorder_props);
 }
 
 static void
@@ -673,23 +944,15 @@ emtr_event_recorder_init (EmtrEventRecorder *self)
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
-  /*
-   * If we can't read the machine ID, mark self a no-op event recorder, and
-   * don't even initialize the rest of the private state.
-   */
-  priv->recording_enabled = read_machine_id ();
-  if (!priv->recording_enabled)
-    return;
-
-  priv->event_buffer = g_new (Event, EVENT_BUFFER_LENGTH);
+  priv->event_buffer = g_new (Event, priv->individual_buffer_length);
   priv->num_events_buffered = 0;
   g_mutex_init (&(priv->event_buffer_lock));
 
-  priv->aggregate_buffer = g_new (Aggregate, AGGREGATE_BUFFER_LENGTH);
+  priv->aggregate_buffer = g_new (Aggregate, priv->aggregate_buffer_length);
   priv->num_aggregates_buffered = 0;
   g_mutex_init (&(priv->aggregate_buffer_lock));
 
-  priv->event_sequence_buffer = g_new (EventSequence, SEQUENCE_BUFFER_LENGTH);
+  priv->event_sequence_buffer = g_new (EventSequence, priv->sequence_buffer_length);
   priv->num_event_sequences_buffered = 0;
   g_mutex_init (&(priv->event_sequence_buffer_lock));
 
@@ -712,7 +975,7 @@ emtr_event_recorder_init (EmtrEventRecorder *self)
   g_free (user_agent);
 
   priv->upload_events_timeout_source_id =
-    g_timeout_add_seconds (NETWORK_SEND_INTERVAL_SECONDS, upload_events, self);
+    g_timeout_add_seconds (priv->network_send_interval_seconds, upload_events, self);
 }
 
 static gboolean
@@ -724,7 +987,7 @@ parse_event_id (const gchar *unparsed_event_id,
     {
       g_warning ("Attempt to parse UUID \"%s\" failed. Make sure you created "
                  "this UUID with uuidgen -r. You may need to sudo apt-get "
-                 "install uuid-runtime first.\n", unparsed_event_id);
+                 "install uuid-runtime first.", unparsed_event_id);
       return FALSE;
     }
 
@@ -773,7 +1036,7 @@ append_event_sequence_to_buffer (EmtrEventRecorderPrivate *priv,
                                  GArray                   *event_values)
 {
   g_mutex_lock (&(priv->event_sequence_buffer_lock));
-  if (G_LIKELY (priv->num_event_sequences_buffered < SEQUENCE_BUFFER_LENGTH))
+  if (priv->num_event_sequences_buffered < priv->sequence_buffer_length)
     {
       EventSequence *event_sequence =
         priv->event_sequence_buffer + priv->num_event_sequences_buffered;
@@ -799,16 +1062,88 @@ append_event_sequence_to_buffer (EmtrEventRecorderPrivate *priv,
 
 /**
  * emtr_event_recorder_new:
+ * @network_send_interval: frequency with which the client will attempt a
+ * network send request; see #EmtrEventRecorder:network-send-interval
+ * @version_number: client version of the network protocol; see
+ * #EmtrEventRecorder:client-version-number
+ * @environment: environment of the machine; see #EmtrEventRecorder:environment
+ * @proxy_server_uri: URI to use; see #EmtrEventRecorder:proxy-server-uri
+ * @buffer_length: The maximum size of the buffers to be used for in-memory
+ * storage of metrics; see #EmtrEventRecorder:individual-buffer-length,
+ * #EmtrEventRecorder:aggregate-buffer-length, and
+ * #EmtrEventRecorder:sequence-buffer-length
+ * @machine_id_provider: (allow-none): The #EmtrMachineIdProvider to supply the
+ * machine ID, or %NULL to use the default; see
+ * #EmtrEventRecorder:machine-id-provider
  *
- * Convenience function for creating a new #EmtrEventRecorder in the C API.
+ * Testing function for creating a new #EmtrEventRecorder in the C API.
+ * You only need to use this if you are creating an event recorder with
+ * nonstandard parameters for use in unit testing.
+ *
+ * Make sure to pass "test" for @environment if using in a test, and never pass
+ * a live metrics proxy server URI for @proxy_server_uri.
+ *
+ * For all normal uses, you should use emtr_event_recorder_get_default()
+ * instead.
  *
  * Returns: (transfer full): a new #EmtrEventRecorder.
- * Free with g_object_unref() when done if using C.
+ * Free with g_object_unref() if using C when done with it.
  */
 EmtrEventRecorder *
-emtr_event_recorder_new (void)
+emtr_event_recorder_new (guint                  network_send_interval,
+                         gint                   version_number,
+                         const gchar           *environment,
+                         const gchar           *proxy_server_uri,
+                         gint                   buffer_length,
+                         EmtrMachineIdProvider *machine_id_provider)
+                         
 {
-  return g_object_new (EMTR_TYPE_EVENT_RECORDER, NULL);
+  if (environment == NULL)
+    g_error ("'environment' parameter was NULL. This is not allowed. No cookie for you.");
+  if (proxy_server_uri == NULL)
+    g_error ("'proxy_server_uri' parameter was NULL. This is not allowed. Go to your room.");
+
+  const gchar *proxy_to_use = g_strdup (proxy_server_uri);
+  const gchar *env_to_use = g_strdup (environment);
+  g_object_ref (machine_id_provider);
+  return g_object_new (EMTR_TYPE_EVENT_RECORDER,
+                       "network-send-interval", network_send_interval,
+                       "client-version-number", version_number,
+                       "environment", env_to_use,
+                       "proxy-server-uri", proxy_to_use,
+                       "individual-buffer-length", buffer_length,
+                       "aggregate-buffer-length", buffer_length,
+                       "sequence-buffer-length", buffer_length,
+                       "machine-id-provider", machine_id_provider,
+                       NULL);
+}
+
+/**
+ * emtr_event_recorder_get_default:
+ *
+ * Gets the event recorder object that you should use to record all metrics.
+ *
+ * Returns: (transfer none): the default #EmtrEventRecorder.
+ * This object is owned by the metrics library; do not free it.
+ */
+EmtrEventRecorder *
+emtr_event_recorder_get_default (void)
+{
+  static EmtrEventRecorder *singleton;
+  G_LOCK_DEFINE_STATIC (singleton);
+
+  G_LOCK (singleton);
+  if (singleton == NULL)
+    {
+      EmtrMachineIdProvider *machine_provider = emtr_machine_id_provider_get_default ();
+      singleton = g_object_new (EMTR_TYPE_EVENT_RECORDER, 
+                                "machine-id-provider", machine_provider,
+                                NULL);
+      g_object_unref (machine_provider);
+    }
+  G_UNLOCK (singleton);
+
+  return singleton;
 }
 
 /**
@@ -868,7 +1203,7 @@ emtr_event_recorder_record_event (EmtrEventRecorder *self,
 
   g_mutex_lock (&(priv->event_buffer_lock));
 
-  if (G_LIKELY (priv->num_events_buffered < EVENT_BUFFER_LENGTH))
+  if (priv->num_events_buffered < priv->individual_buffer_length)
     {
       Event *event_buffer = priv->event_buffer;
       gint num_events_buffered = priv->num_events_buffered;
@@ -950,7 +1285,7 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
 
   g_mutex_lock (&(priv->aggregate_buffer_lock));
 
-  if (G_LIKELY (priv->num_aggregates_buffered < AGGREGATE_BUFFER_LENGTH))
+  if (priv->num_aggregates_buffered < priv->aggregate_buffer_length)
     {
       Aggregate *aggregate_buffer = priv->aggregate_buffer;
       gint num_aggregates_buffered = priv->num_aggregates_buffered;
@@ -1077,7 +1412,7 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
           // event as opposed to its UUID.
           g_warning ("Ignoring request to start event of type %s with key %s "
                      "because there is already an unstopped start event with this "
-                     "type and key.\n", event_id, key_as_string);
+                     "type and key.", event_id, key_as_string);
 
           g_free (key_as_string);
         }
@@ -1087,7 +1422,7 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
           // event as opposed to its UUID.
           g_warning ("Ignoring request to start event of type %s with NULL key "
                      "because there is already an unstopped start event with "
-                     "this type and key.\n", event_id);
+                     "this type and key.", event_id);
         }
       goto finally;
     }
@@ -1169,7 +1504,7 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
           // event as opposed to its UUID.
           g_warning ("Ignoring request to record progress for event of type %s "
                      "with key %s because there is no corresponding unstopped "
-                     "start event.\n", event_id, key_as_string);
+                     "start event.", event_id, key_as_string);
 
           g_free (key_as_string);
         }
@@ -1179,7 +1514,7 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
           // event as opposed to its UUID.
           g_warning ("Ignoring request to record progress for event of type %s "
                      "with NULL key because there is no corresponding "
-                     "unstopped start event.\n", event_id);
+                     "unstopped start event.", event_id);
         }
       goto finally;
     }
@@ -1264,7 +1599,7 @@ emtr_event_recorder_record_stop (EmtrEventRecorder *self,
           // event as opposed to its UUID.
           g_warning ("Ignoring request to stop event of type %s with key %s "
                      "because there is no corresponding unstopped start "
-                     "event.\n", event_id, key_as_string);
+                     "event.", event_id, key_as_string);
 
           g_free (key_as_string);
         }
@@ -1274,7 +1609,7 @@ emtr_event_recorder_record_stop (EmtrEventRecorder *self,
           // event as opposed to its UUID.
           g_warning ("Ignoring request to stop event of type %s with NULL key "
                      "because there is no corresponding unstopped start "
-                     "event.\n", event_id);
+                     "event.", event_id);
         }
       goto finally;
     }

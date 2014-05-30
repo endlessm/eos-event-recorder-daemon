@@ -12,6 +12,9 @@ eosmetrics_private_installed_headers = \
 	eosmetrics/emtr-types.h \
 	eosmetrics/emtr-util.h \
 	eosmetrics/emtr-version.h \
+	eosmetrics/emtr-connection.h \
+	eosmetrics/emtr-sender.h \
+	eosmetrics/emtr-machine-id-provider.h \
 	$(NULL)
 
 eosmetrics_library_sources = \
@@ -24,6 +27,7 @@ eosmetrics_library_sources = \
 	eosmetrics/emtr-util.c eosmetrics/emtr-util-private.h \
 	eosmetrics/emtr-uuid.c eosmetrics/emtr-uuid-private.h \
 	eosmetrics/emtr-web.c eosmetrics/emtr-web-private.h \
+	eosmetrics/emtr-machine-id-provider.c
 	$(NULL)
 
 lib_LTLIBRARIES = libeosmetrics-@EMTR_API_VERSION@.la

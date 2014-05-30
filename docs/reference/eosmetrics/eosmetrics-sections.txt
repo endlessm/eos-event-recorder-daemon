@@ -74,6 +74,7 @@ emtr_sender_get_type
 <TITLE>EmtrEventRecorder</TITLE>
 EmtrEventRecorder
 EmtrEventRecorderClass
+emtr_event_recorder_get_default
 emtr_event_recorder_new
 <SUBSECTION Methods>
 emtr_event_recorder_record_event
@@ -99,4 +100,23 @@ EMTR_EVENT_USER_IS_LOGGED_IN
 EMTR_EVENT_NETWORK_STATUS_CHANGED
 EMTR_EVENT_SHELL_APP_IS_OPEN
 EMTR_EVENT_SOCIAL_BAR_IS_VISIBLE
+</SECTION>
+
+<SECTION>
+<FILE>emtr-machine-id-provider</FILE>
+<TITLE>EmtrMachineIdProvider</TITLE>
+EmtrMachineIdProvider
+EmtrMachineIdProviderClass
+emtr_machine_id_provider_get_default
+emtr_machine_id_provider_new
+<SUBSECTION Methods>
+emtr_machine_id_provider_get_id
+<SUBSECTION Standard>
+EMTR_MACHINE_ID_PROVIDER
+EMTR_MACHINE_ID_PROVIDER_CLASS
+EMTR_MACHINE_ID_PROVIDER_GET_CLASS
+EMTR_IS_MACHINE_ID_PROVIDER
+EMTR_IS_MACHINE_ID_PROVIDER_CLASS
+EMTR_TYPE_MACHINE_ID_PROVIDER
+emtr_machine_id_provider_get_type
 </SECTION>

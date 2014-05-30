@@ -13,6 +13,7 @@ tests_run_tests_SOURCES = \
 	tests/test-event-recorder.c \
 	tests/test-persistent-cache.c \
 	tests/test-mac.c \
+	tests/test-machine-id-provider.c \
 	tests/test-osversion.c \
 	tests/test-uuid.c \
 	tests/test-web.c \

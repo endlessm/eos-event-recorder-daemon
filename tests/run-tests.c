@@ -100,6 +100,7 @@ main (int    argc,
   add_sender_tests ();
   add_event_recorder_tests ();
   add_persistent_cache_tests ();
+  add_machine_id_provider_tests ();
 
   return g_test_run ();
 }

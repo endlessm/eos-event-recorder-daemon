@@ -48,7 +48,7 @@
  * a best-effort basis. No feedback is given regarding the outcome of delivery.
  * The event recorder is thread-safe.
  *
- * This API may be called from Javascript as follows.
+ * This API may be called from JavaScript as follows.
  *
  * |[
  * const EosMetrics = imports.gi.EosMetrics;

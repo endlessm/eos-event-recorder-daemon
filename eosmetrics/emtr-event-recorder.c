@@ -184,44 +184,42 @@ emtr_event_recorder_finalize (GObject *object)
   EmtrEventRecorder *self = EMTR_EVENT_RECORDER (object);
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
+
   g_free (priv->environment);
   g_free (priv->proxy_server_uri);
   if (priv->machine_id_provider != NULL)
     g_object_unref (priv->machine_id_provider);
 
-  if (priv->recording_enabled)
-    {
-      g_source_remove (priv->upload_events_timeout_source_id);
+  g_source_remove (priv->upload_events_timeout_source_id);
 
-      Event *event_buffer = priv->event_buffer;
-      gint num_events = priv->num_events_buffered;
-      for (gint i = 0; i < num_events; ++i)
-        free_event (event_buffer + i);
+  Event *event_buffer = priv->event_buffer;
+  gint num_events = priv->num_events_buffered;
+  for (gint i = 0; i < num_events; ++i)
+    free_event (event_buffer + i);
 
-      g_free (event_buffer);
-      g_mutex_clear (&(priv->event_buffer_lock));
+  g_free (event_buffer);
+  g_mutex_clear (&(priv->event_buffer_lock));
 
-      Aggregate *aggregate_buffer = priv->aggregate_buffer;
-      gint num_aggregates = priv->num_aggregates_buffered;
-      for (gint i = 0; i < num_aggregates; ++i)
-        free_event (&(aggregate_buffer[i].event));
+  Aggregate *aggregate_buffer = priv->aggregate_buffer;
+  gint num_aggregates = priv->num_aggregates_buffered;
+  for (gint i = 0; i < num_aggregates; ++i)
+    free_event (&(aggregate_buffer[i].event));
 
-      g_free (aggregate_buffer);
-      g_mutex_clear (&(priv->aggregate_buffer_lock));
+  g_free (aggregate_buffer);
+  g_mutex_clear (&(priv->aggregate_buffer_lock));
 
-      EventSequence *event_sequence_buffer = priv->event_sequence_buffer;
-      gint num_event_sequences = priv->num_event_sequences_buffered;
-      for (gint i = 0; i < num_event_sequences; ++i)
-        free_event_sequence (event_sequence_buffer + i);
+  EventSequence *event_sequence_buffer = priv->event_sequence_buffer;
+  gint num_event_sequences = priv->num_event_sequences_buffered;
+  for (gint i = 0; i < num_event_sequences; ++i)
+    free_event_sequence (event_sequence_buffer + i);
 
-      g_free (event_sequence_buffer);
-      g_mutex_clear (&(priv->event_sequence_buffer_lock));
+  g_free (event_sequence_buffer);
+  g_mutex_clear (&(priv->event_sequence_buffer_lock));
 
-      g_hash_table_destroy (priv->events_by_id_with_key);
-      g_mutex_clear (&(priv->events_by_id_with_key_lock));
+  g_hash_table_destroy (priv->events_by_id_with_key);
+  g_mutex_clear (&(priv->events_by_id_with_key_lock));
 
-      g_object_unref (priv->http_session);
-    }
+  g_object_unref (priv->http_session);
 
   G_OBJECT_CLASS (emtr_event_recorder_parent_class)->finalize (object);
 }
@@ -548,13 +546,16 @@ enum {
 
 static GParamSpec *emtr_event_recorder_props[NPROPS] = { NULL, };
 
-static void 
+static void
 set_network_send_interval (EmtrEventRecorder *self,
                            guint              seconds)
 {
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
   priv->network_send_interval_seconds = seconds;
+  priv->upload_events_timeout_source_id = g_timeout_add_seconds (seconds,
+                                                                 upload_events,
+                                                                 self);
 }
 
 /*
@@ -657,6 +658,9 @@ set_individual_buffer_length (EmtrEventRecorder *self,
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
   priv->individual_buffer_length = length;
+  priv->event_buffer = g_new (Event, length);
+  priv->num_events_buffered = 0;
+  g_mutex_init (&(priv->event_buffer_lock));
 }
 
 /*
@@ -683,6 +687,9 @@ set_aggregate_buffer_length (EmtrEventRecorder *self,
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
   priv->aggregate_buffer_length = length;
+  priv->aggregate_buffer = g_new (Aggregate, length);
+  priv->num_aggregates_buffered = 0;
+  g_mutex_init (&(priv->aggregate_buffer_lock));
 }
 
 /*
@@ -709,6 +716,10 @@ set_sequence_buffer_length (EmtrEventRecorder *self,
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
   priv->sequence_buffer_length = length;
+  priv->event_sequence_buffer = g_new (EventSequence, length);
+  priv->num_event_sequences_buffered = 0;
+  g_mutex_init (&(priv->event_sequence_buffer_lock));
+
 }
 
 /*
@@ -815,7 +826,7 @@ emtr_event_recorder_get_property (GObject    *object,
     case PROP_CLIENT_VERSION_NUMBER:
       g_value_set_int (value, get_client_version_number (self));
       break;
-    
+
     case PROP_ENVIRONMENT:
       g_value_set_string (value, get_environment (self));
       break;
@@ -944,18 +955,6 @@ emtr_event_recorder_init (EmtrEventRecorder *self)
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
-  priv->event_buffer = g_new (Event, priv->individual_buffer_length);
-  priv->num_events_buffered = 0;
-  g_mutex_init (&(priv->event_buffer_lock));
-
-  priv->aggregate_buffer = g_new (Aggregate, priv->aggregate_buffer_length);
-  priv->num_aggregates_buffered = 0;
-  g_mutex_init (&(priv->aggregate_buffer_lock));
-
-  priv->event_sequence_buffer = g_new (EventSequence, priv->sequence_buffer_length);
-  priv->num_event_sequences_buffered = 0;
-  g_mutex_init (&(priv->event_sequence_buffer_lock));
-
   priv->events_by_id_with_key =
     g_hash_table_new_full (general_variant_hash, g_variant_equal,
                            (GDestroyNotify) g_variant_unref,
@@ -974,8 +973,7 @@ emtr_event_recorder_init (EmtrEventRecorder *self)
                                    NULL);
   g_free (user_agent);
 
-  priv->upload_events_timeout_source_id =
-    g_timeout_add_seconds (priv->network_send_interval_seconds, upload_events, self);
+  priv->recording_enabled = TRUE;
 }
 
 static gboolean
@@ -1096,7 +1094,6 @@ emtr_event_recorder_new (guint                  network_send_interval,
                          const gchar           *proxy_server_uri,
                          gint                   buffer_length,
                          EmtrMachineIdProvider *machine_id_provider)
-                         
 {
   if (environment == NULL)
     g_error ("'environment' parameter was NULL. This is not allowed. No cookie for you.");

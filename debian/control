@@ -10,6 +10,7 @@ Build-Depends: autotools-dev,
                libjson-glib-dev (>= 0.16),
                libsoup2.4-dev (>= 2.42),
                pkg-config,
+               python-dbusmock,
                uuid-dev,
                yelp-tools,
                yelp-xsl

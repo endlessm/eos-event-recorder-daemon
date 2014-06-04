@@ -30,15 +30,17 @@ EXTRA_DIST += $(javascript_tests)
 # Run tests when running 'make check'
 TESTS = \
 	tests/run-tests \
+	tests/test-daemon-integration.py \
 	$(javascript_tests) \
 	$(NULL)
-TEST_EXTENSIONS = .js
+TEST_EXTENSIONS = .js .py
 JS_LOG_COMPILER = eos-run-test
 AM_JS_LOG_FLAGS = \
 	--include-path=$(top_srcdir) \
 	$(NULL)
-LOG_COMPILER = gtester
+LOG_COMPILER = tests/launch-mock-dbus-tests.sh
 AM_LOG_FLAGS = -k --verbose
+PY_LOG_COMPILER = python
 
 # Use locally built versions of EosMetrics-0.gir and libraries; this may need to
 # be changed to AM_TESTS_ENVIRONMENT in a future version of Automake

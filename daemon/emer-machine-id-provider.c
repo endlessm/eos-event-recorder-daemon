@@ -1,8 +1,8 @@
-/* emtr-machine-id-provider.c */
+/* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
 /* Copyright 2014 Endless Mobile, Inc. */
 
-#include "emtr-machine-id-provider.h"
+#include "emer-machine-id-provider.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -10,13 +10,13 @@
 #include <glib/gprintf.h>
 #include <glib/gstdio.h>
 
-typedef struct EmtrMachineIdProviderPrivate
+typedef struct EmerMachineIdProviderPrivate
 {
   gchar *path;
   uuid_t id;
-} EmtrMachineIdProviderPrivate;
+} EmerMachineIdProviderPrivate;
 
-G_DEFINE_TYPE_WITH_PRIVATE (EmtrMachineIdProvider, emtr_machine_id_provider, G_TYPE_OBJECT)
+G_DEFINE_TYPE_WITH_PRIVATE (EmerMachineIdProvider, emer_machine_id_provider, G_TYPE_OBJECT)
 
 /*
  * The number of elements in a uuid_t. uuid_t is assumed to be a fixed-length
@@ -26,7 +26,7 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmtrMachineIdProvider, emtr_machine_id_provider, G_T
 
 /*
  * The expected size in bytes of the file located at
- * #EmtrMachineIdProvider:path.
+ * #EmerMachineIdProvider:path.
  * According to http://www.freedesktop.org/software/systemd/man/machine-id.html
  * the file should be 32 lower-case hexadecimal characters followed by a
  * newline character.
@@ -49,10 +49,10 @@ enum {
   NPROPS
 };
 
-static GParamSpec *emtr_machine_id_provider_props[NPROPS] = { NULL, };
+static GParamSpec *emer_machine_id_provider_props[NPROPS] = { NULL, };
 
-/**
- * SECTION:emtr-machine-id-provider
+/*
+ * SECTION:emer-machine-id-provider
  * @title: Machine ID Provider
  * @short_description: Provides unique machine identifiers.
  * @include: eosmetrics/eosmetrics.h
@@ -60,32 +60,32 @@ static GParamSpec *emtr_machine_id_provider_props[NPROPS] = { NULL, };
  * The machine ID provider supplies UUIDs which anonymously identify the
  * machine (not the user) sending metrics.
  * This class abstracts away how and where UUIDs are generated from by providing
- * a simple interface via emtr_machine_id_provider_get_id() to whatever calling
+ * a simple interface via emer_machine_id_provider_get_id() to whatever calling
  * code needs it.
  */
 
 static const gchar *
-get_id_path (EmtrMachineIdProvider *self)
+get_id_path (EmerMachineIdProvider *self)
 {
-  EmtrMachineIdProviderPrivate *priv = emtr_machine_id_provider_get_instance_private (self);
+  EmerMachineIdProviderPrivate *priv = emer_machine_id_provider_get_instance_private (self);
   return priv->path;
 }
 
 static void
-set_id_path (EmtrMachineIdProvider *self,
+set_id_path (EmerMachineIdProvider *self,
              const gchar           *given_path)
 {
-  EmtrMachineIdProviderPrivate *priv = emtr_machine_id_provider_get_instance_private (self);
+  EmerMachineIdProviderPrivate *priv = emer_machine_id_provider_get_instance_private (self);
   priv->path = g_strdup (given_path);
 }
 
 static void
-emtr_machine_id_provider_get_property (GObject    *object,
+emer_machine_id_provider_get_property (GObject    *object,
                                        guint       property_id,
                                        GValue     *value,
                                        GParamSpec *pspec)
 {
-  EmtrMachineIdProvider *self = EMTR_MACHINE_ID_PROVIDER (object);
+  EmerMachineIdProvider *self = EMER_MACHINE_ID_PROVIDER (object);
   switch (property_id)
     {
     case PROP_PATH:
@@ -98,12 +98,12 @@ emtr_machine_id_provider_get_property (GObject    *object,
 }
 
 static void
-emtr_machine_id_provider_set_property (GObject      *object,
+emer_machine_id_provider_set_property (GObject      *object,
                                        guint         property_id,
                                        const GValue *value,
                                        GParamSpec   *pspec)
 {
-  EmtrMachineIdProvider *self = EMTR_MACHINE_ID_PROVIDER (object);
+  EmerMachineIdProvider *self = EMER_MACHINE_ID_PROVIDER (object);
   switch (property_id)
     {
       case PROP_PATH:
@@ -116,80 +116,80 @@ emtr_machine_id_provider_set_property (GObject      *object,
 }
 
 static void
-emtr_machine_id_provider_finalize (GObject *object)
+emer_machine_id_provider_finalize (GObject *object)
 {
-  EmtrMachineIdProvider *self = EMTR_MACHINE_ID_PROVIDER (object);
-  EmtrMachineIdProviderPrivate *priv = emtr_machine_id_provider_get_instance_private (self);
+  EmerMachineIdProvider *self = EMER_MACHINE_ID_PROVIDER (object);
+  EmerMachineIdProviderPrivate *priv = emer_machine_id_provider_get_instance_private (self);
   g_free (priv->path);
 
-  G_OBJECT_CLASS (emtr_machine_id_provider_parent_class)->finalize (object);
+  G_OBJECT_CLASS (emer_machine_id_provider_parent_class)->finalize (object);
 }
 
 static void
-emtr_machine_id_provider_class_init (EmtrMachineIdProviderClass *klass)
+emer_machine_id_provider_class_init (EmerMachineIdProviderClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
-  object_class->get_property = emtr_machine_id_provider_get_property;
-  object_class->set_property = emtr_machine_id_provider_set_property;
-  object_class->finalize = emtr_machine_id_provider_finalize;
+  object_class->get_property = emer_machine_id_provider_get_property;
+  object_class->set_property = emer_machine_id_provider_set_property;
+  object_class->finalize = emer_machine_id_provider_finalize;
 
   /* Blurb string is good enough default documentation for this */
-  emtr_machine_id_provider_props[PROP_PATH] =
+  emer_machine_id_provider_props[PROP_PATH] =
     g_param_spec_string ("path", "Path",
                          "The path to the file where the unique identifier is stored.",
                          DEFAULT_MACHINE_ID_FILEPATH,
                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, NPROPS,
-                                     emtr_machine_id_provider_props);
+                                     emer_machine_id_provider_props);
 }
 
 // Mandatory empty function.
 static void
-emtr_machine_id_provider_init (EmtrMachineIdProvider *self)
+emer_machine_id_provider_init (EmerMachineIdProvider *self)
 {
 }
 
-/**
- * emtr_machine_id_provider_new:
- * @machine_id_file_path: path to a file; see #EmtrMachineIdProvider:path
+/*
+ * emer_machine_id_provider_new:
+ * @machine_id_file_path: path to a file; see #EmerMachineIdProvider:path
  *
- * Testing function for creating a new #EmtrMachineIdProvider in the C API.
+ * Testing function for creating a new #EmerMachineIdProvider in the C API.
  * You only need to use this if you are creating a mock ID provider for unit
  * testing.
  *
- * For all normal uses, you should use emtr_machine_id_provider_get_default()
+ * For all normal uses, you should use emer_machine_id_provider_get_default()
  * instead.
  *
- * Returns: (transfer full): A new #EmtrMachineIdProvider.
+ * Returns: (transfer full): A new #EmerMachineIdProvider.
  * Free with g_object_unref() when done if using C.
  */
-EmtrMachineIdProvider *
-emtr_machine_id_provider_new (const gchar *machine_id_file_path)
+EmerMachineIdProvider *
+emer_machine_id_provider_new (const gchar *machine_id_file_path)
 { 
-  return g_object_new (EMTR_TYPE_MACHINE_ID_PROVIDER, 
+  return g_object_new (EMER_TYPE_MACHINE_ID_PROVIDER, 
                        "path", machine_id_file_path,
                        NULL);
 }
 
-/**
- * emtr_machine_id_provider_get_default:
+/*
+ * emer_machine_id_provider_get_default:
  *
  * Gets the ID provider that you should use for obtaining a unique machine ID.
  *
- * Returns: (transfer none): the default #EmtrMachineIdProvider.
+ * Returns: (transfer none): the default #EmerMachineIdProvider.
  * This object is owned by the metrics library; do not free it.
  */
-EmtrMachineIdProvider *
-emtr_machine_id_provider_get_default (void)
+EmerMachineIdProvider *
+emer_machine_id_provider_get_default (void)
 {
-  static EmtrMachineIdProvider *singleton;
+  static EmerMachineIdProvider *singleton;
   G_LOCK_DEFINE_STATIC (singleton);
 
   G_LOCK (singleton);
   if (singleton == NULL)
-      singleton = g_object_new (EMTR_TYPE_MACHINE_ID_PROVIDER, NULL);
+    singleton = g_object_new (EMER_TYPE_MACHINE_ID_PROVIDER, NULL);
   G_UNLOCK (singleton);
   return singleton;
 }
@@ -211,9 +211,9 @@ hyphenate_uuid (gchar *uuid_sans_hyphens)
 }
 
 static gboolean
-read_machine_id (EmtrMachineIdProvider *self)
+read_machine_id (EmerMachineIdProvider *self)
 {
-  EmtrMachineIdProviderPrivate *priv = emtr_machine_id_provider_get_instance_private (self);
+  EmerMachineIdProviderPrivate *priv = emer_machine_id_provider_get_instance_private (self);
 
   gchar *machine_id_sans_hyphens;
   gsize machine_id_sans_hyphens_length;
@@ -259,8 +259,8 @@ read_machine_id (EmtrMachineIdProvider *self)
   return TRUE;
 }
 
-/**
- * emtr_machine_id_provider_get_id:
+/*
+ * emer_machine_id_provider_get_id:
  * @self: the machine ID provider
  * @uuid: (out caller-allocates) (array fixed-size=16) (element-type guchar):
  * allocated 16-byte return location for a UUID.
@@ -272,10 +272,10 @@ read_machine_id (EmtrMachineIdProvider *self)
  * If this returns %FALSE, the UUID cannot be trusted to be valid.
  */
 gboolean
-emtr_machine_id_provider_get_id (EmtrMachineIdProvider *self,
+emer_machine_id_provider_get_id (EmerMachineIdProvider *self,
                                  uuid_t                 uuid)
 {
-  EmtrMachineIdProviderPrivate *priv = emtr_machine_id_provider_get_instance_private (self);
+  EmerMachineIdProviderPrivate *priv = emer_machine_id_provider_get_instance_private (self);
   static gboolean id_is_valid = FALSE;
   G_LOCK_DEFINE_STATIC (id_is_valid);
 

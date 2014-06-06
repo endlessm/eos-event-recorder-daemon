@@ -2,6 +2,8 @@
 
 noinst_PROGRAMS = \
 	tests/run-tests \
+	tests/daemon/test-machine-id-provider \
+	tests/daemon/test-daemon \
 	$(NULL)
 
 TEST_FLAGS = @EOSMETRICS_CFLAGS@ -I$(top_srcdir) -DCOMPILING_EOS_METRICS
@@ -13,7 +15,6 @@ tests_run_tests_SOURCES = \
 	tests/test-event-recorder.c \
 	tests/test-persistent-cache.c \
 	tests/test-mac.c \
-	tests/test-machine-id-provider.c \
 	tests/test-osversion.c \
 	tests/test-uuid.c \
 	tests/test-web.c \
@@ -22,6 +23,30 @@ tests_run_tests_SOURCES = \
 	$(NULL)
 tests_run_tests_CPPFLAGS = $(TEST_FLAGS)
 tests_run_tests_LDADD = $(TEST_LIBS)
+
+tests_daemon_test_daemon_SOURCES = \
+	daemon/emer-daemon.c daemon/emer-daemon.h \
+	tests/daemon/test-daemon.c \
+	daemon/emer-machine-id-provider.c daemon/emer-machine-id-provider.h \
+	shared/metrics-util.c shared/metrics-util.h \
+	$(NULL)
+tests_daemon_test_daemon_CPPFLAGS = \
+	@EOSMETRICS_EVENT_RECORDER_CFLAGS@ \
+	-I$(top_srcdir) \
+	-I$(top_srcdir)/daemon \
+	$(NULL)
+tests_daemon_test_daemon_LDADD = @EOSMETRICS_EVENT_RECORDER_LIBS@
+
+tests_daemon_test_machine_id_provider_SOURCES = \
+	daemon/emer-machine-id-provider.c daemon/emer-machine-id-provider.h \
+	tests/daemon/test-machine-id-provider.c \
+	$(NULL)
+tests_daemon_test_machine_id_provider_CPPFLAGS = \
+	@EOSMETRICS_EVENT_RECORDER_CFLAGS@ \
+	-I$(top_srcdir) \
+	-I$(top_srcdir)/daemon \
+	$(NULL)
+tests_daemon_test_machine_id_provider_LDADD = @EOSMETRICS_EVENT_RECORDER_LIBS@
 
 javascript_tests = \
 	$(NULL)
@@ -33,6 +58,8 @@ dist_bin_SCRIPTS = tests/launch-mock-dbus-tests.sh
 TESTS = \
 	tests/run-tests \
 	tests/test-daemon-integration.py \
+	tests/daemon/test-machine-id-provider \
+	tests/daemon/test-daemon \
 	$(javascript_tests) \
 	$(NULL)
 TEST_EXTENSIONS = .js .py

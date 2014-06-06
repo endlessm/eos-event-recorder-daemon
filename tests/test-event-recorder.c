@@ -46,19 +46,12 @@ write_testing_machine_id ()
   return success;
 }
 
-static EmtrEventRecorder *
-make_standard_event_recorder_for_testing ()
-{
-  return emtr_event_recorder_new (2, 0, "test", "http://localhost:8080", 2000,
-                                  emtr_machine_id_provider_new (TESTING_FILE_PATH));
-}
-
 static void
 setup (struct RecorderFixture *fixture,
        gconstpointer           unused)
 {
   write_testing_machine_id ();
-  fixture->recorder = make_standard_event_recorder_for_testing ();
+  fixture->recorder = emtr_event_recorder_new ();
 }
 
 static void

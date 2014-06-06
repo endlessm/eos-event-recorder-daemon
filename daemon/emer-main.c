@@ -7,6 +7,7 @@
 #include <glib-unix.h>
 #include <gio/gio.h>
 
+#include "emer-daemon.h"
 #include "emer-event-recorder-server.h"
 
 static gboolean
@@ -16,8 +17,11 @@ on_record_singular_event (EmerEventRecorderServer *server,
                           GVariant                *event_id,
                           gint64                   relative_timestamp,
                           gboolean                 has_payload,
-                          GVariant                *payload)
+                          GVariant                *payload,
+                          EmerDaemon              *daemon)
 {
+  emer_daemon_record_singular_event (daemon, user_id, event_id,
+                                     relative_timestamp, has_payload, payload);
   emer_event_recorder_server_complete_record_singular_event (server,
                                                              invocation);
   return TRUE;
@@ -31,8 +35,11 @@ on_record_aggregate_event (EmerEventRecorderServer *server,
                            gint64                   count,
                            gint64                   relative_timestamp,
                            gboolean                 has_payload,
-                           GVariant                *payload)
+                           GVariant                *payload,
+                           EmerDaemon              *daemon)
 {
+  emer_daemon_record_aggregate_event (daemon, user_id, event_id, count,
+                                      relative_timestamp, has_payload, payload);
   emer_event_recorder_server_complete_record_aggregate_event (server,
                                                               invocation);
   return TRUE;
@@ -43,8 +50,10 @@ on_record_event_sequence (EmerEventRecorderServer *server,
                           GDBusMethodInvocation   *invocation,
                           guint32                  user_id,
                           GVariant                *event_id,
-                          GVariant                *events)
+                          GVariant                *events,
+                          EmerDaemon              *daemon)
 {
+  emer_daemon_record_event_sequence (daemon, user_id, event_id, events);
   emer_event_recorder_server_complete_record_event_sequence (server,
                                                              invocation);
   return TRUE;
@@ -62,15 +71,16 @@ supposed to export your well-known name, confusingly not in name_acquired; that
 is too late. */
 static void
 on_bus_acquired (GDBusConnection *system_bus,
-                 const gchar     *name)
+                 const gchar     *name,
+                 EmerDaemon      *daemon)
 {
   EmerEventRecorderServer *server = emer_event_recorder_server_skeleton_new ();
   g_signal_connect (server, "handle-record-singular-event",
-                    G_CALLBACK (on_record_singular_event), NULL);
+                    G_CALLBACK (on_record_singular_event), daemon);
   g_signal_connect (server, "handle-record-aggregate-event",
-                    G_CALLBACK (on_record_aggregate_event), NULL);
+                    G_CALLBACK (on_record_aggregate_event), daemon);
   g_signal_connect (server, "handle-record-event-sequence",
-                    G_CALLBACK (on_record_event_sequence), NULL);
+                    G_CALLBACK (on_record_event_sequence), daemon);
 
   GError *error = NULL;
   if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (server),
@@ -103,6 +113,8 @@ int
 main (int                argc,
       const char * const argv[])
 {
+  EmerDaemon *daemon = emer_daemon_new ();
+
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
 
   /* Shut down on any of these signals */
@@ -117,12 +129,14 @@ main (int                argc,
                                   (GBusAcquiredCallback)on_bus_acquired,
                                   NULL, /* name_acquired_callback */
                                   (GBusNameLostCallback)on_name_lost,
-                                  NULL, NULL);
+                                  daemon, NULL /* user data free func */);
 
   g_main_loop_run (main_loop);
 
   g_bus_unown_name(name_id);
   g_main_loop_unref (main_loop);
+
+  g_object_unref (daemon);
 
   return 0;
 }

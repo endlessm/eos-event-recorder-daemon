@@ -103,22 +103,3 @@ EMTR_EVENT_SOCIAL_BAR_IS_VISIBLE
 EMTR_EVENT_SHELL_APP_ADDED
 EMTR_EVENT_SHELL_APP_REMOVED
 </SECTION>
-
-<SECTION>
-<FILE>emtr-machine-id-provider</FILE>
-<TITLE>EmtrMachineIdProvider</TITLE>
-EmtrMachineIdProvider
-EmtrMachineIdProviderClass
-emtr_machine_id_provider_get_default
-emtr_machine_id_provider_new
-<SUBSECTION Methods>
-emtr_machine_id_provider_get_id
-<SUBSECTION Standard>
-EMTR_MACHINE_ID_PROVIDER
-EMTR_MACHINE_ID_PROVIDER_CLASS
-EMTR_MACHINE_ID_PROVIDER_GET_CLASS
-EMTR_IS_MACHINE_ID_PROVIDER
-EMTR_IS_MACHINE_ID_PROVIDER_CLASS
-EMTR_TYPE_MACHINE_ID_PROVIDER
-emtr_machine_id_provider_get_type
-</SECTION>

@@ -13,8 +13,6 @@
 #include <glib-object.h>
 #include <gio/gio.h>
 
-#include "emtr-machine-id-provider.h"
-
 G_BEGIN_DECLS
 
 #define EMTR_TYPE_EVENT_RECORDER emtr_event_recorder_get_type()
@@ -69,12 +67,7 @@ EMTR_ALL_API_VERSIONS
 GType              emtr_event_recorder_get_type        (void) G_GNUC_CONST;
 
 EMTR_ALL_API_VERSIONS
-EmtrEventRecorder *emtr_event_recorder_new             (guint                  network_send_interval,
-                                                        gint                   version_number,
-                                                        const gchar           *environment,
-                                                        const gchar           *proxy_server_uri,
-                                                        gint                   buffer_length,
-                                                        EmtrMachineIdProvider *machine_id_provider);
+EmtrEventRecorder *emtr_event_recorder_new             (void);
 
 EMTR_ALL_API_VERSIONS
 EmtrEventRecorder *emtr_event_recorder_get_default     (void);

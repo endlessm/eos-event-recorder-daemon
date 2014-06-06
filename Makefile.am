@@ -82,7 +82,7 @@ INTROSPECTION_COMPILER_ARGS = --includedir=$(srcdir)
 
 if HAVE_INTROSPECTION
 introspection_sources = \
-	$(filter-out %-private.h, $(eosmetrics_library_sources)) \
+	$(filter-out %.h, $(eosmetrics_library_sources)) \
 	$(eosmetrics_public_installed_headers) \
 	$(eosmetrics_private_installed_headers) \
 	$(NULL)

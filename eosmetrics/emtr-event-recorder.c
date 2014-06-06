@@ -5,6 +5,7 @@
 #define _POSIX_C_SOURCE 200112L
 
 #include "emtr-event-recorder.h"
+#include "emer-event-recorder-server.h"
 
 #include <errno.h>
 #include <gio/gio.h>
@@ -15,8 +16,8 @@
 #include <libsoup/soup.h>
 #include <uuid/uuid.h>
 #include <time.h>
-#include <stdio.h>
 #include <string.h>
+#include <sys/types.h>
 
 /* Convenience macro to check that @ptr is a #GVariant */
 #define _IS_VARIANT(ptr) (g_variant_is_of_type ((ptr), G_VARIANT_TYPE_ANY))
@@ -147,6 +148,16 @@ typedef struct EmtrEventRecorderPrivate
 
   SoupSession *http_session;
 
+  /*
+   * DBus doesn't support maybe types, so a boolean is used to indicate whether
+   * the auxiliary_payload field should be ignored. A non-NULL auxiliary_payload
+   * must be passed even when it will be ignored, and this is the arbitrary
+   * variant that is used for that purpose.
+   */
+  GVariant *empty_auxiliary_payload;
+
+  EmerEventRecorderServer *dbus_proxy;
+
   gboolean recording_enabled;
 
   guint upload_events_timeout_source_id;
@@ -185,12 +196,11 @@ emtr_event_recorder_finalize (GObject *object)
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
+  g_source_remove (priv->upload_events_timeout_source_id);
+
   g_free (priv->environment);
   g_free (priv->proxy_server_uri);
-  if (priv->machine_id_provider != NULL)
-    g_object_unref (priv->machine_id_provider);
-
-  g_source_remove (priv->upload_events_timeout_source_id);
+  g_object_unref (priv->machine_id_provider);
 
   Event *event_buffer = priv->event_buffer;
   gint num_events = priv->num_events_buffered;
@@ -220,6 +230,11 @@ emtr_event_recorder_finalize (GObject *object)
   g_mutex_clear (&(priv->events_by_id_with_key_lock));
 
   g_object_unref (priv->http_session);
+
+  g_variant_unref (priv->empty_auxiliary_payload);
+
+  if (priv->dbus_proxy != NULL)
+    g_object_unref (priv->dbus_proxy);
 
   G_OBJECT_CLASS (emtr_event_recorder_parent_class)->finalize (object);
 }
@@ -973,6 +988,29 @@ emtr_event_recorder_init (EmtrEventRecorder *self)
                                    NULL);
   g_free (user_agent);
 
+  GVariant *unboxed_variant = g_variant_new_boolean (FALSE);
+  priv->empty_auxiliary_payload = g_variant_new_variant (unboxed_variant);
+  g_variant_ref_sink (priv->empty_auxiliary_payload);
+
+
+  /* If getting the DBus connection fails, mark self as a no-op object. */
+  GError *error = NULL;
+  priv->dbus_proxy =
+    emer_event_recorder_server_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
+                                                       G_DBUS_PROXY_FLAGS_NONE,
+                                                       "com.endlessm.Metrics",
+                                                       "/com/endlessm/Metrics",
+                                                       NULL /* GCancellable */,
+                                                       &error);
+  if (priv->dbus_proxy == NULL)
+    {
+      g_critical ("Unable to connect to the DBus event recorder server: %s",
+                  error->message);
+      g_error_free (error);
+      priv->recording_enabled = FALSE;
+      return;
+    }
+
   priv->recording_enabled = TRUE;
 }
 
@@ -1028,6 +1066,48 @@ append_event_value (GArray   *event_values,
   g_array_append_val (event_values, curr_event_value);
 }
 
+/*
+ * Sends the corresponding event_sequence GVariant to D-Bus, which
+ * is currently a no-op.
+ */
+static void
+send_event_sequence_to_dbus (EmtrEventRecorderPrivate *priv,
+                             GVariant                 *event_id,
+                             GArray                   *event_values)
+{
+  GError *error = NULL;
+
+  // Variants sent to DBus are not allowed to be NULL or maybe types.
+  GVariantBuilder event_values_builder;
+  g_variant_builder_init (&event_values_builder, G_VARIANT_TYPE ("a(xbv)"));
+  for (int i = 0; i < event_values->len; i++)
+    {
+      EventValue *event_value = &g_array_index (event_values, EventValue, i);
+      gboolean has_payload = event_value->auxiliary_payload != NULL;
+      GVariant *auxiliary_payload = has_payload ?
+        event_value->auxiliary_payload : priv->empty_auxiliary_payload;
+      g_variant_builder_add (&event_values_builder, "(xbv)",
+                             event_value->relative_time, has_payload,
+                             auxiliary_payload);
+    }
+  GVariant *event_values_variant = g_variant_builder_end (&event_values_builder);
+  if (!emer_event_recorder_server_call_record_event_sequence_sync (priv->dbus_proxy,
+                                                                   getuid (),
+                                                                   event_id,
+                                                                   event_values_variant,
+                                                                   NULL /* GCancellable */,
+                                                                   &error))
+    {
+      g_warning ("Failed to send event to DBus client-side daemon: %s",
+                 error->message);
+      g_error_free (error);
+    }
+}
+
+/*
+ * Places an EventSequence struct on the end of the sequence's buffer.
+ * Will do nothing if the event_sequence buffer is full.
+ */
 static void
 append_event_sequence_to_buffer (EmtrEventRecorderPrivate *priv,
                                  GVariant                 *event_id_with_key,
@@ -1143,6 +1223,55 @@ emtr_event_recorder_get_default (void)
   return singleton;
 }
 
+/* Send either singular or aggregate event to DBus, currently a no-op. 
+   num_events parameter is ignored if is_aggregate is FALSE. */
+static void send_event_to_dbus (EmtrEventRecorderPrivate *priv,
+                                uuid_t                    parsed_event_id,
+                                GVariant                 *auxiliary_payload,
+                                gint64                    relative_time,
+                                gboolean                  is_aggregate,
+                                gint                      num_events)
+{
+  GError *error = NULL;
+  GVariantBuilder uuid_builder;
+  get_uuid_builder (parsed_event_id, &uuid_builder);
+  GVariant *event_id_variant = g_variant_builder_end (&uuid_builder);
+
+  /* Variants sent to DBus are not allowed to be NULL or maybe types. */
+  gboolean has_payload = auxiliary_payload != NULL;
+  GVariant *maybe_auxiliary_payload = has_payload ?
+    g_variant_new_variant (auxiliary_payload) : priv->empty_auxiliary_payload;
+  gboolean success;
+  if (is_aggregate)
+    {
+      success = emer_event_recorder_server_call_record_aggregate_event_sync (priv->dbus_proxy,
+                                                                             getuid (),
+                                                                             event_id_variant,
+                                                                             num_events,
+                                                                             relative_time,
+                                                                             has_payload,
+                                                                             maybe_auxiliary_payload,
+                                                                             NULL /* GCancellable */,
+                                                                             &error);
+    }
+  else
+    {
+      success = emer_event_recorder_server_call_record_singular_event_sync (priv->dbus_proxy,
+                                                                            getuid (),
+                                                                            event_id_variant,
+                                                                            relative_time,
+                                                                            has_payload,
+                                                                            maybe_auxiliary_payload,
+                                                                            NULL /* GCancellable */,
+                                                                            &error);
+    }
+  if (!success)
+    {
+      g_warning ("Failed to send event to DBus client-side daemon: %s",
+                 error->message);
+      g_error_free (error);
+    }
+}
 /**
  * emtr_event_recorder_record_event:
  * @self: (in): the event recorder
@@ -1198,6 +1327,15 @@ emtr_event_recorder_record_event (EmtrEventRecorder *self,
   if (!parse_event_id (event_id, parsed_event_id))
     return;
 
+  auxiliary_payload = get_normalized_form_of_variant (auxiliary_payload);
+
+  send_event_to_dbus (priv,
+                      parsed_event_id,
+                      auxiliary_payload,
+                      relative_time,
+                      FALSE, // Is not aggregate.
+                      0); // Ignored: num_events
+
   g_mutex_lock (&(priv->event_buffer_lock));
 
   if (priv->num_events_buffered < priv->individual_buffer_length)
@@ -1213,7 +1351,6 @@ emtr_event_recorder_record_event (EmtrEventRecorder *self,
 
       Event *event = event_buffer + num_events_buffered;
       priv->num_events_buffered++;
-      auxiliary_payload = get_normalized_form_of_variant (auxiliary_payload);
       EventValue event_value = {relative_time, auxiliary_payload};
       memcpy (event->event_id, parsed_event_id, UUID_LENGTH * sizeof (guchar));
       event->event_value = event_value;
@@ -1280,6 +1417,15 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
   if (!parse_event_id (event_id, parsed_event_id))
     return;
 
+  auxiliary_payload = get_normalized_form_of_variant (auxiliary_payload);
+
+  send_event_to_dbus (priv,
+                      parsed_event_id,
+                      auxiliary_payload,
+                      relative_time,
+                      TRUE, // Is aggregate.
+                      num_events);
+
   g_mutex_lock (&(priv->aggregate_buffer_lock));
 
   if (priv->num_aggregates_buffered < priv->aggregate_buffer_length)
@@ -1297,7 +1443,6 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
 
       Aggregate *aggregate = aggregate_buffer + num_aggregates_buffered;
       priv->num_aggregates_buffered++;
-      auxiliary_payload = get_normalized_form_of_variant (auxiliary_payload);
       EventValue event_value = {relative_time, auxiliary_payload};
       Event event;
       memcpy (event.event_id, parsed_event_id, UUID_LENGTH * sizeof (guchar));
@@ -1618,6 +1763,11 @@ emtr_event_recorder_record_stop (EmtrEventRecorder *self,
 
   append_event_value (event_values, relative_time, auxiliary_payload);
   append_event_sequence_to_buffer (priv, event_id_with_key, event_values);
+
+  GVariant *event_id_variant = g_variant_get_child_value (event_id_with_key, 0);
+  send_event_sequence_to_dbus (priv, event_id_variant, event_values);
+  g_variant_unref (event_id_variant);
+
   g_assert (g_hash_table_remove (priv->events_by_id_with_key,
                                  event_id_with_key));
 

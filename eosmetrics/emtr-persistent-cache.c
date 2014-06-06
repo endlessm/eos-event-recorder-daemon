@@ -131,7 +131,7 @@ static guint64 MAX_CACHE_SIZE = 102400; // 100 kB
  * it were immutable by production code.  Only testing code should
  * ever alter this variable.
  */
-static gchar* CACHE_DIRECTORY = "/etc/metrics_cache/";
+static gchar* CACHE_DIRECTORY = "/var/cache/metrics/";
 
 static void
 emtr_persistent_cache_class_init (Emtr_Persistent_CacheClass *klass)

@@ -137,8 +137,20 @@ uuid_from_gvariant (GVariant *event_id,
   gsize event_id_length;
   gconstpointer event_id_arr =
     g_variant_get_fixed_array (event_id, &event_id_length, sizeof (guchar));
-  g_assert (event_id_length == UUID_LENGTH);
-  memcpy (uuid, event_id_arr, UUID_LENGTH * sizeof (guchar));
+  if (event_id_length != UUID_LENGTH)
+    g_critical ("The event ID should be %d bytes, but it was %d. This is "
+                "probably a bug in the metrics daemon.",
+                UUID_LENGTH, event_id_length);
+  if (event_id_length >= UUID_LENGTH)
+    {
+      memcpy (uuid, event_id_arr, UUID_LENGTH * sizeof (guchar));
+    }
+  else
+    {
+      memcpy (uuid, event_id_arr, event_id_length * sizeof (guchar));
+      memset (uuid + event_id_length, '\0',
+              (UUID_LENGTH - event_id_length) * sizeof (guchar));
+    }
 }
 
 // Handles HTTP or HTTPS responses.

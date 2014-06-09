@@ -9,6 +9,7 @@
 
 #include <errno.h>
 #include <time.h>
+#include <inttypes.h>
 
 #include <glib.h>
 #include <gio/gio.h>
@@ -43,16 +44,23 @@ get_current_time (clockid_t clock_id,
 
   // Ensure that the clock provides a time that can be safely represented in a
   // gint64 in nanoseconds.
-  g_assert (ts.tv_sec >= (G_MININT64 / NANOSECONDS_PER_SECOND));
-  g_assert (ts.tv_sec <= (G_MAXINT64 / NANOSECONDS_PER_SECOND));
-  g_assert (ts.tv_nsec >= 0);
-  g_assert (ts.tv_nsec < NANOSECONDS_PER_SECOND);
-
-  // We already know that ts.tv_sec <= (G_MAXINT64 / NANOSECONDS_PER_SECOND).
-  // This handles the edge case where
-  // ts.tv_sec == (G_MAXINT64 / NANOSECONDS_PER_SECOND).
-  g_assert ((ts.tv_sec < (G_MAXINT64 / NANOSECONDS_PER_SECOND)) ||
-            (ts.tv_nsec <= (G_MAXINT64 % NANOSECONDS_PER_SECOND)));
+  if (ts.tv_sec < G_MININT64 / NANOSECONDS_PER_SECOND ||
+      ts.tv_sec > G_MAXINT64 / NANOSECONDS_PER_SECOND ||
+      ts.tv_nsec < 0 ||
+      ts.tv_nsec >= NANOSECONDS_PER_SECOND ||
+      // We already know that ts.tv_sec <= G_MAXINT64 / NANOSECONDS_PER_SECOND.
+      // This handles the edge case where
+      // ts.tv_sec == G_MAXINT64 / NANOSECONDS_PER_SECOND.
+      (ts.tv_sec == G_MAXINT64 / NANOSECONDS_PER_SECOND &&
+       ts.tv_nsec > G_MAXINT64 % NANOSECONDS_PER_SECOND))
+    {
+      /* The (gint64) conversion is to handle the fact that time_t's size is
+      platform-defined; so we cast it to 64 bits. tv_nsec is defined as long. */
+      g_critical ("Clock returned a time that does not fit in a 64-bit integer "
+                  "in nanoseconds (seconds %" PRId64 ", nanoseconds "
+                  "%ld.)", (gint64) ts.tv_sec, ts.tv_nsec);
+      return FALSE;
+    }
 
   *current_time = (NANOSECONDS_PER_SECOND * ((gint64) ts.tv_sec))
     + ((gint64) ts.tv_nsec);

@@ -3,9 +3,11 @@
 #ifndef METRICS_UTIL_H
 #define METRICS_UTIL_H
 
-#ifndef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 199309L /* for clockid_t */
+/* For clockid_t */
+#if !defined(_POSIX_C_SOURCE) || _POSIX_C_SOURCE < 199309L
+#error "This code requires _POSIX_C_SOURCE to be 199309L or later."
 #endif
+
 #include <sys/types.h>
 
 #include <glib.h>

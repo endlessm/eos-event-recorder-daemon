@@ -1,10 +1,11 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-#ifndef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 199309L /* for clock_gettime() */
-#endif
-
 #include "metrics-util.h"
+
+/* For clock_gettime() */
+#if !defined(_POSIX_C_SOURCE) || _POSIX_C_SOURCE < 199309L
+#error "This code requires _POSIX_C_SOURCE to be 199309L or later."
+#endif
 
 #include <errno.h>
 #include <time.h>

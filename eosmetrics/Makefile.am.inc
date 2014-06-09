@@ -43,6 +43,7 @@ libeosmetrics_@EMTR_API_VERSION@_la_CPPFLAGS = \
 	-DCOMPILING_EOS_METRICS \
 	-DDATADIR=\""$(datadir)"\" \
 	-DSYSCONFDIR=\""$(sysconfdir)"\" \
+	-D_POSIX_C_SOURCE=200112L \
 	$(NULL)
 libeosmetrics_@EMTR_API_VERSION@_la_CFLAGS = $(AM_CFLAGS)
 libeosmetrics_@EMTR_API_VERSION@_la_LIBADD = @EOSMETRICS_LIBS@

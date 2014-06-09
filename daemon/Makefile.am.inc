@@ -10,5 +10,8 @@ eos_metrics_event_recorder_SOURCES = \
 	emer-event-recorder-server.c emer-event-recorder-server.h \
 	shared/metrics-util.c shared/metrics-util.h \
 	$(NULL)
-eos_metrics_event_recorder_CPPFLAGS = $(EOSMETRICS_EVENT_RECORDER_CFLAGS)
+eos_metrics_event_recorder_CPPFLAGS = \
+    $(EOSMETRICS_EVENT_RECORDER_CFLAGS) \
+    -D_POSIX_C_SOURCE=200112L \
+    $(NULL)
 eos_metrics_event_recorder_LDADD = $(EOSMETRICS_EVENT_RECORDER_LIBS)

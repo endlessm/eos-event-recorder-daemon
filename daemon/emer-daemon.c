@@ -2,9 +2,11 @@
 
 /* Copyright 2014 Endless Mobile, Inc. */
 
-#ifndef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 199309L  /* for CLOCK_BOOTTIME etc. */
+/* For CLOCK_BOOTTIME */
+#if !defined(_POSIX_C_SOURCE) || _POSIX_C_SOURCE < 200112L
+#error "This code requires _POSIX_C_SOURCE to be 200112L or later."
 #endif
+
 #include <string.h>
 #include <time.h>
 

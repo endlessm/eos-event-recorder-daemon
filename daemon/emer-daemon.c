@@ -135,6 +135,7 @@ uuid_from_gvariant (GVariant *event_id,
                     uuid_t    uuid)
 {
   gsize event_id_length;
+  g_variant_ref_sink (event_id);
   gconstpointer event_id_arr =
     g_variant_get_fixed_array (event_id, &event_id_length, sizeof (guchar));
   if (event_id_length != UUID_LENGTH)
@@ -151,6 +152,7 @@ uuid_from_gvariant (GVariant *event_id,
       memset (uuid + event_id_length, '\0',
               (UUID_LENGTH - event_id_length) * sizeof (guchar));
     }
+  g_variant_unref (event_id);
 }
 
 // Handles HTTP or HTTPS responses.
@@ -848,6 +850,7 @@ emer_daemon_record_singular_event (EmerDaemon *self,
       SingularEvent *singular = priv->singular_buffer +
         priv->num_singulars_buffered;
       priv->num_singulars_buffered++;
+      g_variant_ref_sink (payload);
       EventValue event_value = { relative_timestamp, payload };
       uuid_from_gvariant (event_id, singular->event_id);
       singular->event_value = event_value;
@@ -874,6 +877,7 @@ emer_daemon_record_aggregate_event (EmerDaemon *self,
       AggregateEvent *aggregate = priv->aggregate_buffer +
         priv->num_aggregates_buffered;
       priv->num_aggregates_buffered++;
+      g_variant_ref_sink (payload);
       EventValue event_value = { relative_timestamp, payload };
       SingularEvent singular;
       uuid_from_gvariant (event_id, singular.event_id);
@@ -903,6 +907,7 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
 
       uuid_from_gvariant (event_id, event_sequence->event_id);
 
+      g_variant_ref_sink (event_values);
       gsize num_events = g_variant_n_children (event_values);
       event_sequence->event_values = g_new (EventValue, num_events);
       for(gsize index = 0; index < num_events; index++)
@@ -920,6 +925,7 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
           event_sequence->event_values[index] = event_value;
         }
 
+      g_variant_unref (event_values);
       event_sequence->num_event_values = num_events;
     }
 

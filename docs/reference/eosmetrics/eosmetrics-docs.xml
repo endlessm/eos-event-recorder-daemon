@@ -23,7 +23,6 @@
     <xi:include href="xml/emtr-connection.xml"/>
     <xi:include href="xml/emtr-sender.xml"/>
     <xi:include href="xml/emtr-event-recorder.xml"/>
-    <xi:include href="xml/emtr-machine-id-provider.xml"/>
     <xi:include href="xml/emtr-event-types.xml" />
   </chapter>
 

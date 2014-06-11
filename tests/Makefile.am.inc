@@ -7,12 +7,16 @@ noinst_PROGRAMS = \
 	tests/daemon/test-persistent-cache \
 	$(NULL)
 
-TEST_FLAGS = @EOSMETRICS_CFLAGS@ \
+LIBRARY_TEST_FLAGS = \
+	@EOSMETRICS_CFLAGS@ \
 	-I$(top_srcdir) \
 	-DCOMPILING_EOS_METRICS \
 	-D_POSIX_C_SOURCE=200112L \
 	$(NULL)
-TEST_LIBS = @EOSMETRICS_LIBS@ $(top_builddir)/libeosmetrics-@EMTR_API_VERSION@.la
+LIBRARY_TEST_LIBS = \
+	@EOSMETRICS_LIBS@ \
+	$(top_builddir)/libeosmetrics-@EMTR_API_VERSION@.la \
+	$(NULL)
 
 tests_run_tests_SOURCES = \
 	tests/run-tests.c tests/run-tests.h \
@@ -25,8 +29,15 @@ tests_run_tests_SOURCES = \
 	tests/test-sender.c \
 	tests/test-util.c \
 	$(NULL)
-tests_run_tests_CPPFLAGS = $(TEST_FLAGS)
-tests_run_tests_LDADD = $(TEST_LIBS)
+tests_run_tests_CPPFLAGS = $(LIBRARY_TEST_FLAGS)
+tests_run_tests_LDADD = $(LIBRARY_TEST_LIBS)
+
+DAEMON_TEST_FLAGS = \
+	@EOSMETRICS_EVENT_RECORDER_CFLAGS@ \
+	-I$(top_srcdir) \
+	-I$(top_srcdir)/daemon \
+	$(NULL)
+DAEMON_TEST_LIBS = @EOSMETRICS_EVENT_RECORDER_LIBS@
 
 tests_daemon_test_daemon_SOURCES = \
 	daemon/emer-daemon.c daemon/emer-daemon.h \
@@ -35,34 +46,24 @@ tests_daemon_test_daemon_SOURCES = \
 	shared/metrics-util.c shared/metrics-util.h \
 	$(NULL)
 tests_daemon_test_daemon_CPPFLAGS = \
-	@EOSMETRICS_EVENT_RECORDER_CFLAGS@ \
-	-I$(top_srcdir) \
-	-I$(top_srcdir)/daemon \
+	$(DAEMON_TEST_FLAGS) \
 	-D_POSIX_C_SOURCE=200112L \
 	$(NULL)
-tests_daemon_test_daemon_LDADD = @EOSMETRICS_EVENT_RECORDER_LIBS@
+tests_daemon_test_daemon_LDADD = $(DAEMON_TEST_LIBS)
 
 tests_daemon_test_machine_id_provider_SOURCES = \
 	daemon/emer-machine-id-provider.c daemon/emer-machine-id-provider.h \
 	tests/daemon/test-machine-id-provider.c \
 	$(NULL)
-tests_daemon_test_machine_id_provider_CPPFLAGS = \
-	@EOSMETRICS_EVENT_RECORDER_CFLAGS@ \
-	-I$(top_srcdir) \
-	-I$(top_srcdir)/daemon \
-	$(NULL)
-tests_daemon_test_machine_id_provider_LDADD = @EOSMETRICS_EVENT_RECORDER_LIBS@
+tests_daemon_test_machine_id_provider_CPPFLAGS = $(DAEMON_TEST_FLAGS)
+tests_daemon_test_machine_id_provider_LDADD = $(DAEMON_TEST_LIBS)
 
 tests_daemon_test_persistent_cache_SOURCES = \
 	tests/daemon/test-persistent-cache.c \
 	daemon/emer-persistent-cache.c daemon/emer-persistent-cache.h \
 	$(NULL)
-tests_daemon_test_persistent_cache_CPPFLAGS = \
-	@EOSMETRICS_EVENT_RECORDER_CFLAGS@ \
-	-I$(top_srcdir) \
-	-I$(top_srcdir)/daemon \
-	$(NULL)
-tests_daemon_test_persistent_cache_LDADD = @EOSMETRICS_EVENT_RECORDER_LIBS@
+tests_daemon_test_persistent_cache_CPPFLAGS = $(DAEMON_TEST_FLAGS)
+tests_daemon_test_persistent_cache_LDADD = $(DAEMON_TEST_LIBS)
 
 javascript_tests = \
 	$(NULL)

@@ -99,7 +99,6 @@ main (int    argc,
   add_connection_tests ();
   add_sender_tests ();
   add_event_recorder_tests ();
-  add_persistent_cache_tests ();
 
   return g_test_run ();
 }

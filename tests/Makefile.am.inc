@@ -4,6 +4,7 @@ noinst_PROGRAMS = \
 	tests/run-tests \
 	tests/daemon/test-machine-id-provider \
 	tests/daemon/test-daemon \
+	tests/daemon/test-persistent-cache \
 	$(NULL)
 
 TEST_FLAGS = @EOSMETRICS_CFLAGS@ \
@@ -17,7 +18,6 @@ tests_run_tests_SOURCES = \
 	tests/run-tests.c tests/run-tests.h \
 	tests/test-connection.c \
 	tests/test-event-recorder.c \
-	tests/test-persistent-cache.c \
 	tests/test-mac.c \
 	tests/test-osversion.c \
 	tests/test-uuid.c \
@@ -52,6 +52,17 @@ tests_daemon_test_machine_id_provider_CPPFLAGS = \
 	-I$(top_srcdir)/daemon \
 	$(NULL)
 tests_daemon_test_machine_id_provider_LDADD = @EOSMETRICS_EVENT_RECORDER_LIBS@
+
+tests_daemon_test_persistent_cache_SOURCES = \
+	tests/daemon/test-persistent-cache.c \
+	daemon/emer-persistent-cache.c daemon/emer-persistent-cache.h \
+	$(NULL)
+tests_daemon_test_persistent_cache_CPPFLAGS = \
+	@EOSMETRICS_EVENT_RECORDER_CFLAGS@ \
+	-I$(top_srcdir) \
+	-I$(top_srcdir)/daemon \
+	$(NULL)
+tests_daemon_test_persistent_cache_LDADD = @EOSMETRICS_EVENT_RECORDER_LIBS@
 
 javascript_tests = \
 	$(NULL)

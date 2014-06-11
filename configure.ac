@@ -81,8 +81,8 @@ UUID_REQUIREMENT="uuid"
 # (Requires.private is for dependencies that are not exposed to the
 # application code; if we expose a type from those dependencies, we
 # need to put the corresponding library in Requires:)
-EMTR_REQUIRED_MODULES="$GLIB_REQUIREMENT $UUID_REQUIREMENT"
-EMTR_REQUIRED_MODULES_PRIVATE="$SOUP_REQUIREMENT $JSON_REQUIREMENT"
+EMTR_REQUIRED_MODULES="$GLIB_REQUIREMENT"
+EMTR_REQUIRED_MODULES_PRIVATE="$SOUP_REQUIREMENT $JSON_REQUIREMENT $UUID_REQUIREMENT"
 AC_SUBST(EMTR_REQUIRED_MODULES)
 AC_SUBST(EMTR_REQUIRED_MODULES_PRIVATE)
 # This indicates a required dbus mocking interface for unit testing.

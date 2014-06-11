@@ -74,8 +74,7 @@ AC_SUBST(EMTR_LT_VERSION_INFO)
 # Required versions of libraries
 # Update these whenever you use a function that requires a certain API version
 GLIB_REQUIREMENT="glib-2.0 >= 2.40"
-GIO_REQUIREMENT="gio-2.0 >= 2.30
-    gio-unix-2.0"
+GIO_REQUIREMENT="gio-2.0 >= 2.30 gio-unix-2.0"
 GOBJECT_REQUIREMENT="gobject-2.0"
 JSON_REQUIREMENT="json-glib-1.0 >= 0.16"
 SOUP_REQUIREMENT="libsoup-2.4 >= 2.42"

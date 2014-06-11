@@ -95,7 +95,9 @@ AC_PROG_MKDIR_P
 # C compiler
 AC_PROG_CC
 # Make sure the C compiler supports per-target CFLAGS
-AM_PROG_CC_C_O
+AC_PROG_CC_C_O
+# Make sure the C compiler supports C99
+AC_PROG_CC_C99
 # Initialize Libtool; don't build static libraries
 AM_PROG_AR  dnl must call before LT_INIT
 LT_INIT([disable-static])
@@ -116,11 +118,6 @@ AS_IF([test "x$GDBUS_CODEGEN" = "xnotfound"],
 AC_ARG_VAR([GDBUS_CODEGEN], [Path to gdbus-codegen])
 
 AC_CACHE_SAVE
-
-# Check that the compiler supports C99, and enable it in our CFLAGS
-AS_COMPILER_FLAGS(C99_CFLAGS, "-std=c99")
-C99_CFLAGS=${C99_CFLAGS#*  }
-CFLAGS="$CFLAGS $C99_CFLAGS"
 
 # Configure options
 # -----------------

@@ -73,6 +73,7 @@ AC_SUBST(EMTR_LT_VERSION_INFO)
 
 # Required versions of libraries
 # Update these whenever you use a function that requires a certain API version
+GOBJECT_REQUIREMENT="gobject-2.0"
 GIO_REQUIREMENT="gio-unix-2.0 >= 2.40"
 JSON_REQUIREMENT="json-glib-1.0 >= 0.16"
 SOUP_REQUIREMENT="libsoup-2.4 >= 2.42"
@@ -83,8 +84,8 @@ UUID_REQUIREMENT="uuid"
 # need to put the corresponding library in Requires:).
 #
 # Keep the list sorted alphabetically.
-EMTR_REQUIRED_MODULES="$GIO_REQUIREMENT"
-EMTR_REQUIRED_MODULES_PRIVATE="$JSON_REQUIREMENT $SOUP_REQUIREMENT $UUID_REQUIREMENT"
+EMTR_REQUIRED_MODULES="$GOBJECT_REQUIREMENT"
+EMTR_REQUIRED_MODULES_PRIVATE="$GIO_REQUIREMENT $JSON_REQUIREMENT $SOUP_REQUIREMENT $UUID_REQUIREMENT"
 AC_SUBST(EMTR_REQUIRED_MODULES)
 AC_SUBST(EMTR_REQUIRED_MODULES_PRIVATE)
 # This indicates a required dbus mocking interface for unit testing.

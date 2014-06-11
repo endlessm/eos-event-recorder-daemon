@@ -26,4 +26,4 @@ gtkdocize || exit $?
 autoreconf -fi || exit $?
 
 cd "$olddir"
-test -n "$NOCONFIGURE" || "./configure" "$@"
+test -n "$NOCONFIGURE" || "$srcdir/configure" "$@"

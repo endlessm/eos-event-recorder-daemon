@@ -73,17 +73,19 @@ AC_SUBST(EMTR_LT_VERSION_INFO)
 
 # Required versions of libraries
 # Update these whenever you use a function that requires a certain API version
-GLIB_REQUIREMENT="glib-2.0 >= 2.40"
-GIO_REQUIREMENT="gio-2.0 >= 2.30
-    gio-unix-2.0"
 GOBJECT_REQUIREMENT="gobject-2.0"
+GIO_REQUIREMENT="gio-unix-2.0 >= 2.40"
 JSON_REQUIREMENT="json-glib-1.0 >= 0.16"
 SOUP_REQUIREMENT="libsoup-2.4 >= 2.42"
 UUID_REQUIREMENT="uuid"
 # These go into the pkg-config file as Requires: and Requires.private:
-# (Generally, use Requires.private: instead of Requires:)
-EMTR_REQUIRED_MODULES=
-EMTR_REQUIRED_MODULES_PRIVATE="$GLIB_REQUIREMENT $GIO_REQUIREMENT $GOBJECT_REQUIREMENT $JSON_REQUIREMENT $SOUP_REQUIREMENT $UUID_REQUIREMENT"
+# (Requires.private is for dependencies that are not exposed to the
+# application code; if we expose a type from those dependencies, we
+# need to put the corresponding library in Requires:).
+#
+# Keep the list sorted alphabetically.
+EMTR_REQUIRED_MODULES="$GOBJECT_REQUIREMENT"
+EMTR_REQUIRED_MODULES_PRIVATE="$GIO_REQUIREMENT $JSON_REQUIREMENT $SOUP_REQUIREMENT $UUID_REQUIREMENT"
 AC_SUBST(EMTR_REQUIRED_MODULES)
 AC_SUBST(EMTR_REQUIRED_MODULES_PRIVATE)
 # This indicates a required dbus mocking interface for unit testing.
@@ -96,7 +98,9 @@ AC_PROG_MKDIR_P
 # C compiler
 AC_PROG_CC
 # Make sure the C compiler supports per-target CFLAGS
-AM_PROG_CC_C_O
+AC_PROG_CC_C_O
+# Make sure the C compiler supports C99
+AC_PROG_CC_C99
 # Initialize Libtool; don't build static libraries
 AM_PROG_AR  dnl must call before LT_INIT
 LT_INIT([disable-static])
@@ -117,11 +121,6 @@ AS_IF([test "x$GDBUS_CODEGEN" = "xnotfound"],
 AC_ARG_VAR([GDBUS_CODEGEN], [Path to gdbus-codegen])
 
 AC_CACHE_SAVE
-
-# Check that the compiler supports C99, and enable it in our CFLAGS
-AS_COMPILER_FLAGS(C99_CFLAGS, "-std=c99")
-C99_CFLAGS=${C99_CFLAGS#*  }
-CFLAGS="$CFLAGS $C99_CFLAGS"
 
 # Configure options
 # -----------------

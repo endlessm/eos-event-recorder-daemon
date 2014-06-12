@@ -10,10 +10,14 @@ static gchar *TEST_DIRECTORY = "/tmp/metrics_testing/";
 
 #define TEST_SIZE 1024000
 
+// TODO: Replace this with a reasonable value once it is used.
+#define MAX_BYTES_TO_READ 0
+
 // ---- Helper functions come first ----
 
 static void
-tear_down_file (gchar *dir, gchar *file)
+tear_down_file (gchar *dir,
+                gchar *file)
 {
   gchar *combo = g_strconcat (dir, file, NULL);
   g_unlink (combo);
@@ -39,7 +43,8 @@ make_individual_event (gint choice)
   gint64 x;
   guint32 u;
   GVariant *mv;
-  if (choice <= 0)
+
+  if (choice == 0)
     {
       u = 234u;
       g_variant_builder_add (&builder, "y", 0xde);
@@ -77,9 +82,10 @@ make_individual_event (gint choice)
     }
   else
     {
-      g_error ("Tried to use a choice for make_individual_event that hasn't been"
-               " programmed.");
+      g_error ("Tried to use a choice for make_individual_event that hasn't "
+               "been programmed.");
     }
+
   return g_variant_new (INDIVIDUAL_TYPE, u, &builder, x, mv);
 }
 
@@ -92,7 +98,8 @@ make_aggregate_event (gint choice)
   gint64 x2;
   GVariant *mv;
   guint32 u;
-  if (choice <= 0)
+
+  if (choice == 0)
     {
       u = 12u;
       g_variant_builder_add (&builder, "y", 0xde);
@@ -133,8 +140,8 @@ make_aggregate_event (gint choice)
     }
   else
     {
-      g_error ("Tried to use a choice for make_aggregate_event that hasn't been"
-               "programmed.");
+      g_error ("Tried to use a choice for make_aggregate_event that hasn't "
+               "been programmed.");
     }
 
   return g_variant_new (AGGREGATE_TYPE, u, &builder, x1, x2, mv);
@@ -148,7 +155,8 @@ make_sequence_event (gint choice)
   GVariantBuilder builder_of_axmv;
   g_variant_builder_init (&builder_of_axmv, G_VARIANT_TYPE ("a(xmv)"));
   guint32 u;
-  if (choice <= 0)
+
+  if (choice == 0)
     {
       u = 1277u;
       g_variant_builder_add (&builder_of_ay, "y", 0x13);
@@ -199,13 +207,17 @@ make_sequence_event (gint choice)
     }
   else
     {
-      g_error ("Tried to use a choice for make_sequence_event that hasn't been "
-               "programmed.");
+      g_error ("Tried to use a choice for make_sequence_event that hasn't "
+               "been programmed.");
     }
 
   return g_variant_new (SEQUENCE_TYPE, u, &builder_of_ay, &builder_of_axmv);
 }
 
+/*
+ * Stores a single individual event and asserts that it (and nothing else) was
+ * stored.
+ */
 static gboolean
 store_single_individual_event (EmerPersistentCache *cache,
                                capacity_t          *capacity)
@@ -213,15 +225,32 @@ store_single_individual_event (EmerPersistentCache *cache,
   GVariant *var = make_individual_event (0);
   GVariant *var_array[] = {var, NULL};
   GVariant *empty_array[] = {NULL};
+
+  gint num_individual_events_stored;
+  gint num_aggregate_events_stored;
+  gint num_sequence_events_stored;
+
   gboolean success = emer_persistent_cache_store_metrics (cache,
                                                           var_array,
                                                           empty_array,
                                                           empty_array,
+                                                          &num_individual_events_stored,
+                                                          &num_aggregate_events_stored,
+                                                          &num_sequence_events_stored,
                                                           capacity);
   g_variant_unref (var);
+
+  g_assert (num_individual_events_stored == 1);
+  g_assert (num_aggregate_events_stored == 0);
+  g_assert (num_sequence_events_stored == 0);
+
   return success;
 }
 
+/*
+ * Stores a single aggregate event and asserts that it (and nothing else) was
+ * stored.
+ */
 static gboolean
 store_single_aggregate_event (EmerPersistentCache *cache,
                               capacity_t          *capacity)
@@ -229,15 +258,32 @@ store_single_aggregate_event (EmerPersistentCache *cache,
   GVariant *var = make_aggregate_event (0);
   GVariant *var_array[] = {var, NULL};
   GVariant *empty_array[] = {NULL};
+
+  gint num_individual_events_stored;
+  gint num_aggregate_events_stored;
+  gint num_sequence_events_stored;
+
   gboolean success = emer_persistent_cache_store_metrics (cache,
                                                           empty_array,
                                                           var_array,
                                                           empty_array,
+                                                          &num_individual_events_stored,
+                                                          &num_aggregate_events_stored,
+                                                          &num_sequence_events_stored,
                                                           capacity);
   g_variant_unref (var);
+
+  g_assert (num_individual_events_stored == 0);
+  g_assert (num_aggregate_events_stored == 1);
+  g_assert (num_sequence_events_stored == 0);
+
   return success;
 }
 
+/*
+ * Stores a single sequence event and asserts that it (and nothing else) was
+ * stored.
+ */
 static gboolean
 store_single_sequence_event (EmerPersistentCache *cache,
                              capacity_t          *capacity)
@@ -245,12 +291,25 @@ store_single_sequence_event (EmerPersistentCache *cache,
   GVariant *var = make_sequence_event (0);
   GVariant *var_array[] = {var, NULL};
   GVariant *empty_array[] = {NULL};
+
+  gint num_individual_events_stored;
+  gint num_aggregate_events_stored;
+  gint num_sequence_events_stored;
+
   gboolean success = emer_persistent_cache_store_metrics (cache,
                                                           empty_array,
                                                           empty_array,
                                                           var_array,
+                                                          &num_individual_events_stored,
+                                                          &num_aggregate_events_stored,
+                                                          &num_sequence_events_stored,
                                                           capacity);
   g_variant_unref (var);
+
+  g_assert (num_individual_events_stored == 0);
+  g_assert (num_aggregate_events_stored == 0);
+  g_assert (num_sequence_events_stored == 1);
+
   return success;
 }
 
@@ -260,44 +319,69 @@ make_many_events (GVariant ***inds,
                   GVariant ***seqs)
 {
   *inds = g_new (GVariant *, 5 * sizeof (GVariant *));
-  for (int i = 0; i < 4; i++)
+  for (gint i = 0; i < 4; i++)
     (*inds)[i] = make_individual_event (i);
   (*inds)[4] = NULL;
 
   *aggs = g_new (GVariant *, 4 * sizeof (GVariant *));
-  for (int i = 0; i < 3; i++)
+  for (gint i = 0; i < 3; i++)
     (*aggs)[i] = make_aggregate_event (i);
   (*aggs)[3] = NULL;
 
   *seqs = g_new (GVariant *, 4 * sizeof (GVariant *));
-  for (int i = 0; i < 3; i++)
+  for (gint i = 0; i < 3; i++)
     (*seqs)[i] = make_sequence_event (i);
   (*seqs)[3] = NULL;
 }
 
 static void
-free_variant_c_array (GVariant **array)
+free_variant_c_array (GVariant *array[])
 {
   g_return_if_fail (array != NULL);
 
-  for (int i = 0; array[i] != NULL; i++)
+  for (gint i = 0; array[i] != NULL; i++)
     g_variant_unref (array[i]);
   g_free (array);
 }
 
+static gint
+c_array_len (GVariant *array[])
+{
+  gint i;
+  for (i = 0; array[i] != NULL; i++)
+    ; // Do nothing.
+  return i;
+}
+
 static gboolean
 store_many (EmerPersistentCache *cache,
+            gint                *num_individual_events_made,
+            gint                *num_aggregate_events_made,
+            gint                *num_sequence_events_made,
+            gint                *num_individual_events_stored,
+            gint                *num_aggregate_events_stored,
+            gint                *num_sequence_events_stored,
             capacity_t          *capacity)
 {
   GVariant **var_ind_array;
   GVariant **var_agg_array;
   GVariant **var_seq_array;
+
   make_many_events (&var_ind_array, &var_agg_array, &var_seq_array);
+
+  *num_individual_events_made = c_array_len (var_ind_array);
+  *num_aggregate_events_made = c_array_len (var_agg_array);
+  *num_sequence_events_made = c_array_len (var_seq_array);
+
   gboolean success = emer_persistent_cache_store_metrics (cache,
                                                           var_ind_array,
                                                           var_agg_array,
                                                           var_seq_array,
+                                                          num_individual_events_stored,
+                                                          num_aggregate_events_stored,
+                                                          num_sequence_events_stored,
                                                           capacity);
+
   free_variant_c_array (var_ind_array);
   free_variant_c_array (var_agg_array);
   free_variant_c_array (var_seq_array);
@@ -312,12 +396,11 @@ check_all_gvariants_equal (GVariant **this_array,
   g_assert (this_array != NULL);
   g_assert (other_array != NULL);
 
-  for (int i = 0; this_array[i] != NULL || other_array[i] != NULL; i++)
+  for (gint i = 0; this_array[i] != NULL || other_array[i] != NULL; i++)
     {
       if (this_array[i] == NULL || other_array[i] == NULL)
-        {
-          g_error ("Array lengths are not equal.");
-        }
+        g_error ("Array lengths are not equal.");
+
       if (!g_variant_equal (this_array[i], other_array[i]))
         {
           gchar *this_one = g_variant_print (this_array[i], TRUE);
@@ -340,10 +423,10 @@ test_persistent_cache_new_succeeds (void)
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
   g_assert (cache != NULL);
+  g_object_unref (cache);
   if (error != NULL)
     g_error_free (error);
   g_assert (error == NULL);
-  g_object_unref (cache);
 }
 
 static void
@@ -402,20 +485,37 @@ test_persistent_cache_store_one_of_each_succeeds (void)
   GVariant *ind = make_individual_event (0);
   GVariant *agg = make_aggregate_event (0);
   GVariant *seq = make_sequence_event (0);
+
   GVariant *ind_a[] = {ind, NULL};
   GVariant *agg_a[] = {agg, NULL};
   GVariant *seq_a[] = {seq, NULL};
+
+  gint num_individual_events_stored;
+  gint num_aggregate_events_stored;
+  gint num_sequence_events_stored;
+
   capacity_t capacity;
+
   gboolean success = emer_persistent_cache_store_metrics (cache,
                                                           ind_a,
                                                           agg_a,
                                                           seq_a,
+                                                          &num_individual_events_stored,
+                                                          &num_aggregate_events_stored,
+                                                          &num_sequence_events_stored,
                                                           &capacity);
   g_object_unref (cache);
+
   g_variant_unref (ind);
   g_variant_unref (agg);
   g_variant_unref (seq);
+
   g_assert (success);
+
+  g_assert (num_individual_events_stored == 1);
+  g_assert (num_aggregate_events_stored == 1);
+  g_assert (num_sequence_events_stored == 1);
+
   g_assert (capacity == CAPACITY_LOW);
 }
 
@@ -427,10 +527,25 @@ test_persistent_cache_store_many_succeeds (void)
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
+
+  gint num_individual_events_made;
+  gint num_aggregate_events_made;
+  gint num_sequence_events_made;
+  gint num_individual_events_stored;
+  gint num_aggregate_events_stored;
+  gint num_sequence_events_stored;
   capacity_t capacity;
-  gboolean success = store_many (cache, &capacity);
+  gboolean success =
+    store_many (cache, &num_individual_events_made, &num_aggregate_events_made,
+                &num_sequence_events_made, &num_individual_events_stored,
+                &num_aggregate_events_stored, &num_sequence_events_stored,
+                &capacity);
   g_object_unref (cache);
   g_assert (success);
+
+  g_assert (num_individual_events_stored == num_individual_events_made);
+  g_assert (num_aggregate_events_stored == num_aggregate_events_made);
+  g_assert (num_sequence_events_stored == num_sequence_events_made);
 }
 
 static void
@@ -442,18 +557,40 @@ test_persistent_cache_store_when_full_succeeds (void)
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           space_in_bytes);
-  capacity_t capacity;
-  gboolean success = TRUE;
+  capacity_t capacity = CAPACITY_LOW;
 
   // Store a ton, until it is full.
-  // Update when storing functions return bytes stored.  TODO
-  int iterations = space_in_bytes / 150;
-  for (int i = 0; i < iterations; i++)
+  // TODO: Find a less hacky way of doing this.
+  gint iterations = space_in_bytes / 150;
+  for (gint i = 0; i < iterations; i++)
     {
-      success &= store_many (cache, &capacity);
+      gint num_individual_events_made;
+      gint num_aggregate_events_made;
+      gint num_sequence_events_made;
+      gint num_individual_events_stored;
+      gint num_aggregate_events_stored;
+      gint num_sequence_events_stored;
+      gboolean success =
+        store_many (cache, &num_individual_events_made,
+                    &num_aggregate_events_made, &num_sequence_events_made,
+                    &num_individual_events_stored, &num_aggregate_events_stored,
+                    &num_sequence_events_stored, &capacity);
+      g_assert (success);
+
+      if (capacity == CAPACITY_MAX)
+        {
+          g_assert (num_individual_events_stored <= num_individual_events_made);
+          g_assert (num_aggregate_events_stored <= num_aggregate_events_made);
+          g_assert (num_sequence_events_stored <= num_sequence_events_made);
+          break;
+        }
+
+      g_assert (num_individual_events_stored == num_individual_events_made);
+      g_assert (num_aggregate_events_stored == num_aggregate_events_made);
+      g_assert (num_sequence_events_stored == num_sequence_events_made);
     }
+
   g_object_unref (cache);
-  g_assert (success);
   g_assert (capacity == CAPACITY_MAX);
 }
 
@@ -465,29 +602,42 @@ test_persistent_cache_drain_one_individual_succeeds (void)
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
-  capacity_t capacity;
   GVariant *var = make_individual_event (1);
   GVariant *var_array[] = {var, NULL};
   GVariant *empty_array[] = {NULL};
+
+  gint num_individual_events_stored;
+  gint num_aggregate_events_stored;
+  gint num_sequence_events_stored;
+
+  capacity_t capacity;
+
   emer_persistent_cache_store_metrics (cache,
                                        var_array,
                                        empty_array,
                                        empty_array,
+                                       &num_individual_events_stored,
+                                       &num_aggregate_events_stored,
+                                       &num_sequence_events_stored,
                                        &capacity);
 
-  GVariant **ind_array = NULL;
-  GVariant **agg_array = NULL;
-  GVariant **seq_array = NULL;
+  GVariant **ind_array;
+  GVariant **agg_array;
+  GVariant **seq_array;
+
   gboolean success = emer_persistent_cache_drain_metrics (cache,
                                                           &ind_array,
                                                           &agg_array,
-                                                          &seq_array);
+                                                          &seq_array,
+                                                          MAX_BYTES_TO_READ);
   g_object_unref (cache);
+
   g_assert (success);
   g_assert (check_all_gvariants_equal (var_array, ind_array));
   g_assert (check_all_gvariants_equal (empty_array, agg_array));
   g_assert (check_all_gvariants_equal (empty_array, seq_array));
   g_variant_unref (var);
+
   free_variant_c_array (ind_array);
   free_variant_c_array (agg_array);
   free_variant_c_array (seq_array);
@@ -501,29 +651,42 @@ test_persistent_cache_drain_one_aggregate_succeeds (void)
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
-  capacity_t capacity;
   GVariant *var = make_aggregate_event (1);
   GVariant *var_array[] = {var, NULL};
   GVariant *empty_array[] = {NULL};
+
+  gint num_individual_events_stored;
+  gint num_aggregate_events_stored;
+  gint num_sequence_events_stored;
+
+  capacity_t capacity;
+
   emer_persistent_cache_store_metrics (cache,
                                        empty_array,
                                        var_array,
                                        empty_array,
+                                       &num_individual_events_stored,
+                                       &num_aggregate_events_stored,
+                                       &num_sequence_events_stored,
                                        &capacity);
 
-  GVariant **ind_array = NULL;
-  GVariant **agg_array = NULL;
-  GVariant **seq_array = NULL;
+  GVariant **ind_array;
+  GVariant **agg_array;
+  GVariant **seq_array;
+
   gboolean success = emer_persistent_cache_drain_metrics (cache,
                                                           &ind_array,
                                                           &agg_array,
-                                                          &seq_array);
+                                                          &seq_array,
+                                                          MAX_BYTES_TO_READ);
   g_object_unref (cache);
+
   g_assert (success);
   g_assert (check_all_gvariants_equal (empty_array, ind_array));
   g_assert (check_all_gvariants_equal (var_array, agg_array));
   g_assert (check_all_gvariants_equal (empty_array, seq_array));
   g_variant_unref (var);
+
   free_variant_c_array (ind_array);
   free_variant_c_array (agg_array);
   free_variant_c_array (seq_array);
@@ -537,29 +700,42 @@ test_persistent_cache_drain_one_sequence_succeeds (void)
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
-  capacity_t capacity;
   GVariant *var = make_sequence_event (1);
   GVariant *var_array[] = {var, NULL};
   GVariant *empty_array[] = {NULL};
+
+  gint num_individual_events_stored;
+  gint num_aggregate_events_stored;
+  gint num_sequence_events_stored;
+
+  capacity_t capacity;
+
   emer_persistent_cache_store_metrics (cache,
                                        empty_array,
                                        empty_array,
                                        var_array,
+                                       &num_individual_events_stored,
+                                       &num_aggregate_events_stored,
+                                       &num_sequence_events_stored,
                                        &capacity);
 
-  GVariant **ind_array = NULL;
-  GVariant **agg_array = NULL;
-  GVariant **seq_array = NULL;
+  GVariant **ind_array;
+  GVariant **agg_array;
+  GVariant **seq_array;
+
   gboolean success = emer_persistent_cache_drain_metrics (cache,
                                                           &ind_array,
                                                           &agg_array,
-                                                          &seq_array);
+                                                          &seq_array,
+                                                          MAX_BYTES_TO_READ);
   g_object_unref (cache);
+
   g_assert (success);
   g_assert (check_all_gvariants_equal (empty_array, ind_array));
   g_assert (check_all_gvariants_equal (empty_array, agg_array));
   g_assert (check_all_gvariants_equal (var_array, seq_array));
   g_variant_unref (var);
+
   free_variant_c_array (ind_array);
   free_variant_c_array (agg_array);
   free_variant_c_array (seq_array);
@@ -573,38 +749,52 @@ test_persistent_cache_drain_many_succeeds (void)
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
-  capacity_t capacity;
 
   // Fill it up first.
   GVariant **ind_array;
   GVariant **agg_array;
   GVariant **seq_array;
   make_many_events (&ind_array, &agg_array, &seq_array);
+
+  gint num_individual_events_stored;
+  gint num_aggregate_events_stored;
+  gint num_sequence_events_stored;
+
+  capacity_t capacity;
+
   emer_persistent_cache_store_metrics (cache,
                                        ind_array,
                                        agg_array,
                                        seq_array,
+                                       &num_individual_events_stored,
+                                       &num_aggregate_events_stored,
+                                       &num_sequence_events_stored,
                                        &capacity);
 
   // Check if we get the same things back.
-  GVariant **new_ind_array = NULL;
-  GVariant **new_agg_array = NULL;
-  GVariant **new_seq_array = NULL;
+  GVariant **new_ind_array;
+  GVariant **new_agg_array;
+  GVariant **new_seq_array;
+
   gboolean success = emer_persistent_cache_drain_metrics (cache,
                                                           &new_ind_array,
                                                           &new_agg_array,
-                                                          &new_seq_array);
+                                                          &new_seq_array,
+                                                          MAX_BYTES_TO_READ);
+  g_object_unref (cache);
+
   g_assert (success);
   g_assert (check_all_gvariants_equal (ind_array, new_ind_array));
   g_assert (check_all_gvariants_equal (agg_array, new_agg_array));
   g_assert (check_all_gvariants_equal (seq_array, new_seq_array));
+
   free_variant_c_array (ind_array);
   free_variant_c_array (agg_array);
   free_variant_c_array (seq_array);
+
   free_variant_c_array (new_ind_array);
   free_variant_c_array (new_agg_array);
   free_variant_c_array (new_seq_array);
-  g_object_unref (cache);
 }
 
 static void
@@ -622,7 +812,10 @@ test_persistent_cache_drain_empty_succeeds (void)
   gboolean success = emer_persistent_cache_drain_metrics (cache,
                                                           &ind_array,
                                                           &agg_array,
-                                                          &seq_array);
+                                                          &seq_array,
+                                                          MAX_BYTES_TO_READ);
+  g_object_unref (cache);
+
   g_assert (success);
 
   // Should contain logically empty arrays.
@@ -630,7 +823,6 @@ test_persistent_cache_drain_empty_succeeds (void)
   g_assert (check_all_gvariants_equal (ind_array, empty_array));
   g_assert (check_all_gvariants_equal (agg_array, empty_array));
   g_assert (check_all_gvariants_equal (seq_array, empty_array));
-  g_object_unref (cache);
 }
 
 static void
@@ -641,8 +833,17 @@ test_persistent_cache_purges_when_out_of_date_succeeds (void)
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
+  gint num_individual_events_made;
+  gint num_aggregate_events_made;
+  gint num_sequence_events_made;
+  gint num_individual_events_stored;
+  gint num_aggregate_events_stored;
+  gint num_sequence_events_stored;
   capacity_t capacity;
-  store_many (cache, &capacity);
+  store_many (cache, &num_individual_events_made, &num_aggregate_events_made,
+              &num_sequence_events_made, &num_individual_events_stored,
+              &num_aggregate_events_stored, &num_sequence_events_stored,
+              &capacity);
   gboolean success =
     emer_persistent_cache_set_different_version_for_testing ();
   g_object_unref (cache);
@@ -656,15 +857,18 @@ test_persistent_cache_purges_when_out_of_date_succeeds (void)
   GVariant **ind_array;
   GVariant **agg_array;
   GVariant **seq_array;
+
   emer_persistent_cache_drain_metrics (cache2,
                                        &ind_array,
                                        &agg_array,
-                                       &seq_array);
+                                       &seq_array,
+                                       MAX_BYTES_TO_READ);
+  g_object_unref (cache2);
+
   GVariant *empty_array[] = {NULL};
   g_assert (check_all_gvariants_equal (ind_array, empty_array));
   g_assert (check_all_gvariants_equal (agg_array, empty_array));
   g_assert (check_all_gvariants_equal (seq_array, empty_array));
-  g_object_unref (cache2);
 }
 
 int

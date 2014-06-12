@@ -74,6 +74,7 @@ static gboolean   purge_cache_files                   (EmerPersistentCache *self
 static gboolean   store_metric_list                   (EmerPersistentCache *self,
                                                        GFile               *file,
                                                        GVariant           **list,
+                                                       gint                *num_variants_stored,
                                                        capacity_t          *capacity);
 
 static gboolean   update_cache_version_number         (GCancellable        *cancellable,
@@ -325,13 +326,16 @@ drain_metrics_file (EmerPersistentCache *self,
  * Will transfer all metrics on disk into the three out parameters.
  * Each list is NULL-terminated. Will delete all metrics from disk immediately
  * afterward. Returns %TRUE on success. If any I/O operation fails, will return
- * %FALSE and the out parameters' contents will be undefined.
+ * %FALSE and the out parameters' contents will be undefined. max_num_bytes is
+ * currently ignored. TODO: Actually use max_num_bytes to limit the amount of
+ * metrics drained.
  */
 gboolean
 emer_persistent_cache_drain_metrics (EmerPersistentCache  *self,
                                      GVariant           ***list_of_individual_metrics,
                                      GVariant           ***list_of_aggregate_metrics,
-                                     GVariant           ***list_of_sequence_metrics)
+                                     GVariant           ***list_of_sequence_metrics,
+                                     gint                  max_num_bytes)
 {
   gboolean ind_success = drain_metrics_file (self,
                                              list_of_individual_metrics,
@@ -387,16 +391,17 @@ free_variant_list (GVariant **list)
 }
 
 /*
- *  Attempts to write a NULL-terminated list of GVariant metrics to a given file.
- *  Will update capacity given to it.  Automatically increments priv->cache_size.
- *  Returns %FALSE if any metrics failed due to I/O error. %TRUE otherwise.
- *  Regardless of success or failure, the capacity will be correctly returned
- *  via its out parameter.
+ * Attempts to write a NULL-terminated list of GVariant metrics to a given file.
+ * Will update num_variants_stored and capacity given to it. Automatically
+ * increments priv->cache_size. Returns %FALSE if any metrics failed due to
+ * I/O error. %TRUE otherwise. Regardless of success or failure,
+ * num_variants_stored and the capacity will be correctly set.
  */
 static gboolean
 store_metric_list (EmerPersistentCache *self,
                    GFile               *file,
                    GVariant           **list,
+                   gint                *num_variants_stored,
                    capacity_t          *capacity)
 {
   gboolean success = TRUE;
@@ -406,7 +411,8 @@ store_metric_list (EmerPersistentCache *self,
     g_error ("Attempted to store a GVariant list that was actually "
              "a NULL pointer!");
 
-  for (int i = 0; list[i] != NULL; i++)
+  gint i;
+  for (i = 0; list[i] != NULL; i++)
     {
       GVariant *current_metric = list[i];
       gsize metric_size = sizeof (gsize) + g_variant_get_size (current_metric);
@@ -430,6 +436,7 @@ store_metric_list (EmerPersistentCache *self,
     }
 
   *capacity = update_capacity (self);
+  *num_variants_stored = i;
   return success;
 }
 
@@ -440,8 +447,9 @@ store_metric_list (EmerPersistentCache *self,
  * Returns %TRUE on success, even if the metrics are intentionally dropped due
  * to space limitations.  Returns %FALSE only on I/O error.
  *
- * Regardless of success or failure, the capacity will be correctly returned
- * via its out parameter.
+ * Regardless of success or failure, num_individual_metrics_stored,
+ * num_aggregate_metrics_stored, num_sequence_metrics_stored, and capacity will
+ * be correctly set.
  *
  * GVariants are assumed to be in the native endianness of the machine.
  */
@@ -450,36 +458,53 @@ emer_persistent_cache_store_metrics (EmerPersistentCache  *self,
                                      GVariant            **list_of_individual_metrics,
                                      GVariant            **list_of_aggregate_metrics,
                                      GVariant            **list_of_sequence_metrics,
+                                     gint                 *num_individual_metrics_stored,
+                                     gint                 *num_aggregate_metrics_stored,
+                                     gint                 *num_sequence_metrics_stored,
                                      capacity_t           *capacity)
 {
   GFile *ind_file = get_cache_file (INDIVIDUAL_SUFFIX);
   gboolean ind_success = store_metric_list (self,
                                             ind_file,
                                             list_of_individual_metrics,
+                                            num_individual_metrics_stored,
                                             capacity);
   g_object_unref (ind_file);
   if (!ind_success)
-    return FALSE;
+    {
+      *num_aggregate_metrics_stored = 0;
+      *num_sequence_metrics_stored = 0;
+      return FALSE;
+    }
 
   GFile *agg_file = get_cache_file (AGGREGATE_SUFFIX);
   gboolean agg_success = store_metric_list (self,
                                             agg_file,
                                             list_of_aggregate_metrics,
+                                            num_aggregate_metrics_stored,
                                             capacity);
   g_object_unref (agg_file);
   if (!agg_success)
-    return FALSE;
+    {
+      *num_sequence_metrics_stored = 0;
+      return FALSE;
+    }
 
   GFile *seq_file = get_cache_file (SEQUENCE_SUFFIX);
   gboolean seq_success = store_metric_list (self,
                                             seq_file,
                                             list_of_sequence_metrics,
+                                            num_sequence_metrics_stored,
                                             capacity);
   g_object_unref (seq_file);
   if (!seq_success)
     return FALSE;
 
-  // capacity is updated within the list storing functions.
+  /*
+   * num_individual_metrics_stored, num_aggregate_metrics_stored,
+   * num_sequence_metrics_stored, and capacity are updated within
+   * store_metric_list.
+   */
   return TRUE;
 }
 

@@ -75,8 +75,9 @@ dist_bin_SCRIPTS = tests/launch-mock-dbus-tests.sh
 TESTS = \
 	tests/run-tests \
 	tests/test-daemon-integration.py \
-	tests/daemon/test-machine-id-provider \
 	tests/daemon/test-daemon \
+	tests/daemon/test-machine-id-provider \
+	tests/daemon/test-persistent-cache \
 	$(javascript_tests) \
 	$(NULL)
 TEST_EXTENSIONS = .js .py

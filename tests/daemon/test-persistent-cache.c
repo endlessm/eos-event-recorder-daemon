@@ -37,9 +37,11 @@ make_individual_event (gint choice)
   GVariantBuilder builder;
   g_variant_builder_init (&builder, G_VARIANT_TYPE ("ay"));
   gint64 x;
+  guint32 u;
   GVariant *mv;
   if (choice <= 0)
     {
+      u = 234u;
       g_variant_builder_add (&builder, "y", 0xde);
       g_variant_builder_add (&builder, "y", 0xad);
       g_variant_builder_add (&builder, "y", 0xbe);
@@ -49,6 +51,7 @@ make_individual_event (gint choice)
     }
   else if (choice == 1)
     {
+      u = 121u;
       g_variant_builder_add (&builder, "y", 0x01);
       g_variant_builder_add (&builder, "y", 0x23);
       g_variant_builder_add (&builder, "y", 0x45);
@@ -59,12 +62,14 @@ make_individual_event (gint choice)
     }
   else if (choice == 2)
     {
+      u = 555u;
       g_variant_builder_add (&builder, "y", 0x4b);
       x = G_GINT64_CONSTANT (12012);
       mv = g_variant_new_string ("I am a banana!");
     }
   else if (choice == 3)
     {
+      u = 411u;
       g_variant_builder_add (&builder, "y", 0x55);
       g_variant_builder_add (&builder, "y", 0x2c);
       x = G_GINT64_CONSTANT (-128);
@@ -75,7 +80,7 @@ make_individual_event (gint choice)
       g_error ("Tried to use a choice for make_individual_event that hasn't been"
                " programmed.");
     }
-  return g_variant_new (INDIVIDUAL_TYPE, &builder, x, mv);
+  return g_variant_new (INDIVIDUAL_TYPE, u, &builder, x, mv);
 }
 
 static GVariant *
@@ -86,8 +91,10 @@ make_aggregate_event (gint choice)
   gint64 x1;
   gint64 x2;
   GVariant *mv;
+  guint32 u;
   if (choice <= 0)
     {
+      u = 12u;
       g_variant_builder_add (&builder, "y", 0xde);
       g_variant_builder_add (&builder, "y", 0xaf);
       g_variant_builder_add (&builder, "y", 0x00);
@@ -98,6 +105,7 @@ make_aggregate_event (gint choice)
     }
   else if (choice == 1)
     {
+      u = 1019u;
       g_variant_builder_add (&builder, "y", 0x33);
       g_variant_builder_add (&builder, "y", 0x44);
       g_variant_builder_add (&builder, "y", 0x95);
@@ -108,6 +116,7 @@ make_aggregate_event (gint choice)
     }
   else if (choice == 2)
     {
+      u = 5u;
       g_variant_builder_add (&builder, "y", 0x33);
       g_variant_builder_add (&builder, "y", 0x44);
       g_variant_builder_add (&builder, "y", 0x95);
@@ -128,7 +137,7 @@ make_aggregate_event (gint choice)
                "programmed.");
     }
 
-  return g_variant_new (AGGREGATE_TYPE, &builder, x1, x2, mv);
+  return g_variant_new (AGGREGATE_TYPE, u, &builder, x1, x2, mv);
 }
 
 static GVariant *
@@ -138,9 +147,10 @@ make_sequence_event (gint choice)
   g_variant_builder_init (&builder_of_ay, G_VARIANT_TYPE ("ay"));
   GVariantBuilder builder_of_axmv;
   g_variant_builder_init (&builder_of_axmv, G_VARIANT_TYPE ("a(xmv)"));
-
+  guint32 u;
   if (choice <= 0)
     {
+      u = 1277u;
       g_variant_builder_add (&builder_of_ay, "y", 0x13);
       g_variant_builder_add (&builder_of_ay, "y", 0x37);
       gint64 x1 = G_GINT64_CONSTANT (1876);
@@ -155,6 +165,7 @@ make_sequence_event (gint choice)
     }
   else if (choice == 1)
     {
+      u = 91912u;
       g_variant_builder_add (&builder_of_ay, "y", 0x13);
       g_variant_builder_add (&builder_of_ay, "y", 0x37);
       g_variant_builder_add (&builder_of_ay, "y", 0xd0);
@@ -168,6 +179,7 @@ make_sequence_event (gint choice)
     }
   else if (choice == 2)
     {
+      u = 113u;
       g_variant_builder_add (&builder_of_ay, "y", 0xe1);
       gint64 x1 = G_GINT64_CONSTANT (747);
       GVariant *mv1 = NULL;
@@ -191,7 +203,7 @@ make_sequence_event (gint choice)
                "programmed.");
     }
 
-  return g_variant_new (SEQUENCE_TYPE, &builder_of_ay, &builder_of_axmv);
+  return g_variant_new (SEQUENCE_TYPE, u, &builder_of_ay, &builder_of_axmv);
 }
 
 static gboolean

@@ -50,9 +50,9 @@ G_BEGIN_DECLS
 /*
  * GVariant Types for deserializing metrics.
  */
-#define INDIVIDUAL_TYPE "(ayxmv)"
-#define AGGREGATE_TYPE  "(ayxxmv)"
-#define SEQUENCE_TYPE   "(aya(xmv))"
+#define INDIVIDUAL_TYPE "(uayxmv)"
+#define AGGREGATE_TYPE  "(uayxxmv)"
+#define SEQUENCE_TYPE   "(uaya(xmv))"
 
 typedef struct _EmerPersistentCache EmerPersistentCache;
 typedef struct _EmerPersistentCacheClass EmerPersistentCacheClass;

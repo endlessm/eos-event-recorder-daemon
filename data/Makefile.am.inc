@@ -22,15 +22,26 @@ edit = sed \
 	-e 's|@libexecdir[@]|$(libexecdir)|g' \
 	$(NULL)
 
+dbusservicedir = ${datadir}/dbus-1/system-services
+dbusservice_DATA = data/com.endlessm.Metrics.service
+
+data/com.endlessm.Metrics.service: data/com.endlessm.Metrics.service.in
+	$(AM_V_GEN)mkdir -p data && \
+	rm -f $@ $@.tmp && \
+	$(edit) $< >$@.tmp && \
+	mv $@.tmp $@
+
 systembussecuritypolicydir = ${sysconfdir}/dbus-1/system.d
 dist_systembussecuritypolicy_DATA = data/com.endlessm.Metrics.conf
 
 EXTRA_DIST += \
 	data/com.endlessm.Metrics.xml \
+	data/com.endlessm.Metrics.service.in \
 	data/eos-metrics-event-recorder.service.in \
 	$(NULL)
 
 CLEANFILES += \
 	$(daemon_dbus_sources) \
+	data/com.endlessm.Metrics.service \
 	data/eos-metrics-event-recorder.service \
 	$(NULL)

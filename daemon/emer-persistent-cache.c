@@ -57,7 +57,9 @@ static GFile*     get_cache_file                      (gchar               *path
 
 static void       emer_persistent_cache_initable_init (GInitableIface      *iface);
 
-static gboolean   load_cache_size                     (EmerPersistentCache *self,
+static void       emtr_persistent_cache_finalize      (GObject             *object);
+
+static gboolean   load_cache_size                     (EmtrPersistentCache *self,
                                                        GCancellable        *cancellable,
                                                        GError             **error);
 
@@ -129,10 +131,14 @@ static gint MAX_CACHE_SIZE = 102400; // 100 kB
  */
 static gchar* CACHE_DIRECTORY = "/var/cache/metrics/";
 
+static EmtrPersistentCache *singleton;
+G_LOCK_DEFINE_STATIC (singleton);
+
 static void
 emer_persistent_cache_class_init (EmerPersistentCacheClass *klass)
 {
-
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+  object_class->finalize = emtr_persistent_cache_finalize;
 }
 
 static void
@@ -164,6 +170,18 @@ emer_persistent_cache_initable_init (GInitableIface *iface)
   iface->init = emer_persistent_cache_may_fail_init;
 }
 
+static void
+emtr_persistent_cache_finalize (GObject *object)
+{
+  EmtrPersistentCache *self = EMTR_PERSISTENT_CACHE (object);
+  G_LOCK (singleton);
+  if (self == singleton)
+    singleton = NULL;
+  G_UNLOCK (singleton);
+
+  G_OBJECT_CLASS (emtr_persistent_cache_parent_class)->finalize (object);
+}
+
 /*
  * Constructor for creating a new Persistent Cache.
  * Returns a singleton instance of a Persistent Cache.
@@ -173,18 +191,15 @@ EmerPersistentCache*
 emer_persistent_cache_get_default (GCancellable *cancellable,
                                    GError      **error)
 {
-  static EmerPersistentCache *singleton_cache;
-  G_LOCK_DEFINE_STATIC (singleton_cache);
+  G_LOCK (singleton);
+  if (singleton == NULL)
+    singleton = g_initable_new (EMTR_TYPE_PERSISTENT_CACHE,
+                                cancellable,
+                                error,
+                                NULL);
+  G_UNLOCK (singleton);
 
-  G_LOCK (singleton_cache);
-  if (singleton_cache == NULL)
-    singleton_cache = g_initable_new (EMER_TYPE_PERSISTENT_CACHE,
-                                      cancellable,
-                                      error,
-                                      NULL);
-  G_UNLOCK (singleton_cache);
-
-  return singleton_cache;
+  return singleton;
 }
 
 /*

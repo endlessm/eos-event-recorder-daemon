@@ -70,7 +70,17 @@ test_machine_id_provider_get_default_is_singleton (void)
   EmerMachineIdProvider *m1 = emer_machine_id_provider_get_default ();
   EmerMachineIdProvider *m2 = emer_machine_id_provider_get_default ();
   g_assert (m1 == m2);
-  // A singleton shouldn't be unref'd.
+  g_object_unref (m1);
+}
+
+static void
+test_machine_id_provider_singleton_call_after_unref (void)
+{
+  write_testing_machine_id ();
+  EmerMachineIdProvider *p1 = emer_machine_id_provider_get_default ();
+  g_object_unref (p1);
+  EmerMachineIdProvider *p2 = emer_machine_id_provider_get_default ();
+  g_object_unref (p2);
 }
 
 static void
@@ -99,6 +109,8 @@ main (int                argc,
                    test_machine_id_provider_new_succeeds);
   g_test_add_func ("/machine-id-provider/get-default-is-singleton",
                    test_machine_id_provider_get_default_is_singleton);
+  g_test_add_func ("/machine-id-provider/singleton-call-after-unref",
+                   test_machine_id_provider_singleton_call_after_unref);
   g_test_add_func ("/machine-id-provider/can-get-id",
                    test_machine_id_provider_can_get_id);
 

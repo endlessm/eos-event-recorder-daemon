@@ -50,6 +50,8 @@ enum {
 };
 
 static GParamSpec *emer_machine_id_provider_props[NPROPS] = { NULL, };
+static EmerMachineIdProvider *singleton;
+G_LOCK_DEFINE_STATIC (singleton);
 
 /*
  * SECTION:emer-machine-id-provider
@@ -119,6 +121,11 @@ static void
 emer_machine_id_provider_finalize (GObject *object)
 {
   EmerMachineIdProvider *self = EMER_MACHINE_ID_PROVIDER (object);
+  G_LOCK (singleton);
+  if (self == singleton)
+    singleton = NULL;
+  G_UNLOCK (singleton);
+
   EmerMachineIdProviderPrivate *priv = emer_machine_id_provider_get_instance_private (self);
   g_free (priv->path);
 
@@ -184,9 +191,6 @@ emer_machine_id_provider_new (const gchar *machine_id_file_path)
 EmerMachineIdProvider *
 emer_machine_id_provider_get_default (void)
 {
-  static EmerMachineIdProvider *singleton;
-  G_LOCK_DEFINE_STATIC (singleton);
-
   G_LOCK (singleton);
   if (singleton == NULL)
     singleton = g_object_new (EMER_TYPE_MACHINE_ID_PROVIDER, NULL);

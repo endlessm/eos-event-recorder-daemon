@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=com.endlessm.Metrics
+Exec=@libexecdir@/eos-metrics-event-recorder
+User=root

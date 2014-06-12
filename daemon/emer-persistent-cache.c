@@ -1,6 +1,8 @@
+/* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
+
 /* Copyright 2014 Endless Mobile, Inc. */
 
-#include "emtr-persistent-cache-private.h"
+#include "emer-persistent-cache.h"
 
 #include <gio/gio.h>
 #include <glib.h>
@@ -12,7 +14,7 @@
 #include <string.h>
 
 /*
- * SECTION:emtr-persistent-cache.c
+ * SECTION:emer-persistent-cache.c
  * @title: Persistent Cache
  * @short_description: Stores metrics locally (on the user's machine).
  * @include: eosmetrics/eosmetrics.h
@@ -31,18 +33,18 @@
  * the new version number.
  */
 
-static gboolean   append_metric                       (EmtrPersistentCache *self,
+static gboolean   append_metric                       (EmerPersistentCache *self,
                                                        GFile               *file,
                                                        GVariant            *metric);
 
-static gboolean   apply_cache_versioning              (EmtrPersistentCache *self,
+static gboolean   apply_cache_versioning              (EmerPersistentCache *self,
                                                        GCancellable        *cancellable,
                                                        GError             **error);
 
-static gboolean   cache_has_room                      (EmtrPersistentCache *self,
+static gboolean   cache_has_room                      (EmerPersistentCache *self,
                                                        gsize                size);
 
-static gboolean   drain_metrics_file                  (EmtrPersistentCache *self,
+static gboolean   drain_metrics_file                  (EmerPersistentCache *self,
                                                        GVariant          ***return_list,
                                                        gchar               *path_ending,
                                                        gchar               *variant_type);
@@ -53,23 +55,23 @@ static void       free_variant_list                   (GVariant           **list
 
 static GFile*     get_cache_file                      (gchar               *path_ending);
 
-static void       emtr_persistent_cache_initable_init (GInitableIface      *iface);
+static void       emer_persistent_cache_initable_init (GInitableIface      *iface);
 
-static gboolean   load_cache_size                     (EmtrPersistentCache *self,
+static gboolean   load_cache_size                     (EmerPersistentCache *self,
                                                        GCancellable        *cancellable,
                                                        GError             **error);
 
 static gboolean   load_local_cache_version            (gint64              *version);
 
-static gboolean   emtr_persistent_cache_may_fail_init (GInitable           *self,
+static gboolean   emer_persistent_cache_may_fail_init (GInitable           *self,
                                                        GCancellable        *cancellable,
                                                        GError             **error);
 
-static gboolean   purge_cache_files                   (EmtrPersistentCache *self,
+static gboolean   purge_cache_files                   (EmerPersistentCache *self,
                                                        GCancellable        *cancellable,
                                                        GError             **error);
 
-static gboolean   store_metric_list                   (EmtrPersistentCache *self,
+static gboolean   store_metric_list                   (EmerPersistentCache *self,
                                                        GFile               *file,
                                                        GVariant           **list,
                                                        capacity_t          *capacity);
@@ -77,7 +79,7 @@ static gboolean   store_metric_list                   (EmtrPersistentCache *self
 static gboolean   update_cache_version_number         (GCancellable        *cancellable,
                                                        GError             **error);
 
-static capacity_t update_capacity                     (EmtrPersistentCache *self);
+static capacity_t update_capacity                     (EmerPersistentCache *self);
 
 typedef struct GVariantWritable
 {
@@ -85,15 +87,15 @@ typedef struct GVariantWritable
   gpointer data;
 } GVariantWritable;
 
-typedef struct _EmtrPersistentCachePrivate
+typedef struct _EmerPersistentCachePrivate
 {
   guint64 cache_size;
   capacity_t capacity;
-} EmtrPersistentCachePrivate;
+} EmerPersistentCachePrivate;
 
-G_DEFINE_TYPE_WITH_CODE (EmtrPersistentCache, emtr_persistent_cache, G_TYPE_OBJECT,
-                         G_ADD_PRIVATE (EmtrPersistentCache)
-                         G_IMPLEMENT_INTERFACE (G_TYPE_INITABLE, emtr_persistent_cache_initable_init))
+G_DEFINE_TYPE_WITH_CODE (EmerPersistentCache, emer_persistent_cache, G_TYPE_OBJECT,
+                         G_ADD_PRIVATE (EmerPersistentCache)
+                         G_IMPLEMENT_INTERFACE (G_TYPE_INITABLE, emer_persistent_cache_initable_init))
 
 /*
  * If this version is greater than the version of the persisted metrics,
@@ -108,7 +110,7 @@ G_DEFINE_TYPE_WITH_CODE (EmtrPersistentCache, emtr_persistent_cache, G_TYPE_OBJE
 #define HIGH_CAPACITY_THRESHOLD 0.75 // 75%
 
 #define PERSISTENT_CACHE_PRIVATE(o) \
-  (G_TYPE_INSTANCE_GET_PRIVATE ((o), EMTR_TYPE_PERSISTENT_CACHE, EmtrPersistentCachePrivate))
+  (G_TYPE_INSTANCE_GET_PRIVATE ((o), EMER_TYPE_PERSISTENT_CACHE, EmerPersistentCachePrivate))
 
 /*
  * The largest amount of memory (in bytes) that the metrics cache may
@@ -127,38 +129,38 @@ static gint MAX_CACHE_SIZE = 102400; // 100 kB
 static gchar* CACHE_DIRECTORY = "/var/cache/metrics/";
 
 static void
-emtr_persistent_cache_class_init (EmtrPersistentCacheClass *klass)
+emer_persistent_cache_class_init (EmerPersistentCacheClass *klass)
 {
 
 }
 
 static void
-emtr_persistent_cache_init (EmtrPersistentCache *self)
+emer_persistent_cache_init (EmerPersistentCache *self)
 {
-  EmtrPersistentCachePrivate *priv =
-    emtr_persistent_cache_get_instance_private (self);
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
   priv->cache_size = 0L;
   priv->capacity = CAPACITY_LOW;
 }
 
 static gboolean
-emtr_persistent_cache_may_fail_init (GInitable    *self,
+emer_persistent_cache_may_fail_init (GInitable    *self,
                                      GCancellable *cancellable,
                                      GError      **error)
 {
-  gboolean versioning_success = apply_cache_versioning (EMTR_PERSISTENT_CACHE (self),
+  gboolean versioning_success = apply_cache_versioning (EMER_PERSISTENT_CACHE (self),
                                                         cancellable,
                                                         error);
   if (!versioning_success)
     return FALSE;
 
-  return load_cache_size (EMTR_PERSISTENT_CACHE (self), cancellable, error);
+  return load_cache_size (EMER_PERSISTENT_CACHE (self), cancellable, error);
 }
 
 static void
-emtr_persistent_cache_initable_init (GInitableIface *iface)
+emer_persistent_cache_initable_init (GInitableIface *iface)
 {
-  iface->init = emtr_persistent_cache_may_fail_init;
+  iface->init = emer_persistent_cache_may_fail_init;
 }
 
 /*
@@ -166,16 +168,16 @@ emtr_persistent_cache_initable_init (GInitableIface *iface)
  * Returns a singleton instance of a Persistent Cache.
  * Please use this in production instead of the testing constructor!
  */
-EmtrPersistentCache*
-emtr_persistent_cache_get_default (GCancellable *cancellable,
+EmerPersistentCache*
+emer_persistent_cache_get_default (GCancellable *cancellable,
                                    GError      **error)
 {
-  static EmtrPersistentCache *singleton_cache;
+  static EmerPersistentCache *singleton_cache;
   G_LOCK_DEFINE_STATIC (singleton_cache);
 
   G_LOCK (singleton_cache);
   if (singleton_cache == NULL)
-    singleton_cache = g_initable_new (EMTR_TYPE_PERSISTENT_CACHE,
+    singleton_cache = g_initable_new (EMER_TYPE_PERSISTENT_CACHE,
                                       cancellable,
                                       error,
                                       NULL);
@@ -185,20 +187,20 @@ emtr_persistent_cache_get_default (GCancellable *cancellable,
 }
 
 /*
- * You should use emtr_persistent_cache_get_default() instead of this function.
+ * You should use emer_persistent_cache_get_default() instead of this function.
  * Function should only be used in testing code, NOT in production code.
  * Should always use a custom directory.  A custom cache size may be specified,
  * but if set to 0, the production value will be used.
  */
-EmtrPersistentCache*
-emtr_persistent_cache_new (GCancellable *cancellable,
+EmerPersistentCache*
+emer_persistent_cache_new (GCancellable *cancellable,
                            GError      **error,
                            gchar        *custom_directory,
                            gint          custom_cache_size)
 {
   MAX_CACHE_SIZE = custom_cache_size;
   CACHE_DIRECTORY = custom_directory;
-  return g_initable_new (EMTR_TYPE_PERSISTENT_CACHE,
+  return g_initable_new (EMER_TYPE_PERSISTENT_CACHE,
                          cancellable,
                          error,
                          NULL);
@@ -211,7 +213,7 @@ emtr_persistent_cache_new (GCancellable *cancellable,
  * the return value is FALSE.
  */
 static gboolean
-drain_metrics_file (EmtrPersistentCache *self,
+drain_metrics_file (EmerPersistentCache *self,
                     GVariant          ***return_list,
                     gchar               *path_ending,
                     gchar               *variant_type)
@@ -326,7 +328,7 @@ drain_metrics_file (EmtrPersistentCache *self,
  * %FALSE and the out parameters' contents will be undefined.
  */
 gboolean
-emtr_persistent_cache_drain_metrics (EmtrPersistentCache  *self,
+emer_persistent_cache_drain_metrics (EmerPersistentCache  *self,
                                      GVariant           ***list_of_individual_metrics,
                                      GVariant           ***list_of_aggregate_metrics,
                                      GVariant           ***list_of_sequence_metrics)
@@ -392,14 +394,14 @@ free_variant_list (GVariant **list)
  *  via its out parameter.
  */
 static gboolean
-store_metric_list (EmtrPersistentCache *self,
+store_metric_list (EmerPersistentCache *self,
                    GFile               *file,
                    GVariant           **list,
                    capacity_t          *capacity)
 {
   gboolean success = TRUE;
-  EmtrPersistentCachePrivate *priv =
-    emtr_persistent_cache_get_instance_private (self);
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
   if (list == NULL)
     g_error ("Attempted to store a GVariant list that was actually "
              "a NULL pointer!");
@@ -444,7 +446,7 @@ store_metric_list (EmtrPersistentCache *self,
  * GVariants are assumed to be in the native endianness of the machine.
  */
 gboolean
-emtr_persistent_cache_store_metrics (EmtrPersistentCache  *self,
+emer_persistent_cache_store_metrics (EmerPersistentCache  *self,
                                      GVariant            **list_of_individual_metrics,
                                      GVariant            **list_of_aggregate_metrics,
                                      GVariant            **list_of_sequence_metrics,
@@ -502,7 +504,7 @@ get_cache_file (gchar *path_ending)
  * Returns TRUE on success and FALSE on I/O failure.
  */
 static gboolean
-purge_cache_files (EmtrPersistentCache *self,
+purge_cache_files (EmerPersistentCache *self,
                    GCancellable        *cancellable,
                    GError             **error)
 {
@@ -557,8 +559,8 @@ purge_cache_files (EmtrPersistentCache *self,
     }
   g_object_unref (seq_file);
 
-  EmtrPersistentCachePrivate *priv =
-    emtr_persistent_cache_get_instance_private (self);
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
   priv->cache_size = 0L;
   priv->capacity = CAPACITY_LOW;
 
@@ -606,7 +608,7 @@ load_local_cache_version (gint64 *version)
  * Returns TRUE on success and FALSE on failure.
  */
 static gboolean
-append_metric (EmtrPersistentCache *self,
+append_metric (EmerPersistentCache *self,
                GFile               *file,
                GVariant            *metric)
 {
@@ -707,7 +709,7 @@ update_cache_version_number (GCancellable *cancellable,
  * Returns TRUE on success, FALSE on failure.
  */
 gboolean
-emtr_persistent_cache_set_different_version_for_testing (void)
+emer_persistent_cache_set_different_version_for_testing (void)
 {
   gint diff_version = CURRENT_CACHE_VERSION - 1;
   gchar *ver_string = g_strdup_printf ("%i", diff_version);
@@ -728,7 +730,7 @@ emtr_persistent_cache_set_different_version_for_testing (void)
  * doesn't exist. Returns %TRUE on success and %FALSE on failure.
  */
 static gboolean
-apply_cache_versioning (EmtrPersistentCache *self,
+apply_cache_versioning (EmerPersistentCache *self,
                         GCancellable        *cancellable,
                         GError             **error)
 {
@@ -779,7 +781,7 @@ apply_cache_versioning (EmtrPersistentCache *self,
  * files. Returns %TRUE on success.
  */
 static gboolean
-load_cache_size (EmtrPersistentCache *self,
+load_cache_size (EmerPersistentCache *self,
                  GCancellable        *cancellable,
                  GError             **error)
 {
@@ -805,8 +807,8 @@ load_cache_size (EmtrPersistentCache *self,
       return FALSE;
     }
 
-  EmtrPersistentCachePrivate *priv =
-    emtr_persistent_cache_get_instance_private (self);
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
   priv->cache_size = disk_used;
   update_capacity (self);
   return success;
@@ -817,10 +819,10 @@ load_cache_size (EmtrPersistentCache *self,
  * updates the internal value of capacity.
  */
 static capacity_t
-update_capacity (EmtrPersistentCache *self)
+update_capacity (EmerPersistentCache *self)
 {
-  EmtrPersistentCachePrivate *priv =
-    emtr_persistent_cache_get_instance_private (self);
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
   if (priv->capacity == CAPACITY_MAX)
     return CAPACITY_MAX;
 
@@ -837,11 +839,11 @@ update_capacity (EmtrPersistentCache *self)
  * %TRUE if it can, %FALSE otherwise.
  */
 static gboolean
-cache_has_room (EmtrPersistentCache *self,
+cache_has_room (EmerPersistentCache *self,
                 gsize                size)
 {
-  EmtrPersistentCachePrivate *priv =
-    emtr_persistent_cache_get_instance_private (self);
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
   if (priv->capacity == CAPACITY_MAX)
     return FALSE;
   return priv->cache_size + size <= MAX_CACHE_SIZE;

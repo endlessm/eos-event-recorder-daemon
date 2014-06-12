@@ -1,8 +1,6 @@
 /* Copyright 2014 Endless Mobile, Inc. */
 
-#include "run-tests.h"
-
-#include "eosmetrics/emtr-persistent-cache-private.h"
+#include "daemon/emer-persistent-cache.h"
 
 #include <glib.h>
 #include <stdio.h>
@@ -197,13 +195,13 @@ make_sequence_event (gint choice)
 }
 
 static gboolean
-store_single_individual_event (EmtrPersistentCache *cache,
+store_single_individual_event (EmerPersistentCache *cache,
                                capacity_t          *capacity)
 {
   GVariant *var = make_individual_event (0);
   GVariant *var_array[] = {var, NULL};
   GVariant *empty_array[] = {NULL};
-  gboolean success = emtr_persistent_cache_store_metrics (cache,
+  gboolean success = emer_persistent_cache_store_metrics (cache,
                                                           var_array,
                                                           empty_array,
                                                           empty_array,
@@ -213,13 +211,13 @@ store_single_individual_event (EmtrPersistentCache *cache,
 }
 
 static gboolean
-store_single_aggregate_event (EmtrPersistentCache *cache,
+store_single_aggregate_event (EmerPersistentCache *cache,
                               capacity_t          *capacity)
 {
   GVariant *var = make_aggregate_event (0);
   GVariant *var_array[] = {var, NULL};
   GVariant *empty_array[] = {NULL};
-  gboolean success = emtr_persistent_cache_store_metrics (cache,
+  gboolean success = emer_persistent_cache_store_metrics (cache,
                                                           empty_array,
                                                           var_array,
                                                           empty_array,
@@ -229,13 +227,13 @@ store_single_aggregate_event (EmtrPersistentCache *cache,
 }
 
 static gboolean
-store_single_sequence_event (EmtrPersistentCache *cache,
+store_single_sequence_event (EmerPersistentCache *cache,
                              capacity_t          *capacity)
 {
   GVariant *var = make_sequence_event (0);
   GVariant *var_array[] = {var, NULL};
   GVariant *empty_array[] = {NULL};
-  gboolean success = emtr_persistent_cache_store_metrics (cache,
+  gboolean success = emer_persistent_cache_store_metrics (cache,
                                                           empty_array,
                                                           empty_array,
                                                           var_array,
@@ -276,14 +274,14 @@ free_variant_c_array (GVariant **array)
 }
 
 static gboolean
-store_many (EmtrPersistentCache *cache,
+store_many (EmerPersistentCache *cache,
             capacity_t          *capacity)
 {
   GVariant **var_ind_array;
   GVariant **var_agg_array;
   GVariant **var_seq_array;
   make_many_events (&var_ind_array, &var_agg_array, &var_seq_array);
-  gboolean success = emtr_persistent_cache_store_metrics (cache,
+  gboolean success = emer_persistent_cache_store_metrics (cache,
                                                           var_ind_array,
                                                           var_agg_array,
                                                           var_seq_array,
@@ -325,7 +323,7 @@ test_persistent_cache_new_succeeds (void)
 {
   tear_down_files (TEST_DIRECTORY);
   GError *error = NULL;
-  EmtrPersistentCache *cache = emtr_persistent_cache_new (NULL,
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           &error,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
@@ -340,7 +338,7 @@ static void
 test_persistent_cache_store_one_individual_event_succeeds (void)
 {
   tear_down_files (TEST_DIRECTORY);
-  EmtrPersistentCache *cache = emtr_persistent_cache_new (NULL,
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
@@ -355,7 +353,7 @@ static void
 test_persistent_cache_store_one_aggregate_event_succeeds (void)
 {
   tear_down_files (TEST_DIRECTORY);
-  EmtrPersistentCache *cache = emtr_persistent_cache_new (NULL,
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
@@ -370,7 +368,7 @@ static void
 test_persistent_cache_store_one_sequence_event_succeeds (void)
 {
   tear_down_files (TEST_DIRECTORY);
-  EmtrPersistentCache *cache = emtr_persistent_cache_new (NULL,
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
@@ -385,7 +383,7 @@ static void
 test_persistent_cache_store_one_of_each_succeeds (void)
 {
   tear_down_files (TEST_DIRECTORY);
-  EmtrPersistentCache *cache = emtr_persistent_cache_new (NULL,
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
@@ -396,7 +394,7 @@ test_persistent_cache_store_one_of_each_succeeds (void)
   GVariant *agg_a[] = {agg, NULL};
   GVariant *seq_a[] = {seq, NULL};
   capacity_t capacity;
-  gboolean success = emtr_persistent_cache_store_metrics (cache,
+  gboolean success = emer_persistent_cache_store_metrics (cache,
                                                           ind_a,
                                                           agg_a,
                                                           seq_a,
@@ -413,7 +411,7 @@ static void
 test_persistent_cache_store_many_succeeds (void)
 {
   tear_down_files (TEST_DIRECTORY);
-  EmtrPersistentCache *cache = emtr_persistent_cache_new (NULL,
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
@@ -428,7 +426,7 @@ test_persistent_cache_store_when_full_succeeds (void)
 {
   gint space_in_bytes = 3000;
   tear_down_files (TEST_DIRECTORY);
-  EmtrPersistentCache *cache = emtr_persistent_cache_new (NULL,
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           space_in_bytes);
@@ -451,7 +449,7 @@ static void
 test_persistent_cache_drain_one_individual_succeeds (void)
 {
   tear_down_files (TEST_DIRECTORY);
-  EmtrPersistentCache *cache = emtr_persistent_cache_new (NULL,
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
@@ -459,7 +457,7 @@ test_persistent_cache_drain_one_individual_succeeds (void)
   GVariant *var = make_individual_event (1);
   GVariant *var_array[] = {var, NULL};
   GVariant *empty_array[] = {NULL};
-  emtr_persistent_cache_store_metrics (cache,
+  emer_persistent_cache_store_metrics (cache,
                                        var_array,
                                        empty_array,
                                        empty_array,
@@ -468,7 +466,7 @@ test_persistent_cache_drain_one_individual_succeeds (void)
   GVariant **ind_array = NULL;
   GVariant **agg_array = NULL;
   GVariant **seq_array = NULL;
-  gboolean success = emtr_persistent_cache_drain_metrics (cache,
+  gboolean success = emer_persistent_cache_drain_metrics (cache,
                                                           &ind_array,
                                                           &agg_array,
                                                           &seq_array);
@@ -487,7 +485,7 @@ static void
 test_persistent_cache_drain_one_aggregate_succeeds (void)
 {
   tear_down_files (TEST_DIRECTORY);
-  EmtrPersistentCache *cache = emtr_persistent_cache_new (NULL,
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
@@ -495,7 +493,7 @@ test_persistent_cache_drain_one_aggregate_succeeds (void)
   GVariant *var = make_aggregate_event (1);
   GVariant *var_array[] = {var, NULL};
   GVariant *empty_array[] = {NULL};
-  emtr_persistent_cache_store_metrics (cache,
+  emer_persistent_cache_store_metrics (cache,
                                        empty_array,
                                        var_array,
                                        empty_array,
@@ -504,7 +502,7 @@ test_persistent_cache_drain_one_aggregate_succeeds (void)
   GVariant **ind_array = NULL;
   GVariant **agg_array = NULL;
   GVariant **seq_array = NULL;
-  gboolean success = emtr_persistent_cache_drain_metrics (cache,
+  gboolean success = emer_persistent_cache_drain_metrics (cache,
                                                           &ind_array,
                                                           &agg_array,
                                                           &seq_array);
@@ -523,7 +521,7 @@ static void
 test_persistent_cache_drain_one_sequence_succeeds (void)
 {
   tear_down_files (TEST_DIRECTORY);
-  EmtrPersistentCache *cache = emtr_persistent_cache_new (NULL,
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
@@ -531,7 +529,7 @@ test_persistent_cache_drain_one_sequence_succeeds (void)
   GVariant *var = make_sequence_event (1);
   GVariant *var_array[] = {var, NULL};
   GVariant *empty_array[] = {NULL};
-  emtr_persistent_cache_store_metrics (cache,
+  emer_persistent_cache_store_metrics (cache,
                                        empty_array,
                                        empty_array,
                                        var_array,
@@ -540,7 +538,7 @@ test_persistent_cache_drain_one_sequence_succeeds (void)
   GVariant **ind_array = NULL;
   GVariant **agg_array = NULL;
   GVariant **seq_array = NULL;
-  gboolean success = emtr_persistent_cache_drain_metrics (cache,
+  gboolean success = emer_persistent_cache_drain_metrics (cache,
                                                           &ind_array,
                                                           &agg_array,
                                                           &seq_array);
@@ -559,7 +557,7 @@ static void
 test_persistent_cache_drain_many_succeeds (void)
 {
   tear_down_files (TEST_DIRECTORY);
-  EmtrPersistentCache *cache = emtr_persistent_cache_new (NULL,
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
@@ -570,7 +568,7 @@ test_persistent_cache_drain_many_succeeds (void)
   GVariant **agg_array;
   GVariant **seq_array;
   make_many_events (&ind_array, &agg_array, &seq_array);
-  emtr_persistent_cache_store_metrics (cache,
+  emer_persistent_cache_store_metrics (cache,
                                        ind_array,
                                        agg_array,
                                        seq_array,
@@ -580,7 +578,7 @@ test_persistent_cache_drain_many_succeeds (void)
   GVariant **new_ind_array = NULL;
   GVariant **new_agg_array = NULL;
   GVariant **new_seq_array = NULL;
-  gboolean success = emtr_persistent_cache_drain_metrics (cache,
+  gboolean success = emer_persistent_cache_drain_metrics (cache,
                                                           &new_ind_array,
                                                           &new_agg_array,
                                                           &new_seq_array);
@@ -602,14 +600,14 @@ test_persistent_cache_drain_empty_succeeds (void)
 {
   tear_down_files (TEST_DIRECTORY);
   // Don't store anything.
-  EmtrPersistentCache *cache = emtr_persistent_cache_new (NULL,
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
   GVariant **ind_array;
   GVariant **agg_array;
   GVariant **seq_array;
-  gboolean success = emtr_persistent_cache_drain_metrics (cache,
+  gboolean success = emer_persistent_cache_drain_metrics (cache,
                                                           &ind_array,
                                                           &agg_array,
                                                           &seq_array);
@@ -627,18 +625,18 @@ static void
 test_persistent_cache_purges_when_out_of_date_succeeds (void)
 {
   tear_down_files (TEST_DIRECTORY);
-  EmtrPersistentCache *cache = emtr_persistent_cache_new (NULL,
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
                                                           TEST_SIZE);
   capacity_t capacity;
   store_many (cache, &capacity);
   gboolean success =
-    emtr_persistent_cache_set_different_version_for_testing ();
+    emer_persistent_cache_set_different_version_for_testing ();
   g_object_unref (cache);
   g_assert (success);
 
-  EmtrPersistentCache *cache2 = emtr_persistent_cache_new (NULL,
+  EmerPersistentCache *cache2 = emer_persistent_cache_new (NULL,
                                                            NULL,
                                                            TEST_DIRECTORY,
                                                            TEST_SIZE);
@@ -646,7 +644,7 @@ test_persistent_cache_purges_when_out_of_date_succeeds (void)
   GVariant **ind_array;
   GVariant **agg_array;
   GVariant **seq_array;
-  emtr_persistent_cache_drain_metrics (cache2,
+  emer_persistent_cache_drain_metrics (cache2,
                                        &ind_array,
                                        &agg_array,
                                        &seq_array);
@@ -657,9 +655,12 @@ test_persistent_cache_purges_when_out_of_date_succeeds (void)
   g_object_unref (cache2);
 }
 
-void
-add_persistent_cache_tests (void)
+int
+main (int                argc,
+      const char * const argv[])
 {
+  g_test_init (&argc, (char ***) &argv, NULL);
+
   g_test_add_func ("/persistent-cache/new-succeeds",
                    test_persistent_cache_new_succeeds);
   g_test_add_func ("/persistent-cache/store-one-individual-event-succeeds",
@@ -686,4 +687,6 @@ add_persistent_cache_tests (void)
                    test_persistent_cache_drain_empty_succeeds);
   g_test_add_func ("/persistent-cache/purges-when-out-of-date-succeeds",
                    test_persistent_cache_purges_when_out_of_date_succeeds);
+
+  return g_test_run ();
 }

@@ -70,7 +70,6 @@ void add_web_tests                 (void);
 void add_connection_tests          (void);
 void add_sender_tests              (void);
 void add_event_recorder_tests      (void);
-void add_persistent_cache_tests    (void);
 void add_machine_id_provider_tests (void);
 
 #endif /* RUN_TESTS_H */

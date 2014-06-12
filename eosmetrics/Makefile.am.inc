@@ -20,7 +20,6 @@ eosmetrics_library_sources = \
 	eosmetrics/emtr-event-recorder.c \
 	eosmetrics/emtr-mac.c eosmetrics/emtr-mac-private.h \
 	eosmetrics/emtr-osversion.c eosmetrics/emtr-osversion-private.h \
-	eosmetrics/emtr-persistent-cache.c eosmetrics/emtr-persistent-cache-private.h \
 	eosmetrics/emtr-sender.c \
 	eosmetrics/emtr-util.c eosmetrics/emtr-util-private.h \
 	eosmetrics/emtr-uuid.c eosmetrics/emtr-uuid-private.h \

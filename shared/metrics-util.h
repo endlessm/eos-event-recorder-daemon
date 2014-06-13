@@ -23,11 +23,15 @@ array of guchar. */
 
 G_BEGIN_DECLS
 
-void      get_uuid_builder               (uuid_t           uuid,
-                                          GVariantBuilder *uuid_builder);
+void      get_builder_from_iter          (GVariantIter       *iter,
+                                          GVariantBuilder    *builder,
+                                          const GVariantType *type);
 
-gboolean  get_current_time               (clockid_t        clock_id,
-                                          gint64          *current_time);
+gboolean  get_current_time               (clockid_t           clock_id,
+                                          gint64             *current_time);
+
+void      get_uuid_builder               (uuid_t              uuid,
+                                          GVariantBuilder    *uuid_builder);
 
 G_END_DECLS
 

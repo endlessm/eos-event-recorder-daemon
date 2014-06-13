@@ -6,33 +6,213 @@
 #include <stdio.h>
 #include <glib/gstdio.h>
 
+#include "shared/metrics-util.h"
+
 static gchar *TEST_DIRECTORY = "/tmp/metrics_testing/";
+
+// Generated via uuidgen.
+#define FAKE_BOOT_ID "baccd4dd-9765-4eb2-a2a0-03c6623471e6\n"
 
 #define TEST_SIZE 1024000
 
 // TODO: Replace this with a reasonable value once it is used.
 #define MAX_BYTES_TO_READ 0
 
+#define NANOSECONDS_PER_MILLISECOND 1000000
+
+#define ACCEPTABLE_OFFSET_VARIANCE (500 /* Milliseconds */ * NANOSECONDS_PER_MILLISECOND)
+
+#define DEFAULT_KEY_FILE_DATA \
+  "[time]\n" \
+  "relative_time_offset=0\n" \
+  "was_reset=true\n" \
+  "absolute_time=1403195800943262692\n" \
+  "relative_time=2516952859775\n" \
+  "boot_id=299a89b4-72c2-455a-b2d3-13c1a7c8c11f\n"
+
 // ---- Helper functions come first ----
 
 static void
-tear_down_file (gchar *dir,
-                gchar *file)
+tear_down_file (const gchar *dir,
+                const gchar *file)
 {
   gchar *combo = g_strconcat (dir, file, NULL);
   g_unlink (combo);
   g_free (combo);
-  return;
 }
 
 static void
-tear_down_files (gchar *directory)
+tear_down_files (gboolean     *unused,
+                 gconstpointer dontuseme)
 {
-  tear_down_file (directory, CACHE_PREFIX INDIVIDUAL_SUFFIX);
-  tear_down_file (directory, CACHE_PREFIX AGGREGATE_SUFFIX);
-  tear_down_file (directory, CACHE_PREFIX SEQUENCE_SUFFIX);
-  tear_down_file (directory, CACHE_PREFIX LOCAL_CACHE_VERSION_METAFILE);
-  g_rmdir (directory);
+  tear_down_file (TEST_DIRECTORY, CACHE_PREFIX INDIVIDUAL_SUFFIX);
+  tear_down_file (TEST_DIRECTORY, CACHE_PREFIX AGGREGATE_SUFFIX);
+  tear_down_file (TEST_DIRECTORY, CACHE_PREFIX SEQUENCE_SUFFIX);
+  tear_down_file (TEST_DIRECTORY, CACHE_PREFIX LOCAL_CACHE_VERSION_METAFILE);
+  tear_down_file (TEST_DIRECTORY, BOOT_TIMING_METAFILE);
+  g_rmdir (TEST_DIRECTORY);
+}
+
+/*
+ * Returns a new GKeyFile associated with the boot timing metafile.
+ * Keyfile should be unref'd via g_key_file_unref().
+ */
+static GKeyFile *
+load_testing_key_file (void)
+{
+  GKeyFile *key_file = g_key_file_new ();
+  gchar *full_path = g_strconcat (TEST_DIRECTORY, BOOT_TIMING_METAFILE, NULL);
+  g_assert (g_key_file_load_from_file (key_file, full_path, G_KEY_FILE_NONE,
+                                       NULL));
+  return key_file;
+}
+
+/*
+ * Will populate the boot metafile with data similar to the default that will be
+ * written when the cache and boot metafile are reset to defaults. Must be
+ * called AFTER the testing directory exists (after a Persistent Cache instance
+ * has been new'd constructed.)
+ */
+static void
+write_default_key_file_to_disk (void)
+{
+  GKeyFile *key_file = g_key_file_new ();
+  g_assert (g_key_file_load_from_data (key_file, DEFAULT_KEY_FILE_DATA, -1,
+                                       G_KEY_FILE_NONE, NULL));
+
+  gchar *full_path = g_strconcat (TEST_DIRECTORY, BOOT_TIMING_METAFILE, NULL);
+  g_assert (g_key_file_save_to_file (key_file, full_path, NULL));
+  g_free (full_path);
+}
+
+/*
+ * Will overwrite the contents of the boot id metafile's boot id with a
+ * given new_boot_id.
+ */
+static void
+set_boot_id_in_metafile (gchar *new_boot_id)
+{
+  GKeyFile *key_file = load_testing_key_file ();
+
+  g_key_file_set_string (key_file,
+                         CACHE_TIMING_GROUP_NAME,
+                         CACHE_LAST_BOOT_ID_KEY,
+                         new_boot_id);
+
+  gchar *full_path = g_strconcat (TEST_DIRECTORY, BOOT_TIMING_METAFILE, NULL);
+  g_assert (g_key_file_save_to_file (key_file, full_path, NULL));
+
+  g_key_file_unref (key_file);
+  g_free (full_path);
+}
+
+/*
+ * Removes the offset key/value pair from the boot metafile to simulate
+ * corruption and writes that change to disk.
+ */
+static void
+remove_offset (void)
+{
+  GKeyFile *key_file = load_testing_key_file ();
+  g_assert (g_key_file_remove_key (key_file, CACHE_TIMING_GROUP_NAME,
+                                   CACHE_RELATIVE_OFFSET_KEY, NULL));
+
+  gchar *full_path = g_strconcat (TEST_DIRECTORY, BOOT_TIMING_METAFILE, NULL);
+  g_assert (g_key_file_save_to_file (key_file, full_path, NULL));
+  g_key_file_unref (key_file);
+  g_free (full_path);
+}
+
+/*
+ * Gets the stored offset from disk (metafile.)
+ */
+static gint64
+read_offset (void)
+{
+  GKeyFile *key_file = load_testing_key_file ();
+  GError *error = NULL;
+  gint64 stored_offset = g_key_file_get_int64 (key_file,
+                                               CACHE_TIMING_GROUP_NAME,
+                                               CACHE_RELATIVE_OFFSET_KEY,
+                                               &error);
+  g_key_file_unref (key_file);
+  g_assert (error == NULL);
+  return stored_offset;
+}
+
+/*
+ * Gets the stored metafile was reset flag from disk (metafile.)
+ */
+static gboolean
+read_whether_boot_offset_is_reset_value (void)
+{
+  GKeyFile *key_file = load_testing_key_file ();
+  GError *error = NULL;
+  gboolean was_reset = g_key_file_get_boolean (key_file,
+                                               CACHE_TIMING_GROUP_NAME,
+                                               CACHE_WAS_RESET_KEY,
+                                               &error);
+  g_key_file_unref (key_file);
+  g_assert_no_error (error);
+  return was_reset;
+}
+
+/*
+ * Gets the stored relative time from disk (metafile.)
+ */
+static gint64
+read_relative_time (void)
+{
+  GKeyFile *key_file = load_testing_key_file ();
+  GError *error = NULL;
+  gint64 stored_offset = g_key_file_get_int64 (key_file,
+                                               CACHE_TIMING_GROUP_NAME,
+                                               CACHE_RELATIVE_TIME_KEY,
+                                               &error);
+  g_key_file_unref (key_file);
+  g_assert_no_error (error);
+  return stored_offset;
+}
+
+/*
+ * Gets the stored absolute time from disk (metafile.)
+ */
+static gint64
+read_absolute_time (void)
+{
+  GKeyFile *key_file = load_testing_key_file ();
+  GError *error = NULL;
+  gint64 stored_offset = g_key_file_get_int64 (key_file,
+                                               CACHE_TIMING_GROUP_NAME,
+                                               CACHE_ABSOLUTE_TIME_KEY,
+                                               &error);
+  g_key_file_unref (key_file);
+  g_assert_no_error (error);
+  return stored_offset;
+}
+
+/*
+ * Will perform a disk lookup of the metafile to see if the stored timestamps
+ * are greater than or equal to the previous timestamps (given as parameters)
+ * and less than or equal to timestamps generated by subsequently generated
+ * timestamps.
+ */
+static gboolean
+boot_timestamp_is_valid (gint64 previous_relative_timestamp,
+                         gint64 previous_absolute_timestamp)
+{
+  gint64 stored_relative_timestamp = read_relative_time ();
+  gint64 stored_absolute_timestamp = read_absolute_time ();
+
+  gint64 after_relative_timestamp, after_absolute_timestamp;
+  g_assert (get_current_time (CLOCK_BOOTTIME, &after_relative_timestamp) &&
+            get_current_time (CLOCK_REALTIME, &after_absolute_timestamp));
+
+  // The actual testing:
+  return (previous_relative_timestamp <= stored_relative_timestamp &&
+          stored_relative_timestamp   <= after_relative_timestamp  &&
+          previous_absolute_timestamp <= stored_absolute_timestamp &&
+          stored_absolute_timestamp   <= after_absolute_timestamp);
 }
 
 static GVariant *
@@ -414,9 +594,9 @@ check_all_gvariants_equal (GVariant **this_array,
 // ----- Actual Test Cases below ------
 
 static void
-test_persistent_cache_new_succeeds (void)
+test_persistent_cache_new_succeeds (gboolean     *unused,
+                                    gconstpointer dontuseme)
 {
-  tear_down_files (TEST_DIRECTORY);
   GError *error = NULL;
   EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           &error,
@@ -430,9 +610,9 @@ test_persistent_cache_new_succeeds (void)
 }
 
 static void
-test_persistent_cache_store_one_individual_event_succeeds (void)
+test_persistent_cache_store_one_individual_event_succeeds (gboolean     *unused,
+                                                           gconstpointer dontuseme)
 {
-  tear_down_files (TEST_DIRECTORY);
   EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
@@ -445,9 +625,9 @@ test_persistent_cache_store_one_individual_event_succeeds (void)
 }
 
 static void
-test_persistent_cache_store_one_aggregate_event_succeeds (void)
+test_persistent_cache_store_one_aggregate_event_succeeds (gboolean     *unused,
+                                                          gconstpointer dontuseme)
 {
-  tear_down_files (TEST_DIRECTORY);
   EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
@@ -460,9 +640,9 @@ test_persistent_cache_store_one_aggregate_event_succeeds (void)
 }
 
 static void
-test_persistent_cache_store_one_sequence_event_succeeds (void)
+test_persistent_cache_store_one_sequence_event_succeeds (gboolean     *unused,
+                                                         gconstpointer dontuseme)
 {
-  tear_down_files (TEST_DIRECTORY);
   EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
@@ -475,9 +655,9 @@ test_persistent_cache_store_one_sequence_event_succeeds (void)
 }
 
 static void
-test_persistent_cache_store_one_of_each_succeeds (void)
+test_persistent_cache_store_one_of_each_succeeds (gboolean     *unused,
+                                                  gconstpointer dontuseme)
 {
-  tear_down_files (TEST_DIRECTORY);
   EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
@@ -520,9 +700,9 @@ test_persistent_cache_store_one_of_each_succeeds (void)
 }
 
 static void
-test_persistent_cache_store_many_succeeds (void)
+test_persistent_cache_store_many_succeeds (gboolean     *unused,
+                                           gconstpointer dontuseme)
 {
-  tear_down_files (TEST_DIRECTORY);
   EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
@@ -549,10 +729,10 @@ test_persistent_cache_store_many_succeeds (void)
 }
 
 static void
-test_persistent_cache_store_when_full_succeeds (void)
+test_persistent_cache_store_when_full_succeeds (gboolean     *unused,
+                                                gconstpointer dontuseme)
 {
   gint space_in_bytes = 3000;
-  tear_down_files (TEST_DIRECTORY);
   EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
@@ -595,9 +775,9 @@ test_persistent_cache_store_when_full_succeeds (void)
 }
 
 static void
-test_persistent_cache_drain_one_individual_succeeds (void)
+test_persistent_cache_drain_one_individual_succeeds (gboolean     *unused,
+                                                     gconstpointer dontuseme)
 {
-  tear_down_files (TEST_DIRECTORY);
   EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
@@ -644,9 +824,9 @@ test_persistent_cache_drain_one_individual_succeeds (void)
 }
 
 static void
-test_persistent_cache_drain_one_aggregate_succeeds (void)
+test_persistent_cache_drain_one_aggregate_succeeds (gboolean     *unused,
+                                                    gconstpointer dontuseme)
 {
-  tear_down_files (TEST_DIRECTORY);
   EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
@@ -693,9 +873,9 @@ test_persistent_cache_drain_one_aggregate_succeeds (void)
 }
 
 static void
-test_persistent_cache_drain_one_sequence_succeeds (void)
+test_persistent_cache_drain_one_sequence_succeeds (gboolean     *unused,
+                                                   gconstpointer dontuseme)
 {
-  tear_down_files (TEST_DIRECTORY);
   EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
@@ -742,9 +922,9 @@ test_persistent_cache_drain_one_sequence_succeeds (void)
 }
 
 static void
-test_persistent_cache_drain_many_succeeds (void)
+test_persistent_cache_drain_many_succeeds (gboolean     *unused,
+                                           gconstpointer dontuseme)
 {
-  tear_down_files (TEST_DIRECTORY);
   EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
@@ -798,9 +978,9 @@ test_persistent_cache_drain_many_succeeds (void)
 }
 
 static void
-test_persistent_cache_drain_empty_succeeds (void)
+test_persistent_cache_drain_empty_succeeds (gboolean     *unused,
+                                            gconstpointer dontuseme)
 {
-  tear_down_files (TEST_DIRECTORY);
   // Don't store anything.
   EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
@@ -826,9 +1006,9 @@ test_persistent_cache_drain_empty_succeeds (void)
 }
 
 static void
-test_persistent_cache_purges_when_out_of_date_succeeds (void)
+test_persistent_cache_purges_when_out_of_date_succeeds (gboolean     *unused,
+                                                        gconstpointer dontuseme)
 {
-  tear_down_files (TEST_DIRECTORY);
   EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
@@ -871,38 +1051,281 @@ test_persistent_cache_purges_when_out_of_date_succeeds (void)
   g_assert (check_all_gvariants_equal (seq_array, empty_array));
 }
 
+/*
+ * Test creates an default boot metafile. A single metric is added. Then it
+ * corrupts the metafile by removing the offset from it. Finally, a store call
+ * is made again to detect the corruption and purge the old metrics, but store
+ * the metrics sent by the latest *_store_metrics() call.
+ */
+static void
+test_persistent_cache_wipes_metrics_when_boot_offset_corrupted (gboolean     *unused,
+                                                                gconstpointer dontuseme)
+{
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
+                                                          NULL,
+                                                          TEST_DIRECTORY,
+                                                          TEST_SIZE);
+
+  write_default_key_file_to_disk ();
+
+  capacity_t capacity;
+
+  // Insert a metric.
+  store_single_individual_event (cache, &capacity);
+
+  // Corrupt metafile.
+  remove_offset ();
+
+  // Reset cached metadata.
+  g_object_unref (cache);
+  EmerPersistentCache *cache2 = emer_persistent_cache_new (NULL,
+                                                           NULL,
+                                                           TEST_DIRECTORY,
+                                                           TEST_SIZE);
+
+  // This call should detect corruption and wipe the cache of all previous
+  // events. However, this new aggregate event should be stored.
+  store_single_aggregate_event (cache2, &capacity);
+
+  GVariant **ind_array;
+  GVariant **agg_array;
+  GVariant **seq_array;
+
+  emer_persistent_cache_drain_metrics (cache2, &ind_array, &agg_array,
+                                       &seq_array, MAX_BYTES_TO_READ);
+
+  // Only an aggregate event should remain.
+  g_assert (c_array_len (agg_array) == 1);
+  g_assert (c_array_len (ind_array) == 0);
+
+  g_object_unref (cache2);
+}
+
+/*
+ * Test creates an default boot metafile. Then it corrupts the metafile by
+ * removing the offset from it. Finally, a store call is made again to detect
+ * the corruption and reset the metafile.
+ */
+static void
+test_persistent_cache_resets_boot_metafile_when_boot_offset_corrupted (gboolean     *unused,
+                                                                       gconstpointer dontuseme)
+{
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
+                                                          NULL,
+                                                          TEST_DIRECTORY,
+                                                          TEST_SIZE);
+
+  write_default_key_file_to_disk ();
+
+  // Corrupt metafile.
+  remove_offset ();
+
+  // This call should detect corruption and reset the metafile.
+  capacity_t capacity;
+  store_single_aggregate_event (cache, &capacity);
+
+  g_assert (read_whether_boot_offset_is_reset_value ());
+
+  g_object_unref (cache);
+}
+
+/*
+ * Test triggers the computation of a new boot offset by storing metrics with no
+ * preexisting boot metafile, which triggers a reset to offset 0 and the saved
+ * boot id to the current boot id on the system. The persistent cache is
+ * then unref'd and made anew. This causes the cached values to be lost. The
+ * metafile must then be mutated to simulate a new boot. Then another storing of
+ * metrics is needed to get the cache to compute a new offset.
+ * Then we need to unref this and create it AGAIN to remove the cached values.
+ * Finally, one more call to store should write new timestamps but shouldn't
+ * have a different offset as it should not be computed again in this case.
+ *
+ * Thus, if you restart the cache with a preexisting cache from a previous boot,
+ * then the relative time offsets will be the same.
+ */
+static void
+test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean     *unused,
+                                                                    gconstpointer dontuseme)
+{
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
+                                                          NULL,
+                                                          TEST_DIRECTORY,
+                                                          TEST_SIZE);
+  capacity_t capacity;
+  store_single_individual_event (cache, &capacity);
+
+  g_assert (read_whether_boot_offset_is_reset_value ());
+
+  gint64 absolute_time, relative_time;
+  g_assert (get_current_time (CLOCK_BOOTTIME, &relative_time) &&
+            get_current_time (CLOCK_REALTIME, &absolute_time));
+
+  g_object_unref (cache);
+  set_boot_id_in_metafile (FAKE_BOOT_ID);
+
+  EmerPersistentCache *cache2 = emer_persistent_cache_new (NULL,
+                                                           NULL,
+                                                           TEST_DIRECTORY,
+                                                           TEST_SIZE);
+
+  // This call should have to compute the boot offset itself.
+  store_single_aggregate_event (cache2, &capacity);
+
+  g_assert (boot_timestamp_is_valid (relative_time, absolute_time));
+  gint64 second_offset = read_offset ();
+
+  // This should not have simply reset the metafile again.
+  g_assert_false (read_whether_boot_offset_is_reset_value ());
+
+  g_object_unref (cache2);
+  EmerPersistentCache *cache3 = emer_persistent_cache_new (NULL,
+                                                           NULL,
+                                                           TEST_DIRECTORY,
+                                                           TEST_SIZE);
+
+  store_single_individual_event (cache3, &capacity);
+
+  gint64 third_offset = read_offset ();
+  g_assert (third_offset == second_offset);
+
+  g_object_unref (cache3);
+}
+
+/*
+ * Test triggers the computation of a new boot offset by storing metrics with no
+ * preexisting boot metafile, which triggers a reset to offset 0. The persistent
+ * cache is then unref'd and made anew. This causes the cached value to be lost.
+ * Then the test mutates the boot id stored from the previous metrics storing
+ * call which will make the persistent cache believe this is a different boot
+ * than before.
+ *
+ * The validity of the two offsets can really only be approximated by a
+ * #define'd acceptable variance.
+ */
+static void
+test_persistent_cache_computes_reasonable_offset (gboolean *unused,
+                                                  gconstpointer dontuseme)
+{
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
+                                                          NULL,
+                                                          TEST_DIRECTORY,
+                                                          TEST_SIZE);
+  capacity_t capacity;
+  store_single_individual_event (cache, &capacity);
+
+  gint64 first_offset = read_offset ();
+  g_assert (read_whether_boot_offset_is_reset_value ());
+
+  gint64 absolute_time, relative_time;
+  g_assert (get_current_time (CLOCK_BOOTTIME, &relative_time) &&
+            get_current_time (CLOCK_REALTIME, &absolute_time));
+
+  g_object_unref (cache);
+  EmerPersistentCache *cache2 = emer_persistent_cache_new (NULL,
+                                                           NULL,
+                                                           TEST_DIRECTORY,
+                                                           TEST_SIZE);
+
+  // Mutate boot id externally because we cannot actually reboot in a test case.
+  set_boot_id_in_metafile (FAKE_BOOT_ID);
+
+  store_single_aggregate_event (cache2, &capacity);
+
+  g_assert (boot_timestamp_is_valid (relative_time, absolute_time));
+  gint64 second_offset = read_offset();
+  g_assert (second_offset <= first_offset + ACCEPTABLE_OFFSET_VARIANCE);
+  g_assert (second_offset >= first_offset - ACCEPTABLE_OFFSET_VARIANCE);
+
+  // This should not have simply reset the metafile again.
+  g_assert (!read_whether_boot_offset_is_reset_value ());
+
+  g_object_unref (cache2);
+}
+
+/*
+ * Will test if the cached offset loading doesn't crash or produce unexpected
+ * values by storing metrics in multiple *_store_metrics() calls without
+ * cleaning up the metafile in between.
+ *
+ * This test does no special mutation of the metafile in the test case beyond
+ * what the production code would normally do. Thus the offset will always be
+ * reset to, and then cached to, 0.
+ */
+static void
+test_persistent_cache_rebuilds_boot_metafile (gboolean     *unused,
+                                              gconstpointer dontuseme)
+{
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
+                                                          NULL,
+                                                          TEST_DIRECTORY,
+                                                          TEST_SIZE);
+  capacity_t capacity;
+  store_single_individual_event (cache, &capacity);
+
+  gint64 first_offset = read_offset ();
+  gint64 absolute_time, relative_time;
+  g_assert (get_current_time (CLOCK_BOOTTIME, &relative_time) &&
+            get_current_time (CLOCK_REALTIME, &absolute_time));
+
+  store_single_sequence_event (cache, &capacity);
+
+  g_assert (boot_timestamp_is_valid (relative_time, absolute_time));
+  gint64 second_offset = read_offset();
+
+  // The offset should not have changed.
+  g_assert (first_offset == second_offset);
+  g_assert (read_whether_boot_offset_is_reset_value ());
+
+  g_object_unref (cache);
+}
+
 int
 main (int                argc,
       const char * const argv[])
 {
   g_test_init (&argc, (char ***) &argv, NULL);
 
-  g_test_add_func ("/persistent-cache/new-succeeds",
-                   test_persistent_cache_new_succeeds);
-  g_test_add_func ("/persistent-cache/store-one-individual-event-succeeds",
-                   test_persistent_cache_store_one_individual_event_succeeds);
-  g_test_add_func ("/persistent-cache/store-one-aggregate-event-succeeds",
-                   test_persistent_cache_store_one_aggregate_event_succeeds);
-  g_test_add_func ("/persistent-cache/store-one-sequence-event-succeeds",
-                   test_persistent_cache_store_one_sequence_event_succeeds);
-  g_test_add_func ("/persistent-cache/store-one-of-each-succeeds",
-                   test_persistent_cache_store_one_of_each_succeeds);
-  g_test_add_func ("/persistent-cache/store-many-succeeds",
-                   test_persistent_cache_store_many_succeeds);
-  g_test_add_func ("/persistent-cache/store-when-full-succeeds",
-                   test_persistent_cache_store_when_full_succeeds);
-  g_test_add_func ("/persistent-cache/drain-one-individual-succeeds",
-                   test_persistent_cache_drain_one_individual_succeeds);
-  g_test_add_func ("/persistent-cache/drain-one-aggregate-succeeds",
-                   test_persistent_cache_drain_one_aggregate_succeeds);
-  g_test_add_func ("/persistent-cache/drain-one-sequence-succeeds",
-                   test_persistent_cache_drain_one_sequence_succeeds);
-  g_test_add_func ("/persistent-cache/drain-many-succeeds",
-                   test_persistent_cache_drain_many_succeeds);
-  g_test_add_func ("/persistent-cache/drain-empty-succeeds",
-                   test_persistent_cache_drain_empty_succeeds);
-  g_test_add_func ("/persistent-cache/purges-when-out-of-date-succeeds",
-                   test_persistent_cache_purges_when_out_of_date_succeeds);
+// We are using a gboolean as a fixture type, but it will go unused.
+#define ADD_CACHE_TEST_FUNC(path, func) \
+  g_test_add((path), gboolean, NULL, tear_down_files, (func), tear_down_files)
+
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/new-succeeds",
+                       test_persistent_cache_new_succeeds);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/store-one-individual-event-succeeds",
+                       test_persistent_cache_store_one_individual_event_succeeds);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/store-one-aggregate-event-succeeds",
+                       test_persistent_cache_store_one_aggregate_event_succeeds);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/store-one-sequence-event-succeeds",
+                       test_persistent_cache_store_one_sequence_event_succeeds);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/store-one-of-each-succeeds",
+                       test_persistent_cache_store_one_of_each_succeeds);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/store-many-succeeds",
+                       test_persistent_cache_store_many_succeeds);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/store-when-full-succeeds",
+                       test_persistent_cache_store_when_full_succeeds);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/drain-one-individual-succeeds",
+                       test_persistent_cache_drain_one_individual_succeeds);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/drain-one-aggregate-succeeds",
+                       test_persistent_cache_drain_one_aggregate_succeeds);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/drain-one-sequence-succeeds",
+                       test_persistent_cache_drain_one_sequence_succeeds);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/drain-many-succeeds",
+                       test_persistent_cache_drain_many_succeeds);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/drain-empty-succeeds",
+                       test_persistent_cache_drain_empty_succeeds);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/purges-when-out-of-date-succeeds",
+                       test_persistent_cache_purges_when_out_of_date_succeeds);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/rebuilds-boot-metafile",
+                       test_persistent_cache_rebuilds_boot_metafile);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/computes-reasonable-offset",
+                       test_persistent_cache_computes_reasonable_offset);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/does-not-compute-offset-when-boot-id-is-same",
+                       test_persistent_cache_does_not_compute_offset_when_boot_id_is_same);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/resets-boot-metafile-when-boot-offset-corrupted",
+                       test_persistent_cache_resets_boot_metafile_when_boot_offset_corrupted);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/wipes-metrics-when-boot-offset-corrupted",
+                       test_persistent_cache_wipes_metrics_when_boot_offset_corrupted);
+#undef ADD_CACHE_TEST_FUNC
 
   return g_test_run ();
 }

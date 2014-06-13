@@ -36,6 +36,12 @@ G_BEGIN_DECLS
 #define LOCAL_CACHE_VERSION_METAFILE "local_metafile"
 
 /*
+ * The name of the meta-file containing the relative time, absolute time, and
+ * boot id meta-data.
+ */
+#define BOOT_TIMING_METAFILE "boot_timing_metafile"
+
+/*
  * The prefix for all metrics cache files.
  */
 #define CACHE_PREFIX "cache_"
@@ -53,6 +59,16 @@ G_BEGIN_DECLS
 #define INDIVIDUAL_TYPE "(uayxmv)"
 #define AGGREGATE_TYPE  "(uayxxmv)"
 #define SEQUENCE_TYPE   "(uaya(xmv))"
+
+/*
+ * Constants for GKeyFile metadata.
+ */
+#define CACHE_TIMING_GROUP_NAME   "time"
+#define CACHE_ABSOLUTE_TIME_KEY   "absolute_time"
+#define CACHE_RELATIVE_TIME_KEY   "relative_time"
+#define CACHE_LAST_BOOT_ID_KEY    "boot_id"
+#define CACHE_RELATIVE_OFFSET_KEY "relative_time_offset"
+#define CACHE_WAS_RESET_KEY       "was_reset"
 
 typedef struct _EmerPersistentCache EmerPersistentCache;
 typedef struct _EmerPersistentCacheClass EmerPersistentCacheClass;

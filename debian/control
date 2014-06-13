@@ -12,6 +12,7 @@ Build-Depends: autotools-dev,
                libsoup2.4-dev (>= 2.42),
                pkg-config,
                python-dbusmock,
+               systemd,
                uuid-dev,
                yelp-tools,
                yelp-xsl

@@ -23,8 +23,7 @@ Homepage: http://www.endlessm.com
 Package: eos-metrics-event-recorder
 Section: non-free/net
 Architecture: any
-Depends: libeosmetrics-0-0 (= ${binary:Version}),
-         ${misc:Depends}
+Depends: ${misc:Depends}
 Description: EndlessOS Metrics Kit
  Daemon for aggregating and recording metrics data in EndlessOS.
 
@@ -43,7 +42,8 @@ Description: Files needed for developing using the EndlessOS Metrics Kit
 Package: libeosmetrics-0-0
 Section: non-free/libs
 Architecture: any
-Depends: ${shlibs:Depends},
+Depends: eos-metrics-event-recorder,
+         ${shlibs:Depends},
          ${misc:Depends}
 Description: EndlessOS Metrics Kit
  Library for recording and sending metrics data in EndlessOS.

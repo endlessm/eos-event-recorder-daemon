@@ -3,6 +3,7 @@ Priority: standard
 Maintainer: Philip Chimento <philip@endlessm.com>
 Build-Depends: autotools-dev,
                debhelper (>= 8.0.0),
+               dh-systemd,
                gobject-introspection,
                gtk-doc-tools (>= 1.18),
                libgirepository1.0-dev,
@@ -17,6 +18,14 @@ Build-Depends: autotools-dev,
 Standards-Version: 3.9.4
 Section: non-free/libs
 Homepage: http://www.endlessm.com
+
+Package: eos-metrics-event-recorder
+Section: non-free/net
+Architecture: any
+Depends: libeosmetrics-0-0 (= ${binary:Version}),
+         ${misc:Depends}
+Description: EndlessOS Metrics Kit
+ Daemon for aggregating and recording metrics data in EndlessOS.
 
 Package: eos-metrics-0-dev
 Section: non-free/libdevel

@@ -496,7 +496,7 @@ reset_boot_timing_metafile (EmerPersistentCache *self,
   uuid_t system_boot_id;
   if (!get_system_boot_id (system_boot_id, &error))
     {
-      g_critical ("Failed to reset boot metadata. Error:%s", error->message);
+      g_critical ("Failed to reset boot metadata. Error: %s", error->message);
       g_error_free (error);
       return FALSE;
     }

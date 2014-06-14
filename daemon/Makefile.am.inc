@@ -7,6 +7,7 @@ eos_metrics_event_recorder_SOURCES = \
 	daemon/emer-main.c \
 	daemon/emer-daemon.c daemon/emer-daemon.h \
 	daemon/emer-machine-id-provider.c daemon/emer-machine-id-provider.h \
+	daemon/emer-permissions-provider.c daemon/emer-permissions-provider.h \
 	daemon/emer-persistent-cache.c daemon/emer-persistent-cache.h \
 	emer-event-recorder-server.c emer-event-recorder-server.h \
 	shared/metrics-util.c shared/metrics-util.h \

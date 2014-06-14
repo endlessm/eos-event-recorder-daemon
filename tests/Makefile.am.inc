@@ -2,8 +2,9 @@
 
 noinst_PROGRAMS = \
 	tests/run-tests \
-	tests/daemon/test-machine-id-provider \
 	tests/daemon/test-daemon \
+	tests/daemon/test-machine-id-provider \
+	tests/daemon/test-permissions-provider \
 	tests/daemon/test-persistent-cache \
 	$(NULL)
 
@@ -58,6 +59,13 @@ tests_daemon_test_machine_id_provider_SOURCES = \
 tests_daemon_test_machine_id_provider_CPPFLAGS = $(DAEMON_TEST_FLAGS)
 tests_daemon_test_machine_id_provider_LDADD = $(DAEMON_TEST_LIBS)
 
+tests_daemon_test_permissions_provider_SOURCES = \
+	tests/daemon/test-permissions-provider.c \
+	daemon/emer-permissions-provider.c daemon/emer-permissions-provider.h \
+	$(NULL)
+tests_daemon_test_permissions_provider_CPPFLAGS = $(DAEMON_TEST_FLAGS)
+tests_daemon_test_permissions_provider_LDADD = $(DAEMON_TEST_LIBS)
+
 tests_daemon_test_persistent_cache_SOURCES = \
 	tests/daemon/test-persistent-cache.c \
 	daemon/emer-persistent-cache.c daemon/emer-persistent-cache.h \
@@ -78,6 +86,7 @@ TESTS = \
 	tests/daemon/test-daemon \
 	tests/daemon/test-machine-id-provider \
 	tests/daemon/test-persistent-cache \
+	tests/daemon/test-permissions-provider \
 	$(javascript_tests) \
 	$(NULL)
 TEST_EXTENSIONS = .js .py

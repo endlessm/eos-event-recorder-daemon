@@ -147,6 +147,64 @@ test_permissions_provider_get_daemon_enabled_fallback (Fixture      *fixture,
   g_test_assert_expected_messages ();
 }
 
+static void
+test_permissions_provider_creates_config_file_if_absent (Fixture      *fixture,
+                                                         gconstpointer unused)
+{
+  g_assert (g_file_query_exists (fixture->temp_file, NULL));
+}
+
+static void
+test_permissions_provider_reloads_changed_config_file (Fixture      *fixture,
+                                                       gconstpointer unused)
+{
+  g_assert (emer_permissions_provider_get_daemon_enabled (fixture->test_object));
+  g_assert (g_file_replace_contents (fixture->temp_file,
+                                     CONFIG_FILE_DISABLED_CONTENTS,
+                                     strlen (CONFIG_FILE_DISABLED_CONTENTS),
+                                     NULL /* etag */, FALSE /* backup */,
+                                     G_FILE_CREATE_NONE, NULL /* new etag */,
+                                     NULL, NULL));
+  g_main_loop_run (fixture->main_loop);
+  g_assert (fixture->notify_daemon_called);
+  g_assert_false (fixture->notify_daemon_called_with);
+  g_assert_false (emer_permissions_provider_get_daemon_enabled (fixture->test_object));
+}
+
+static void
+test_permissions_provider_loads_created_config_file (Fixture      *fixture,
+                                                     gconstpointer unused)
+{
+  g_assert_false (emer_permissions_provider_get_daemon_enabled (fixture->test_object));
+  g_assert (g_file_replace_contents (fixture->temp_file,
+                                     CONFIG_FILE_ENABLED_CONTENTS,
+                                     strlen (CONFIG_FILE_ENABLED_CONTENTS),
+                                     NULL /* etag */, FALSE /* backup */,
+                                     G_FILE_CREATE_NONE, NULL /* new etag */,
+                                     NULL, NULL));
+  g_main_loop_run (fixture->main_loop);
+  g_assert (fixture->notify_daemon_called);
+  g_assert (fixture->notify_daemon_called_with);
+  g_assert (emer_permissions_provider_get_daemon_enabled (fixture->test_object));
+}
+
+static void
+test_permissions_provider_recreates_deleted_config_file (Fixture      *fixture,
+                                                         gconstpointer unused)
+{
+  g_assert (g_file_delete (fixture->temp_file, NULL, NULL));
+  g_main_loop_run (fixture->main_loop);
+  g_assert (fixture->notify_daemon_called);
+  g_assert_false (fixture->notify_daemon_called_with);
+  g_assert_false (emer_permissions_provider_get_daemon_enabled (fixture->test_object));
+
+  /* We don't block on recreating the config file, so if we were to assert that
+  it had been created, we couldn't guarantee that it had finished being
+  recreated by the time an assertion happened. So, less than ideally, the test
+  has to be satisfied with the fact that notify::daemon-enabled was called after
+  the file was deleted. */
+}
+
 /* This is run in an idle function so that it doesn't quit the main loop before
 the main loop has started. */
 static gboolean
@@ -242,6 +300,18 @@ main (int                argc,
                                  CONFIG_FILE_INVALID_CONTENTS,
                                  setup_invalid_file,
                                  test_permissions_provider_get_daemon_enabled_fallback);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/creates-config-file-if-absent",
+                                 NULL, setup,
+                                 test_permissions_provider_creates_config_file_if_absent);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/reloads-changed-config-file",
+                                 CONFIG_FILE_ENABLED_CONTENTS, setup,
+                                 test_permissions_provider_reloads_changed_config_file);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/loads-created-config-file",
+                                 NULL, setup,
+                                 test_permissions_provider_loads_created_config_file);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/recreates-deleted-config-file",
+                                 CONFIG_FILE_ENABLED_CONTENTS, setup,
+                                 test_permissions_provider_recreates_deleted_config_file);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/set-daemon-enabled",
                                  CONFIG_FILE_ENABLED_CONTENTS, setup,
                                  test_permissions_provider_set_daemon_enabled);

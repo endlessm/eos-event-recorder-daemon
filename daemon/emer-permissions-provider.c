@@ -7,13 +7,25 @@
 #include <glib.h>
 #include <gio/gio.h>
 
+/* When a file is overwritten, that involves several emissions of the
+GFileMonitor::changed signal in quick succession. The permissions provider
+only takes action after this number of milliseconds have elapsed after the last
+emission of GFileMonitor::changed. Currently this value is equal to the default
+value of GFileMonitor:rate-limit. */
+#define MILLISECONDS_TO_WAIT_FOR_FILE_TO_SETTLE_DOWN 800
+
 typedef struct _EmerPermissionsProviderPrivate
 {
   /* Permissions, cached from config file */
   GKeyFile *permissions;
 
-  /* For reading the config file */
+  /* For reading and monitoring the config file */
   GFile *config_file;
+  GFileMonitor *config_file_monitor;
+  gulong monitor_handler;
+
+  /* For delaying the reaction to GFileMonitor::changed */
+  guint reload_source_id;
 } EmerPermissionsProviderPrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerPermissionsProvider, emer_permissions_provider, G_TYPE_OBJECT)
@@ -63,7 +75,12 @@ write_config_file_sync (EmerPermissionsProvider *self)
   gchar *config_file_path = g_file_get_path (priv->config_file);
   GError *error = NULL;
 
-  if (!g_key_file_save_to_file (priv->permissions, config_file_path, &error))
+  g_signal_handler_block (priv->config_file_monitor, priv->monitor_handler);
+  gboolean success = g_key_file_save_to_file (priv->permissions,
+                                              config_file_path, &error);
+  g_signal_handler_unblock (priv->config_file_monitor, priv->monitor_handler);
+
+  if (!success)
     {
       g_critical ("Could not write to permissions config file '%s': %s.",
                   config_file_path, error->message);
@@ -73,8 +90,8 @@ write_config_file_sync (EmerPermissionsProvider *self)
   g_free (config_file_path);
 }
 
-/* Read config values from the config file, and if that fails assume the
-default. Also emits a property notification. */
+/* Read config values from the config file, recreating it if necessary, and if
+that fails assume the default. Also emits a property notification. */
 static void
 read_config_file_sync (EmerPermissionsProvider *self)
 {
@@ -90,17 +107,21 @@ read_config_file_sync (EmerPermissionsProvider *self)
     {
       load_fallback_data (self);
 
-      if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT) &&
-          !g_error_matches (error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_NOT_FOUND))
-        g_critical ("Permissions config file '%s' was invalid or could not be "
-                    "read. Loading fallback data. Message: %s.", path,
-                    error->message);
-      /* but if the config file was simply not there, fail silently and stick
-      with the defaults */
+      if (g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT) ||
+          g_error_matches (error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_NOT_FOUND))
+        {
+          g_clear_error (&error);
+          write_config_file_sync (self);
+          goto finally;
+        }
 
+      g_critical ("Permissions config file '%s' was invalid or could not be "
+                  "read. Loading fallback data. Message: %s.", path,
+                  error->message);
       g_clear_error (&error);
     }
 
+finally:
   g_object_notify (G_OBJECT (self), "daemon-enabled");
 
   g_free (path);
@@ -126,10 +147,97 @@ write_config_file_async (EmerPermissionsProvider *self)
   g_object_unref (task);
 }
 
+/* Helper function to run read_config_file_sync() in another thread. */
+static void
+read_task_func (GTask                   *task,
+                EmerPermissionsProvider *self,
+                gpointer                 data,
+                GCancellable            *cancellable)
+{
+  read_config_file_sync (self);
+  g_task_return_pointer (task, NULL, NULL);
+}
+
+/* "Fire and forget" read_config_file_sync(). Don't wait for it to finish. */
+static gboolean
+read_config_file_async (EmerPermissionsProvider *self)
+{
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  GTask *task = g_task_new (self, NULL, NULL, NULL);
+  g_task_run_in_thread (task, (GTaskThreadFunc) read_task_func);
+  g_object_unref (task);
+
+  priv->reload_source_id = 0;
+  return G_SOURCE_REMOVE;
+}
+
+static void
+on_config_file_changed (GFileMonitor            *monitor,
+                        GFile                   *file,
+                        GFile                   *other_file,
+                        GFileMonitorEvent        event_type,
+                        EmerPermissionsProvider *self)
+{
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  switch (event_type)
+    {
+    case G_FILE_MONITOR_EVENT_CHANGED:
+    case G_FILE_MONITOR_EVENT_CREATED:
+    case G_FILE_MONITOR_EVENT_DELETED:
+    case G_FILE_MONITOR_EVENT_MOVED:
+    case G_FILE_MONITOR_EVENT_CHANGES_DONE_HINT:
+      /* DELETED and CREATED happen in quick succession when the file is
+      overwritten, e.g. with g_file_set_contents; so wait until a particular
+      amount of time has elapsed after the last emission of this signal. */
+      if (priv->reload_source_id != 0)
+        g_source_remove (priv->reload_source_id);
+      priv->reload_source_id = g_timeout_add (MILLISECONDS_TO_WAIT_FOR_FILE_TO_SETTLE_DOWN,
+                                              (GSourceFunc) read_config_file_async,
+                                              self);
+      break;
+
+    case G_FILE_MONITOR_EVENT_UNMOUNTED:
+      g_critical ("The metrics permissions file was unmounted. This was "
+                  "seriously unexpected.");
+      break;
+
+    case G_FILE_MONITOR_EVENT_ATTRIBUTE_CHANGED:
+    case G_FILE_MONITOR_EVENT_PRE_UNMOUNT:
+      /* not interested in this change event */
+      break;
+
+    default:
+      g_message ("GFileMonitor added another event type, %d, that you may want "
+                 "to consider in %s.", event_type, G_STRFUNC);
+      break;
+    }
+}
+
 static void
 emer_permissions_provider_constructed (GObject *object)
 {
   EmerPermissionsProvider *self = EMER_PERMISSIONS_PROVIDER (object);
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  GError *error = NULL;
+  priv->config_file_monitor = g_file_monitor_file (priv->config_file,
+                                                   G_FILE_MONITOR_WATCH_HARD_LINKS,
+                                                   NULL, &error);
+  if (priv->config_file_monitor == NULL)
+    {
+      g_critical ("Error monitoring the config file: %s.", error->message);
+      g_clear_error (&error);
+      return;
+    }
+  priv->monitor_handler = g_signal_connect (priv->config_file_monitor,
+                                            "changed",
+                                            G_CALLBACK (on_config_file_changed),
+                                            self);
 
   /* One blocking call on daemon startup (usually once per boot) */
   read_config_file_sync (self);
@@ -199,8 +307,12 @@ emer_permissions_provider_finalize (GObject *object)
   EmerPermissionsProviderPrivate *priv =
     emer_permissions_provider_get_instance_private (self);
 
+  if (priv->reload_source_id != 0)
+    g_source_remove (priv->reload_source_id);
+
   g_key_file_unref (priv->permissions);
   g_clear_object (&priv->config_file);
+  g_clear_object (&priv->config_file_monitor);
 
   G_OBJECT_CLASS (emer_permissions_provider_parent_class)->finalize (object);
 }

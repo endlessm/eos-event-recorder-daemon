@@ -5,6 +5,7 @@ eos-metrics-0.0.0
 /tests/daemon/test-machine-id-provider
 /tests/daemon/test-boot-id-provider
 /tests/daemon/test-daemon
+/tests/daemon/test-permissions-provider
 /tests/daemon/test-persistent-cache
 /EosMetrics-0.gir
 /EosMetrics-0.typelib

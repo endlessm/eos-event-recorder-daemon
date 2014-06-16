@@ -83,6 +83,9 @@ typedef struct EmtrEventRecorderPrivate
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmtrEventRecorder, emtr_event_recorder, G_TYPE_OBJECT)
 
+/* Callback to make the finish call after async D-Bus calls */
+typedef gboolean (*FinishCallback) (EmerEventRecorderServer *, GAsyncResult *, GError **);
+
 static void
 emtr_event_recorder_finalize (GObject *object)
 {
@@ -236,6 +239,73 @@ append_event_to_sequence (EmtrEventRecorderPrivate *priv,
 }
 
 /*
+ * The callback for the asynchronous D-Bus calls, send_event_to_dbus and
+ * send_event_sequence_to_dbus. Calls the finish method.
+ * @finish_callback: the finish D-Bus method call, will be called in this
+ * function.
+ */
+static void
+send_event_to_dbus_finish_callback (EmerEventRecorderServer *dbus_proxy,
+                                    GAsyncResult            *res,
+                                    FinishCallback           finish_callback)
+{
+  GError *error = NULL;
+  gboolean success = finish_callback (dbus_proxy, res, &error);
+
+  if (!success)
+    {
+      g_warning ("Failed to send event to DBus client-side daemon: %s.",
+                 error->message);
+      g_error_free (error);
+    }
+}
+
+/* Send either singular or aggregate event to DBus, currently a no-op.
+   num_events parameter is ignored if is_aggregate is FALSE. */
+static void
+send_event_to_dbus (EmtrEventRecorderPrivate *priv,
+                    uuid_t                    parsed_event_id,
+                    GVariant                 *auxiliary_payload,
+                    gint64                    relative_time,
+                    gboolean                  is_aggregate,
+                    gint                      num_events)
+{
+  GVariantBuilder uuid_builder;
+  get_uuid_builder (parsed_event_id, &uuid_builder);
+  GVariant *event_id_variant = g_variant_builder_end (&uuid_builder);
+
+  /* Variants sent to DBus are not allowed to be NULL or maybe types. */
+  gboolean has_payload = auxiliary_payload != NULL;
+  GVariant *maybe_auxiliary_payload = has_payload ?
+    g_variant_new_variant (auxiliary_payload) : priv->empty_auxiliary_payload;
+  if (is_aggregate)
+    {
+      emer_event_recorder_server_call_record_aggregate_event (priv->dbus_proxy,
+                                                              getuid (),
+                                                              event_id_variant,
+                                                              num_events,
+                                                              relative_time,
+                                                              has_payload,
+                                                              maybe_auxiliary_payload,
+                                                              NULL /* GCancellable */,
+                                                              (GAsyncReadyCallback) send_event_to_dbus_finish_callback,
+                                                              (FinishCallback) emer_event_recorder_server_call_record_aggregate_event_finish);
+    }
+  else
+    {
+      emer_event_recorder_server_call_record_singular_event (priv->dbus_proxy,
+                                                             getuid (),
+                                                             event_id_variant,
+                                                             relative_time,
+                                                             has_payload,
+                                                             maybe_auxiliary_payload,
+                                                             NULL /* GCancellable */,
+                                                             (GAsyncReadyCallback) send_event_to_dbus_finish_callback,
+                                                             (FinishCallback) emer_event_recorder_server_call_record_singular_event_finish);
+    }
+}
+
+/*
  * Sends the corresponding event_sequence GVariant to D-Bus.
  */
 static void
@@ -243,8 +313,6 @@ send_event_sequence_to_dbus (EmtrEventRecorderPrivate *priv,
                              GVariant                 *event_id,
                              GArray                   *event_sequence)
 {
-  GError *error = NULL;
-
   GVariantBuilder event_sequence_builder;
   g_variant_builder_init (&event_sequence_builder, G_VARIANT_TYPE ("a(xbv)"));
   for (int i = 0; i < event_sequence->len; i++)
@@ -255,17 +323,13 @@ send_event_sequence_to_dbus (EmtrEventRecorderPrivate *priv,
   GVariant *event_sequence_variant =
     g_variant_builder_end (&event_sequence_builder);
 
-  if (!emer_event_recorder_server_call_record_event_sequence_sync (priv->dbus_proxy,
-                                                                   getuid (),
-                                                                   event_id,
-                                                                   event_sequence_variant,
-                                                                   NULL /* GCancellable */,
-                                                                   &error))
-    {
-      g_warning ("Failed to send event to DBus client-side daemon: %s",
-                 error->message);
-      g_error_free (error);
-    }
+  emer_event_recorder_server_call_record_event_sequence (priv->dbus_proxy,
+                                                         getuid (),
+                                                         event_id,
+                                                         event_sequence_variant,
+                                                         NULL /* GCancellable */,
+                                                         (GAsyncReadyCallback) send_event_to_dbus_finish_callback,
+                                                         (FinishCallback) emer_event_recorder_server_call_record_event_sequence_finish);
 }
 
 /* PUBLIC API */
@@ -311,55 +375,6 @@ emtr_event_recorder_get_default (void)
   return singleton;
 }
 
-/* Send either singular or aggregate event to DBus, currently a no-op. 
-   num_events parameter is ignored if is_aggregate is FALSE. */
-static void send_event_to_dbus (EmtrEventRecorderPrivate *priv,
-                                uuid_t                    parsed_event_id,
-                                GVariant                 *auxiliary_payload,
-                                gint64                    relative_time,
-                                gboolean                  is_aggregate,
-                                gint                      num_events)
-{
-  GError *error = NULL;
-  GVariantBuilder uuid_builder;
-  get_uuid_builder (parsed_event_id, &uuid_builder);
-  GVariant *event_id_variant = g_variant_builder_end (&uuid_builder);
-
-  /* Variants sent to DBus are not allowed to be NULL or maybe types. */
-  gboolean has_payload = auxiliary_payload != NULL;
-  GVariant *maybe_auxiliary_payload = has_payload ?
-    g_variant_new_variant (auxiliary_payload) : priv->empty_auxiliary_payload;
-  gboolean success;
-  if (is_aggregate)
-    {
-      success = emer_event_recorder_server_call_record_aggregate_event_sync (priv->dbus_proxy,
-                                                                             getuid (),
-                                                                             event_id_variant,
-                                                                             num_events,
-                                                                             relative_time,
-                                                                             has_payload,
-                                                                             maybe_auxiliary_payload,
-                                                                             NULL /* GCancellable */,
-                                                                             &error);
-    }
-  else
-    {
-      success = emer_event_recorder_server_call_record_singular_event_sync (priv->dbus_proxy,
-                                                                            getuid (),
-                                                                            event_id_variant,
-                                                                            relative_time,
-                                                                            has_payload,
-                                                                            maybe_auxiliary_payload,
-                                                                            NULL /* GCancellable */,
-                                                                            &error);
-    }
-  if (!success)
-    {
-      g_warning ("Failed to send event to DBus client-side daemon: %s",
-                 error->message);
-      g_error_free (error);
-    }
-}
 /**
  * emtr_event_recorder_record_event:
  * @self: (in): the event recorder

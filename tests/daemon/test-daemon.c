@@ -22,7 +22,8 @@ make_daemon_for_testing (void)
 {
   EmerMachineIdProvider *id_prov =
     emer_machine_id_provider_new (MACHINE_ID_PATH);
-  return emer_daemon_new_full (42, // Version number
+  return emer_daemon_new_full (g_rand_new_with_seed (18),
+                               42, // Version number
                                "test", // Environment
                                5,  // Network Send Interval
                                "http://localhost:8080", // uri, (port TBD) TODO

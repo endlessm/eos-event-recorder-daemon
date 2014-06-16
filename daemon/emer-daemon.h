@@ -49,7 +49,8 @@ GType       emer_daemon_get_type               (void) G_GNUC_CONST;
 
 EmerDaemon *emer_daemon_new                    (void);
 
-EmerDaemon *emer_daemon_new_full               (gint                   version_number,
+EmerDaemon *emer_daemon_new_full               (GRand                 *rand,
+                                                gint                   version_number,
                                                 const gchar           *environment,
                                                 guint                  network_send_interval,
                                                 const gchar           *proxy_server_uri,

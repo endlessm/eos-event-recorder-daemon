@@ -15,21 +15,12 @@
 #define USER_ID 4200u
 #define RELATIVE_TIMESTAMP G_GINT64_CONSTANT (123456789)
 
-// Helper methods first:
-
-static EmerDaemon*
-make_daemon_for_testing (void)
+typedef struct
 {
-  EmerMachineIdProvider *id_prov =
-    emer_machine_id_provider_new (MACHINE_ID_PATH);
-  return emer_daemon_new_full (g_rand_new_with_seed (18),
-                               42, // Version number
-                               "test", // Environment
-                               5,  // Network Send Interval
-                               "http://localhost:8080", // uri, (port TBD) TODO
-                               id_prov, // MachineIdProvider
-                               20); // Buffer length
-}
+  EmerDaemon *test_object;
+} Fixture;
+
+// Helper methods first:
 
 static GVariant *
 make_event_id_gvariant (void)
@@ -67,7 +58,33 @@ make_event_values_gvariant (void)
   return g_variant_new ("a(xbv)", &builder);
 }
 
-// Unit Tests second:
+// Setup/Teardown functions next:
+
+static void
+setup (Fixture      *fixture,
+       gconstpointer unused)
+{
+  EmerMachineIdProvider *id_prov =
+    emer_machine_id_provider_new (MACHINE_ID_PATH);
+  fixture->test_object =
+    emer_daemon_new_full (g_rand_new_with_seed (18),
+                          42, // Version number
+                          "test", // Environment
+                          5,  // Network Send Interval
+                          "http://localhost:8080", // uri, (port TBD) TODO
+                          id_prov, // MachineIdProvider
+                          20); // Buffer length
+  g_object_unref (id_prov);
+}
+
+static void
+teardown (Fixture      *fixture,
+          gconstpointer unused)
+{
+  g_object_unref (fixture->test_object);
+}
+
+// Unit Tests next:
 
 static void
 test_daemon_new_succeeds (void)
@@ -78,68 +95,64 @@ test_daemon_new_succeeds (void)
 }
 
 static void
-test_daemon_new_full_succeeds (void)
+test_daemon_new_full_succeeds (Fixture      *fixture,
+                               gconstpointer unused)
 {
-  EmerDaemon *daemon = make_daemon_for_testing ();
-  g_assert (daemon != NULL);
-  g_object_unref (daemon);
+  g_assert (fixture->test_object != NULL);
 }
 
 static void
-test_daemon_can_record_singular_event (void)
+test_daemon_can_record_singular_event (Fixture      *fixture,
+                                       gconstpointer unused)
 {
-  EmerDaemon *daemon = make_daemon_for_testing ();
-  emer_daemon_record_singular_event (daemon,
+  emer_daemon_record_singular_event (fixture->test_object,
                                      USER_ID,
                                      make_event_id_gvariant (),
                                      RELATIVE_TIMESTAMP,
                                      FALSE,
                                      g_variant_new_string ("This must be ignored."));
-  emer_daemon_record_singular_event (daemon,
+  emer_daemon_record_singular_event (fixture->test_object,
                                      USER_ID,
                                      make_event_id_gvariant (),
                                      RELATIVE_TIMESTAMP,
                                      FALSE,
                                      g_variant_new_string ("This must be ignored."));
-  emer_daemon_record_singular_event (daemon,
+  emer_daemon_record_singular_event (fixture->test_object,
                                      USER_ID,
                                      make_event_id_gvariant (),
                                      RELATIVE_TIMESTAMP,
                                      TRUE,
                                      make_variant_payload ());
-  g_object_unref (daemon);
 }
 
 static void
-test_daemon_can_record_aggregate_events (void)
+test_daemon_can_record_aggregate_events (Fixture      *fixture,
+                                         gconstpointer unused)
 {
-  EmerDaemon *daemon = make_daemon_for_testing ();
-  emer_daemon_record_aggregate_event (daemon,
+  emer_daemon_record_aggregate_event (fixture->test_object,
                                       USER_ID,
                                       make_event_id_gvariant (),
                                       101,
                                       RELATIVE_TIMESTAMP,
                                       FALSE,
                                       g_variant_new_string ("This must be ignored."));
-  emer_daemon_record_aggregate_event (daemon,
+  emer_daemon_record_aggregate_event (fixture->test_object,
                                       USER_ID,
                                       make_event_id_gvariant (),
                                       101,
                                       RELATIVE_TIMESTAMP,
                                       TRUE,
                                       make_variant_payload ());
-  g_object_unref (daemon);
 }
 
 static void
-test_daemon_can_record_event_sequence (void)
+test_daemon_can_record_event_sequence (Fixture      *fixture,
+                                       gconstpointer unused)
 {
-  EmerDaemon *daemon = make_daemon_for_testing ();
-  emer_daemon_record_event_sequence (daemon,
+  emer_daemon_record_event_sequence (fixture->test_object,
                                      USER_ID,
                                      make_event_id_gvariant (),
                                      make_event_values_gvariant ());
-  g_object_unref (daemon);
 }
 
 int
@@ -150,14 +163,20 @@ main (int                argc,
 
   g_test_add_func ("/daemon/new-succeeds",
                    test_daemon_new_succeeds);
-  g_test_add_func ("/daemon/new-full-succeeds",
+
+#define ADD_DAEMON_TEST(path, test_func) \
+  g_test_add ((path), Fixture, NULL, setup, (test_func), teardown)
+
+  ADD_DAEMON_TEST ("/daemon/new-full-succeeds",
                    test_daemon_new_full_succeeds);
-  g_test_add_func ("/daemon/can-record-singular-event",
+  ADD_DAEMON_TEST ("/daemon/can-record-singular-event",
                    test_daemon_can_record_singular_event);
-  g_test_add_func ("/daemon/can-record-aggregate-events",
+  ADD_DAEMON_TEST ("/daemon/can-record-aggregate-events",
                    test_daemon_can_record_aggregate_events);
-  g_test_add_func ("/daemon/can-record-event-sequence",
+  ADD_DAEMON_TEST ("/daemon/can-record-event-sequence",
                    test_daemon_can_record_event_sequence);
+
+#undef ADD_DAEMON_TEST
 
   return g_test_run ();
 }

@@ -1,7 +1,7 @@
 # Build products
 eos-metrics-0.0.0
 /eosmetrics-0.pc
-/tests/run-tests
+/tests/test-library.dbus
 /tests/daemon/test-machine-id-provider
 /tests/daemon/test-boot-id-provider
 /tests/daemon/test-daemon

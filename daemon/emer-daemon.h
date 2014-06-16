@@ -6,6 +6,8 @@
 #define EMER_DAEMON_H
 
 #include "emer-machine-id-provider.h"
+#include "emer-permissions-provider.h"
+
 #include <glib-object.h>
 
 G_BEGIN_DECLS
@@ -49,32 +51,33 @@ GType       emer_daemon_get_type               (void) G_GNUC_CONST;
 
 EmerDaemon *emer_daemon_new                    (void);
 
-EmerDaemon *emer_daemon_new_full               (gint                   version_number,
-                                                const gchar           *environment,
-                                                guint                  network_send_interval,
-                                                const gchar           *proxy_server_uri,
-                                                EmerMachineIdProvider *machine_id_provider,
-                                                gint                   buffer_length);
+EmerDaemon *emer_daemon_new_full               (gint                     version_number,
+                                                const gchar             *environment,
+                                                guint                    network_send_interval,
+                                                const gchar             *proxy_server_uri,
+                                                EmerMachineIdProvider   *machine_id_provider,
+                                                EmerPermissionsProvider *permissions_provider,
+                                                gint                     buffer_length);
 
-void        emer_daemon_record_singular_event  (EmerDaemon            *self,
-                                                guint32                user_id,
-                                                GVariant              *event_id,
-                                                gint64                 relative_timestamp,
-                                                gboolean               has_payload,
-                                                GVariant              *payload);
+void        emer_daemon_record_singular_event  (EmerDaemon              *self,
+                                                guint32                  user_id,
+                                                GVariant                *event_id,
+                                                gint64                   relative_timestamp,
+                                                gboolean                 has_payload,
+                                                GVariant                *payload);
 
-void        emer_daemon_record_aggregate_event (EmerDaemon            *self,
-                                                guint32                user_id,
-                                                GVariant              *event_id,
-                                                gint64                 count,
-                                                gint64                 relative_timestamp,
-                                                gboolean               has_payload,
-                                                GVariant              *payload);
+void        emer_daemon_record_aggregate_event (EmerDaemon              *self,
+                                                guint32                  user_id,
+                                                GVariant                *event_id,
+                                                gint64                   count,
+                                                gint64                   relative_timestamp,
+                                                gboolean                 has_payload,
+                                                GVariant                *payload);
 
-void        emer_daemon_record_event_sequence  (EmerDaemon            *self,
-                                                guint32                user_id,
-                                                GVariant              *event_id,
-                                                GVariant              *events);
+void        emer_daemon_record_event_sequence  (EmerDaemon              *self,
+                                                guint32                  user_id,
+                                                GVariant                *event_id,
+                                                GVariant                *events);
 
 G_END_DECLS
 

@@ -1,7 +1,7 @@
 # Copyright 2013 Endless Mobile, Inc.
 
 noinst_PROGRAMS = \
-	tests/run-tests \
+	tests/test-library.dbus \
 	tests/daemon/test-daemon \
 	tests/daemon/test-machine-id-provider \
 	tests/daemon/test-permissions-provider \
@@ -19,7 +19,7 @@ LIBRARY_TEST_LIBS = \
 	$(top_builddir)/libeosmetrics-@EMTR_API_VERSION@.la \
 	$(NULL)
 
-tests_run_tests_SOURCES = \
+tests_test_library_dbus_SOURCES = \
 	tests/run-tests.c tests/run-tests.h \
 	tests/test-connection.c \
 	tests/test-event-recorder.c \
@@ -30,8 +30,8 @@ tests_run_tests_SOURCES = \
 	tests/test-sender.c \
 	tests/test-util.c \
 	$(NULL)
-tests_run_tests_CPPFLAGS = $(LIBRARY_TEST_FLAGS)
-tests_run_tests_LDADD = $(LIBRARY_TEST_LIBS)
+tests_test_library_dbus_CPPFLAGS = $(LIBRARY_TEST_FLAGS)
+tests_test_library_dbus_LDADD = $(LIBRARY_TEST_LIBS)
 
 DAEMON_TEST_FLAGS = \
 	@EOSMETRICS_EVENT_RECORDER_CFLAGS@ \
@@ -81,7 +81,7 @@ dist_bin_SCRIPTS = tests/launch-mock-dbus-tests.sh
 
 # Run tests when running 'make check'
 TESTS = \
-	tests/run-tests \
+	tests/test-library.dbus \
 	tests/test-daemon-integration.py \
 	tests/daemon/test-daemon \
 	tests/daemon/test-machine-id-provider \
@@ -89,12 +89,14 @@ TESTS = \
 	tests/daemon/test-permissions-provider \
 	$(javascript_tests) \
 	$(NULL)
-TEST_EXTENSIONS = .js .py
+TEST_EXTENSIONS = .dbus .js .py
 JS_LOG_COMPILER = eos-run-test
 AM_JS_LOG_FLAGS = \
 	--include-path=$(top_srcdir) \
 	$(NULL)
-LOG_COMPILER = $(top_srcdir)/tests/launch-mock-dbus-tests.sh
+DBUS_LOG_COMPILER = $(top_srcdir)/tests/launch-mock-dbus-tests.sh
+AM_DBUS_LOG_FLAGS = -k --verbose
+LOG_COMPILER = gtester
 AM_LOG_FLAGS = -k --verbose
 PY_LOG_COMPILER = python
 

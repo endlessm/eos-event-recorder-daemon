@@ -4,6 +4,8 @@
 
 #include "emer-daemon.h"
 #include "emer-machine-id-provider.h"
+#include "emer-permissions-provider.h"
+#include "mock-permissions-provider.h"
 
 #include <uuid/uuid.h>
 #include "shared/metrics-util.h"
@@ -18,6 +20,7 @@
 typedef struct
 {
   EmerDaemon *test_object;
+  EmerPermissionsProvider *mock_permissions_prov;
 } Fixture;
 
 // Helper methods first:
@@ -66,6 +69,7 @@ setup (Fixture      *fixture,
 {
   EmerMachineIdProvider *id_prov =
     emer_machine_id_provider_new (MACHINE_ID_PATH);
+  fixture->mock_permissions_prov = emer_permissions_provider_new ();
   fixture->test_object =
     emer_daemon_new_full (g_rand_new_with_seed (18),
                           42, // Version number
@@ -73,6 +77,7 @@ setup (Fixture      *fixture,
                           5,  // Network Send Interval
                           "http://localhost:8080", // uri, (port TBD) TODO
                           id_prov, // MachineIdProvider
+                          fixture->mock_permissions_prov, // PermissionsProvider
                           20); // Buffer length
   g_object_unref (id_prov);
 }
@@ -82,6 +87,7 @@ teardown (Fixture      *fixture,
           gconstpointer unused)
 {
   g_object_unref (fixture->test_object);
+  g_object_unref (fixture->mock_permissions_prov);
 }
 
 // Unit Tests next:
@@ -155,6 +161,53 @@ test_daemon_can_record_event_sequence (Fixture      *fixture,
                                      make_event_values_gvariant ());
 }
 
+static void
+test_daemon_does_not_record_singular_event_if_not_allowed (Fixture      *fixture,
+                                                           gconstpointer unused)
+{
+  guint num_calls =
+    mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
+
+  mock_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
+  test_daemon_can_record_singular_event (fixture, unused);
+
+  /* FIXME: nothing can currently be asserted about whether the EmerDaemon tries
+  to send its metrics, but at least we can confirm that it read the enabled
+  property: */
+  g_assert_cmpuint (mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov),
+                    >=, num_calls + 1);
+}
+
+static void
+test_daemon_does_not_record_aggregate_event_if_not_allowed (Fixture      *fixture,
+                                                            gconstpointer unused)
+{
+  guint num_calls =
+    mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
+
+  mock_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
+  test_daemon_can_record_aggregate_events (fixture, unused);
+
+  /* FIXME: See note above. */
+  g_assert_cmpuint (mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov),
+                    >=, num_calls + 1);
+}
+
+static void
+test_daemon_does_not_record_event_sequence_if_not_allowed (Fixture      *fixture,
+                                                           gconstpointer unused)
+{
+  guint num_calls =
+    mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
+
+  mock_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
+  test_daemon_can_record_event_sequence (fixture, unused);
+
+  /* FIXME: See note above. */
+  g_assert_cmpuint (mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov),
+                    >=, num_calls + 1);
+}
+
 int
 main (int                argc,
       const char * const argv[])
@@ -175,6 +228,12 @@ main (int                argc,
                    test_daemon_can_record_aggregate_events);
   ADD_DAEMON_TEST ("/daemon/can-record-event-sequence",
                    test_daemon_can_record_event_sequence);
+  ADD_DAEMON_TEST ("/daemon/does-not-record-singular-event-if-not-allowed",
+                   test_daemon_does_not_record_singular_event_if_not_allowed);
+  ADD_DAEMON_TEST ("/daemon/does-not-record-aggregate-event-if-not-allowed",
+                   test_daemon_does_not_record_aggregate_event_if_not_allowed);
+  ADD_DAEMON_TEST ("/daemon/does-not-record-event-sequence-if-not-allowed",
+                   test_daemon_does_not_record_event_sequence_if_not_allowed);
 
 #undef ADD_DAEMON_TEST
 

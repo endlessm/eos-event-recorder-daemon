@@ -15,6 +15,7 @@
 
 #include "emer-daemon.h"
 #include "emer-machine-id-provider.h"
+#include "emer-permissions-provider.h"
 #include "shared/metrics-util.h"
 
 // TODO: Once we have a production proxy server, update this constant
@@ -94,6 +95,9 @@ typedef struct _EmerDaemonPrivate {
   gchar *proxy_server_uri;
 
   EmerMachineIdProvider *machine_id_provider;
+  EmerPermissionsProvider *permissions_provider;
+
+  gboolean recording_enabled;
 
   /* Storage buffers for different event types */
 
@@ -124,6 +128,7 @@ enum
   PROP_NETWORK_SEND_INTERVAL,
   PROP_PROXY_SERVER_URI,
   PROP_MACHINE_ID_PROVIDER,
+  PROP_PERMISSIONS_PROVIDER,
   PROP_SINGULAR_BUFFER_LENGTH,
   PROP_AGGREGATE_BUFFER_LENGTH,
   PROP_SEQUENCE_BUFFER_LENGTH,
@@ -588,6 +593,16 @@ get_user_agent (void)
                           libsoup_minor_version, libsoup_micro_version);
 }
 
+static void
+on_permissions_changed (EmerPermissionsProvider *permissions_provider,
+                        GParamSpec              *pspec,
+                        EmerDaemon              *self)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+  priv->recording_enabled =
+    emer_permissions_provider_get_daemon_enabled (permissions_provider);
+}
+
 /*
  * The following functions are private setters and getters for the properties of
  * EmerDaemon. These properties are write-only, construct-only, so these only
@@ -691,6 +706,21 @@ get_machine_id_provider (EmerDaemon *self)
 }
 
 static void
+set_permissions_provider (EmerDaemon              *self,
+                          EmerPermissionsProvider *permissions_provider)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  if (permissions_provider == NULL)
+    priv->permissions_provider = emer_permissions_provider_new ();
+  else
+    priv->permissions_provider = g_object_ref (permissions_provider);
+
+  g_signal_connect (priv->permissions_provider, "notify::daemon-enabled",
+                    G_CALLBACK (on_permissions_changed), self);
+}
+
+static void
 set_singular_buffer_length (EmerDaemon *self,
                             gint        length)
 {
@@ -743,6 +773,18 @@ get_sequence_buffer_length (EmerDaemon *self)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   return priv->sequence_buffer_length;
+}
+
+static void
+emer_daemon_constructed (GObject *object)
+{
+  EmerDaemon *self = EMER_DAEMON (object);
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  priv->recording_enabled =
+    emer_permissions_provider_get_daemon_enabled (priv->permissions_provider);
+
+  G_OBJECT_CLASS (emer_daemon_parent_class)->constructed (object);
 }
 
 static void
@@ -830,6 +872,10 @@ emer_daemon_set_property (GObject      *object,
       set_machine_id_provider (self, g_value_get_object (value));
       break;
 
+    case PROP_PERMISSIONS_PROVIDER:
+      set_permissions_provider (self, g_value_get_object (value));
+      break;
+
     case PROP_SINGULAR_BUFFER_LENGTH:
       set_singular_buffer_length (self, g_value_get_int (value));
       break;
@@ -859,6 +905,7 @@ emer_daemon_finalize (GObject *object)
   g_free (priv->environment);
   g_free (priv->proxy_server_uri);
   g_clear_object(&priv->machine_id_provider);
+  g_clear_object (&priv->permissions_provider);
 
   SingularEvent *singular_buffer = priv->singular_buffer;
   gint num_singulars = priv->num_singulars_buffered;
@@ -892,6 +939,7 @@ emer_daemon_class_init (EmerDaemonClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
+  object_class->constructed = emer_daemon_constructed;
   object_class->get_property = emer_daemon_get_property;
   object_class->set_property = emer_daemon_set_property;
   object_class->finalize = emer_daemon_finalize;
@@ -963,6 +1011,16 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                          EMER_TYPE_MACHINE_ID_PROVIDER,
                          G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                          G_PARAM_STATIC_STRINGS);
+
+  /*
+   * EmerDaemon:permissions-provider:
+   *
+   */
+  emer_daemon_props[PROP_PERMISSIONS_PROVIDER] =
+    g_param_spec_object ("permissions-provider", "Permissions provider",
+                         "Object providing user's permission to record metrics",
+                         EMER_TYPE_PERMISSIONS_PROVIDER,
+                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS);
 
   /*
    * EmerDaemon:network-send-interval:
@@ -1049,6 +1107,8 @@ emer_daemon_new (void)
  * @proxy_server_uri: URI to use
  * @machine_id_provider: (allow-none): The #EmerMachineIdProvider to supply the
  *   machine ID, or %NULL to use the default
+ * @permissions_provider: The #EmerPermissionsProvider to supply information
+ *   about opting out of metrics collection
  * @buffer_length: The maximum size of the buffers to be used for in-memory
  *   storage of metrics
  *
@@ -1061,13 +1121,14 @@ emer_daemon_new (void)
  * Returns: (transfer full): a new #EmerDaemon.
  */
 EmerDaemon *
-emer_daemon_new_full (GRand                 *rand,
-                      gint                   version_number,
-                      const gchar           *environment,
-                      guint                  network_send_interval,
-                      const gchar           *proxy_server_uri,
-                      EmerMachineIdProvider *machine_id_provider,
-                      gint                   buffer_length)
+emer_daemon_new_full (GRand                   *rand,
+                      gint                     version_number,
+                      const gchar             *environment,
+                      guint                    network_send_interval,
+                      const gchar             *proxy_server_uri,
+                      EmerMachineIdProvider   *machine_id_provider,
+                      EmerPermissionsProvider *permissions_provider,
+                      gint                     buffer_length)
 {
   return g_object_new (EMER_TYPE_DAEMON,
                        "random-number-generator", rand,
@@ -1076,6 +1137,7 @@ emer_daemon_new_full (GRand                 *rand,
                        "network-send-interval", network_send_interval,
                        "proxy-server-uri", proxy_server_uri,
                        "machine-id-provider", machine_id_provider,
+                       "permissions-provider", permissions_provider,
                        "singular-buffer-length", buffer_length,
                        "aggregate-buffer-length", buffer_length,
                        "sequence-buffer-length", buffer_length,
@@ -1091,6 +1153,9 @@ emer_daemon_record_singular_event (EmerDaemon *self,
                                    GVariant   *payload)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  if (!priv->recording_enabled)
+    return;
 
   g_mutex_lock (&priv->singular_buffer_lock);
 
@@ -1120,6 +1185,9 @@ emer_daemon_record_aggregate_event (EmerDaemon *self,
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
+  if (!priv->recording_enabled)
+    return;
+
   g_mutex_lock (&priv->aggregate_buffer_lock);
 
   if (priv->num_aggregates_buffered < priv->aggregate_buffer_length)
@@ -1147,6 +1215,9 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
                                    GVariant   *event_values)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  if (!priv->recording_enabled)
+    return;
 
   g_mutex_lock (&priv->sequence_buffer_lock);
 

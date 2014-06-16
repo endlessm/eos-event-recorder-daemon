@@ -53,6 +53,7 @@ tests_daemon_test_daemon_SOURCES = \
 	daemon/emer-daemon.c daemon/emer-daemon.h \
 	tests/daemon/test-daemon.c \
 	daemon/emer-machine-id-provider.c daemon/emer-machine-id-provider.h \
+	tests/daemon/mock-permissions-provider.c daemon/emer-permissions-provider.h \
 	shared/metrics-util.c shared/metrics-util.h \
 	$(NULL)
 tests_daemon_test_daemon_CPPFLAGS = \

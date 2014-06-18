@@ -12,8 +12,6 @@
 G_BEGIN_DECLS
 
 guint mock_permissions_provider_get_daemon_enabled_called (EmerPermissionsProvider *self);
-void  mock_permissions_provider_set_daemon_enabled        (EmerPermissionsProvider *self,
-                                                           gboolean                 enabled);
 
 G_END_DECLS
 

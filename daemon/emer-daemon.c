@@ -1020,7 +1020,7 @@ emer_daemon_class_init (EmerDaemonClass *klass)
     g_param_spec_object ("permissions-provider", "Permissions provider",
                          "Object providing user's permission to record metrics",
                          EMER_TYPE_PERMISSIONS_PROVIDER,
-                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS);
+                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   /*
    * EmerDaemon:network-send-interval:
@@ -1253,4 +1253,20 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
     }
 
   g_mutex_unlock (&priv->sequence_buffer_lock);
+}
+
+/*
+ * emer_daemon_get_permissions_provider:
+ * @self: the daemon
+ *
+ * This is a public property accessor so that the DBus calls can communicate
+ * directly with the permissions provider.
+ *
+ * Returns: (transfer none): the daemon's permissions provider
+ */
+EmerPermissionsProvider *
+emer_daemon_get_permissions_provider (EmerDaemon *self)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+  return priv->permissions_provider;
 }

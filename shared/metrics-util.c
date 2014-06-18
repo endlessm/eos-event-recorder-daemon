@@ -82,7 +82,15 @@ get_current_time (clockid_t clock_id,
       return FALSE;
     }
 
-  *current_time = (NANOSECONDS_PER_SECOND * ((gint64) ts.tv_sec))
-    + ((gint64) ts.tv_nsec);
+  gint64 detected_time = (NANOSECONDS_PER_SECOND * ((gint64) ts.tv_sec))
+                         + ((gint64) ts.tv_nsec);
+  if (detected_time < (G_MININT64 / 2) || detected_time > (G_MAXINT64 / 2))
+    {
+      g_critical ("Clock returned a time that may result in arithmatic that "
+                  "causes 64-bit overflow. This machine may have been running "
+                  "for over 100 years! (Has a bird pooped in your mouth?)");
+      return FALSE;
+    }
+  *current_time = detected_time;
   return TRUE;
 }

@@ -199,6 +199,8 @@ backoff (GRand *rand,
   g_usleep (G_USEC_PER_SEC * randomized_backoff_sec);
 }
 
+/* Returned object is owned by calling code. Free with soup_uri_free() when
+done. */
 static SoupURI *
 get_https_request_uri (EmerDaemon   *self,
                        const guchar *data,
@@ -351,17 +353,23 @@ handle_https_response (SoupSession         *https_session,
         }
 
       gsize request_body_length = g_variant_get_size (updated_request_body);
-      soup_message_set_request (https_message, "application/octet-stream",
-                                SOUP_MEMORY_TEMPORARY, serialized_request_body,
-                                request_body_length);
 
       SoupURI *https_request_uri =
         get_https_request_uri (callback_data->daemon, serialized_request_body,
                                request_body_length);
-      soup_message_set_uri (https_message, https_request_uri);
-      g_object_unref (https_request_uri);
+      SoupMessage *new_https_message =
+        soup_message_new_from_uri ("PUT",  https_request_uri);
+      soup_uri_free (https_request_uri);
 
-      soup_session_requeue_message (https_session, https_message);
+      soup_message_set_request (new_https_message, "application/octet-stream",
+                                SOUP_MEMORY_TEMPORARY, serialized_request_body,
+                                request_body_length);
+
+      soup_session_queue_message (https_session, new_https_message,
+                                  (SoupSessionCallback) handle_https_response,
+                                  callback_data);
+      /* Old message is unreffed automatically, because it is not requeued. */
+
       return;
     }
 
@@ -551,7 +559,7 @@ upload_events (EmerDaemon *self)
     get_https_request_uri (self, serialized_request_body, request_body_length);
   SoupMessage *https_message =
     soup_message_new_from_uri ("PUT",  https_request_uri);
-  g_object_unref (https_request_uri);
+  soup_uri_free (https_request_uri);
 
   soup_message_set_request (https_message, "application/octet-stream",
                             SOUP_MEMORY_TEMPORARY, serialized_request_body,

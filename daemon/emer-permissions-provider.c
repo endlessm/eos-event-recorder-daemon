@@ -53,6 +53,26 @@ load_fallback_data (EmerPermissionsProvider *self)
   g_assert_not_reached ();
 }
 
+/* Writes current in-memory data to the config file */
+static void
+write_config_file_sync (EmerPermissionsProvider *self)
+{
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  gchar *config_file_path = g_file_get_path (priv->config_file);
+  GError *error = NULL;
+
+  if (!g_key_file_save_to_file (priv->permissions, config_file_path, &error))
+    {
+      g_critical ("Could not write to permissions config file '%s': %s.",
+                  config_file_path, error->message);
+      g_clear_error (&error);
+    }
+
+  g_free (config_file_path);
+}
+
 /* Read config values from the config file, and if that fails assume the
 default. Also emits a property notification. */
 static void
@@ -84,6 +104,26 @@ read_config_file_sync (EmerPermissionsProvider *self)
   g_object_notify (G_OBJECT (self), "daemon-enabled");
 
   g_free (path);
+}
+
+/* Helper function to run write_config_file_sync() in another thread. */
+static void
+write_task_func (GTask                   *task,
+                 EmerPermissionsProvider *self,
+                 gpointer                 data,
+                 GCancellable            *cancellable)
+{
+  write_config_file_sync (self);
+  g_task_return_pointer (task, NULL, NULL);
+}
+
+/* "Fire and forget" write_config_file_sync(). Don't wait for it to finish. */
+static void
+write_config_file_async (EmerPermissionsProvider *self)
+{
+  GTask *task = g_task_new (self, NULL, NULL, NULL);
+  g_task_run_in_thread (task, (GTaskThreadFunc)write_task_func);
+  g_object_unref (task);
 }
 
 static void
@@ -142,6 +182,11 @@ emer_permissions_provider_set_property (GObject      *object,
       set_config_file_path (self, g_value_get_string (value));
       break;
 
+    case PROP_DAEMON_ENABLED:
+      emer_permissions_provider_set_daemon_enabled (self,
+                                                    g_value_get_boolean (value));
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
     }
@@ -179,7 +224,7 @@ emer_permissions_provider_class_init (EmerPermissionsProviderClass *klass)
     g_param_spec_boolean ("daemon-enabled", "Daemon enabled",
                           "Whether to enable the metrics daemon system-wide",
                           FALSE,
-                          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
+                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, NPROPS,
                                      emer_permissions_provider_props);
@@ -258,4 +303,26 @@ emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self)
     }
 
   return retval;
+}
+
+/*
+ * emer_permissions_provider_set_daemon_enabled:
+ * @self: the permissions provider
+ * @enabled: whether recording metrics is allowed
+ *
+ * Sets whether the event recorder should record events.
+ */
+void
+emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
+                                              gboolean                 enabled)
+{
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  g_key_file_set_boolean (priv->permissions, DAEMON_ENABLED_GROUP_NAME,
+                          DAEMON_ENABLED_KEY_NAME, enabled);
+
+  write_config_file_async (self);
+
+  g_object_notify (G_OBJECT (self), "daemon-enabled");
 }

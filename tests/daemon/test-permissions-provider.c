@@ -20,7 +20,27 @@
 typedef struct {
   GFile *temp_file;
   EmerPermissionsProvider *test_object;
+
+  GMainLoop *main_loop; /* for asynchronous tests */
+  guint failsafe_source_id;
+
+  gboolean notify_daemon_called;
+  gboolean notify_daemon_called_with;
 } Fixture;
+
+/* Callback for notify::daemon-enabled that records what it was called with and
+quits the main loop so the test can continue. */
+static void
+on_notify_daemon_enabled (GObject    *test_object,
+                          GParamSpec *pspec,
+                          Fixture    *fixture)
+{
+  if (!fixture->notify_daemon_called)
+    fixture->notify_daemon_called_with =
+      emer_permissions_provider_get_daemon_enabled (EMER_PERMISSIONS_PROVIDER (test_object));
+  fixture->notify_daemon_called = TRUE;
+  g_main_loop_quit (fixture->main_loop);
+}
 
 /* Pass NULL to config_file_contents if you don't want to create a file on disk.
 A file name will be created in any case and passed to the object's constructor.
@@ -55,6 +75,16 @@ setup (Fixture      *fixture,
   gchar *config_file_path = g_file_get_path (fixture->temp_file);
   fixture->test_object = emer_permissions_provider_new_full (config_file_path);
   g_free (config_file_path);
+
+  fixture->main_loop = g_main_loop_new (NULL, FALSE);
+  fixture->notify_daemon_called = FALSE;
+  g_signal_connect (fixture->test_object, "notify::daemon-enabled",
+                    G_CALLBACK (on_notify_daemon_enabled), fixture);
+
+  /* Failsafe: quit any hung async tests after 5 seconds. */
+  fixture->failsafe_source_id = g_timeout_add_seconds (5,
+                                                       (GSourceFunc) g_main_loop_quit,
+                                                       fixture->main_loop);
 }
 
 static void
@@ -71,9 +101,11 @@ static void
 teardown (Fixture      *fixture,
           gconstpointer unused)
 {
+  g_source_remove (fixture->failsafe_source_id);
   g_file_delete (fixture->temp_file, NULL, NULL); /* might not exist */
   g_clear_object (&fixture->temp_file);
   g_clear_object (&fixture->test_object);
+  g_main_loop_unref (fixture->main_loop);
 }
 
 /* This test is run several times with different data; once with a config file,
@@ -115,6 +147,70 @@ test_permissions_provider_get_daemon_enabled_fallback (Fixture      *fixture,
   g_test_assert_expected_messages ();
 }
 
+/* This is run in an idle function so that it doesn't quit the main loop before
+the main loop has started. */
+static gboolean
+set_daemon_enabled_false_idle (Fixture *fixture)
+{
+  emer_permissions_provider_set_daemon_enabled (fixture->test_object, FALSE);
+  return G_SOURCE_REMOVE;
+}
+
+static void
+test_permissions_provider_set_daemon_enabled (Fixture      *fixture,
+                                              gconstpointer unused)
+{
+  g_idle_add ((GSourceFunc) set_daemon_enabled_false_idle, fixture);
+  g_main_loop_run (fixture->main_loop);
+  g_assert (fixture->notify_daemon_called);
+  g_assert_false (fixture->notify_daemon_called_with);
+}
+
+/* Callback for file monitor change, which quits the main loop. */
+static void
+on_config_file_changed (GFileMonitor     *monitor,
+                        GFile            *file,
+                        GFile            *other_file,
+                        GFileMonitorEvent event_type,
+                        Fixture          *fixture)
+{
+  if (event_type == G_FILE_MONITOR_EVENT_CREATED ||
+      event_type == G_FILE_MONITOR_EVENT_CHANGED)
+    g_main_loop_quit (fixture->main_loop);
+}
+
+static void
+test_permissions_provider_set_daemon_enabled_updates_config_file (Fixture      *fixture,
+                                                                  gconstpointer unused)
+{
+  gchar *contents;
+  g_assert (g_file_load_contents (fixture->temp_file, NULL, &contents, NULL,
+                                  NULL, NULL));
+  g_assert (strstr (contents, "enabled=true"));
+  g_free (contents);
+
+  g_idle_add ((GSourceFunc) set_daemon_enabled_false_idle, fixture);
+
+  GFileMonitor *monitor = g_file_monitor_file (fixture->temp_file,
+                                               G_FILE_MONITOR_NONE, NULL, NULL);
+  g_assert_nonnull (monitor);
+
+  g_signal_connect (monitor, "changed", G_CALLBACK (on_config_file_changed),
+                    fixture);
+
+  /* Run the main loop twice, to wait for two events: the property notification
+  and a "changed" or "created" file monitor event. */
+  g_main_loop_run (fixture->main_loop);
+  g_main_loop_run (fixture->main_loop);
+
+  g_object_unref (monitor);
+
+  g_assert (g_file_load_contents (fixture->temp_file, NULL, &contents, NULL,
+                                  NULL, NULL));
+  g_assert (strstr (contents, "enabled=false"));
+  g_free (contents);
+}
+
 int
 main (int                argc,
       const char * const argv[])
@@ -146,6 +242,12 @@ main (int                argc,
                                  CONFIG_FILE_INVALID_CONTENTS,
                                  setup_invalid_file,
                                  test_permissions_provider_get_daemon_enabled_fallback);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/set-daemon-enabled",
+                                 CONFIG_FILE_ENABLED_CONTENTS, setup,
+                                 test_permissions_provider_set_daemon_enabled);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/set-daemon-enabled-updates-config-file",
+                                 CONFIG_FILE_ENABLED_CONTENTS, setup,
+                                 test_permissions_provider_set_daemon_enabled_updates_config_file);
 
 #undef ADD_PERMISSIONS_PROVIDER_TEST
 

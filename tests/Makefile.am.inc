@@ -84,6 +84,7 @@ dist_bin_SCRIPTS = tests/launch-mock-dbus-tests.sh
 TESTS = \
 	tests/test-library.dbus \
 	tests/test-daemon-integration.py \
+	tests/test-opt-out-integration.py \
 	tests/daemon/test-daemon \
 	tests/daemon/test-machine-id-provider \
 	tests/daemon/test-persistent-cache \
@@ -114,6 +115,7 @@ TESTS_ENVIRONMENT = \
 
 EXTRA_DIST += \
 	tests/test-daemon-integration.py \
+	tests/test-opt-out-integration.py \
 	tests/smoke-tests/smoke.js \
 	tests/smoke-tests/event-types.js \
 	$(NULL)

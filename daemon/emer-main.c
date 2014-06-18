@@ -82,6 +82,11 @@ on_bus_acquired (GDBusConnection *system_bus,
   g_signal_connect (server, "handle-record-event-sequence",
                     G_CALLBACK (on_record_event_sequence), daemon);
 
+  EmerPermissionsProvider *permissions =
+    emer_daemon_get_permissions_provider (daemon);
+  g_object_bind_property (permissions, "daemon-enabled", server, "enabled",
+                          G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
+
   GError *error = NULL;
   if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (server),
                                          system_bus,

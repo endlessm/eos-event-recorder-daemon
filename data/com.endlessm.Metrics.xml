@@ -17,6 +17,10 @@
   -->
   <interface name="com.endlessm.Metrics.EventRecorderServer">
 
+    <!-- Enabled: Whether it is okay to record metrics; if not, the user has
+    opted out. -->
+    <property name="Enabled" type="b" access="readwrite"/>
+
     <!--
       RecordSingularEvent:
       @user_id: user ID

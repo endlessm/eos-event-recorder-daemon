@@ -5,6 +5,7 @@ libexec_PROGRAMS = eos-metrics-event-recorder
 ## emer-event-recorder-server.[ch] are generated in ../data/Makefile.am.inc.
 eos_metrics_event_recorder_SOURCES = \
 	daemon/emer-main.c \
+	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
 	daemon/emer-daemon.c daemon/emer-daemon.h \
 	daemon/emer-machine-id-provider.c daemon/emer-machine-id-provider.h \
 	daemon/emer-persistent-cache.c daemon/emer-persistent-cache.h \

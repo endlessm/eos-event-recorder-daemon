@@ -60,6 +60,17 @@ on_record_event_sequence (EmerEventRecorderServer *server,
 }
 
 static gboolean
+on_set_enabled (EmerEventRecorderServer *server,
+                GDBusMethodInvocation   *invocation,
+                gboolean                 enabled,
+                EmerDaemon              *daemon)
+{
+  emer_event_recorder_server_set_enabled (server, enabled);
+  emer_event_recorder_server_complete_set_enabled (server, invocation);
+  return TRUE;
+}
+
+static gboolean
 quit_main_loop (GMainLoop *main_loop)
 {
   g_main_loop_quit (main_loop);
@@ -81,6 +92,8 @@ on_bus_acquired (GDBusConnection *system_bus,
                     G_CALLBACK (on_record_aggregate_event), daemon);
   g_signal_connect (server, "handle-record-event-sequence",
                     G_CALLBACK (on_record_event_sequence), daemon);
+  g_signal_connect (server, "handle-set-enabled",
+                    G_CALLBACK (on_set_enabled), daemon);
 
   EmerPermissionsProvider *permissions =
     emer_daemon_get_permissions_provider (daemon);

@@ -19,7 +19,22 @@
 
     <!-- Enabled: Whether it is okay to record metrics; if not, the user has
     opted out. -->
-    <property name="Enabled" type="b" access="readwrite"/>
+    <property name="Enabled" type="b" access="read"/>
+
+    <!--
+      SetEnabled:
+      @enabled: whether the metrics server is enabled
+
+      Sets whether the metrics server is enabled or not. If not enabled, all
+      other methods result in a no-op.
+
+      This method sets the property "Enabled", but that property is not set with
+      "readwrite" access because we need to control authorization for enabling
+      or disabling the server through Polkit.
+    -->
+    <method name="SetEnabled">
+      <arg type="b" name="enabled"/>
+    </method>
 
     <!--
       RecordSingularEvent:

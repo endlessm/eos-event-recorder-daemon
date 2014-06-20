@@ -2,8 +2,9 @@
 
 noinst_PROGRAMS = \
 	tests/run-tests \
-	tests/daemon/test-machine-id-provider \
+	tests/daemon/test-boot-id-provider \
 	tests/daemon/test-daemon \
+	tests/daemon/test-machine-id-provider \
 	tests/daemon/test-persistent-cache \
 	$(NULL)
 
@@ -38,6 +39,13 @@ DAEMON_TEST_FLAGS = \
 	-I$(top_srcdir)/daemon \
 	$(NULL)
 DAEMON_TEST_LIBS = @EOSMETRICS_EVENT_RECORDER_LIBS@
+
+tests_daemon_test_boot_id_provider_SOURCES = \
+	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
+	tests/daemon/test-boot-id-provider.c \
+	$(NULL)
+tests_daemon_test_boot_id_provider_CPPFLAGS = $(DAEMON_TEST_FLAGS)
+tests_daemon_test_boot_id_provider_LDADD = $(DAEMON_TEST_LIBS)
 
 tests_daemon_test_daemon_SOURCES = \
 	daemon/emer-daemon.c daemon/emer-daemon.h \
@@ -75,6 +83,7 @@ dist_bin_SCRIPTS = tests/launch-mock-dbus-tests.sh
 TESTS = \
 	tests/run-tests \
 	tests/test-daemon-integration.py \
+	tests/daemon/test-boot-id-provider \
 	tests/daemon/test-daemon \
 	tests/daemon/test-machine-id-provider \
 	tests/daemon/test-persistent-cache \

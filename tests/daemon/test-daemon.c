@@ -6,8 +6,11 @@
 #include "emer-boot-id-provider.h"
 #include "emer-machine-id-provider.h"
 #include "emer-permissions-provider.h"
+#include "emer-persistent-cache.h"
 #include "mock-permissions-provider.h"
 
+#include <glib.h>
+#include <glib/gstdio.h>
 #include <uuid/uuid.h>
 #include "shared/metrics-util.h"
 
@@ -15,7 +18,6 @@
 #define MEANINGLESS_EVENT_2 "d936cd5c-08de-4d4e-8a87-8df1f4a33cba"
 
 #define MACHINE_ID_PATH "/tmp/testing-machine-id"
-#define PERSISTENT_CACHE_TEST_DIR "/tmp/metrics_testing/"
 #define USER_ID 4200u
 #define RELATIVE_TIMESTAMP G_GINT64_CONSTANT (123456789)
 
@@ -23,6 +25,7 @@ typedef struct
 {
   EmerDaemon *test_object;
   EmerPermissionsProvider *mock_permissions_prov;
+  EmerPersistentCache *mock_persistent_cache;
 } Fixture;
 
 // Helper methods first:
@@ -72,15 +75,7 @@ setup (Fixture      *fixture,
   EmerMachineIdProvider *id_prov =
     emer_machine_id_provider_new (MACHINE_ID_PATH);
   fixture->mock_permissions_prov = emer_permissions_provider_new ();
-
-  EmerBootIdProvider *boot_prov = emer_boot_id_provider_new ();
-
-  GError *error = NULL;
-  EmerPersistentCache *persistent_cache =
-    emer_persistent_cache_new_full (NULL, &error, PERSISTENT_CACHE_TEST_DIR,
-                                    92160, boot_prov);
-  g_object_unref (boot_prov);
-
+  fixture->mock_persistent_cache = emer_persistent_cache_new (NULL, NULL);
   fixture->test_object =
     emer_daemon_new_full (g_rand_new_with_seed (18),
                           42, // Version number
@@ -89,10 +84,9 @@ setup (Fixture      *fixture,
                           "https://localhost", // uri,
                           id_prov, // MachineIdProvider
                           fixture->mock_permissions_prov, // PermissionsProvider
-                          persistent_cache, // PersistentCache
+                          fixture->mock_persistent_cache, // PersistentCache
                           20); // Buffer length
   g_object_unref (id_prov);
-  g_object_unref (persistent_cache);
 }
 
 static void
@@ -101,6 +95,8 @@ teardown (Fixture      *fixture,
 {
   g_object_unref (fixture->test_object);
   g_object_unref (fixture->mock_permissions_prov);
+  g_object_unref (fixture->mock_persistent_cache);
+  g_unlink (MACHINE_ID_PATH);
 }
 
 // Unit Tests next:

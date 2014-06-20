@@ -59,32 +59,34 @@ typedef struct SequenceEvent
   gsize num_event_values;
 } SequenceEvent;
 
-void       trash_singular_event  (SingularEvent   *singular);
+void      trash_singular_event     (SingularEvent   *singular);
 
-void       trash_aggregate_event (AggregateEvent  *aggregate);
+void      trash_aggregate_event    (AggregateEvent  *aggregate);
 
-void       trash_sequence_event  (SequenceEvent   *sequence);
+void      trash_sequence_event     (SequenceEvent   *sequence);
 
-void       free_singular_buffer  (SingularEvent   *singular_buffer,
-                                  gint             num_singulars_buffered);
+void      free_singular_buffer     (SingularEvent   *singular_buffer,
+                                    gint             num_singulars_buffered);
 
-void       free_aggregate_buffer (AggregateEvent  *aggregate_buffer,
-                                  gint             num_aggregates_buffered);
+void      free_aggregate_buffer    (AggregateEvent  *aggregate_buffer,
+                                    gint             num_aggregates_buffered);
 
-void       free_sequence_buffer  (SequenceEvent   *sequence_buffer,
-                                  gint             num_sequences_buffered);
+void      free_sequence_buffer     (SequenceEvent   *sequence_buffer,
+                                    gint             num_sequences_buffered);
 
-GVariant * singular_to_variant   (SingularEvent   *singular);
+GVariant *singular_to_variant      (SingularEvent   *singular);
 
-GVariant * aggregate_to_variant  (AggregateEvent  *aggregate);
+GVariant *aggregate_to_variant     (AggregateEvent  *aggregate);
 
-GVariant * sequence_to_variant   (SequenceEvent   *sequence);
+GVariant *sequence_to_variant      (SequenceEvent   *sequence);
 
-void       get_uuid_builder      (uuid_t           uuid,
-                                  GVariantBuilder *uuid_builder);
+GVariant *swap_bytes_if_big_endian (GVariant        *variant);
 
-gboolean   get_current_time      (clockid_t        clock_id,
-                                  gint64          *current_time);
+void      get_uuid_builder         (uuid_t           uuid,
+                                    GVariantBuilder *uuid_builder);
+
+gboolean  get_current_time         (clockid_t        clock_id,
+                                    gint64          *current_time);
 
 G_END_DECLS
 

@@ -4,7 +4,7 @@ Requires=dbus.service
 After=dbus.service
 
 [Service]
-User=root
+User=metrics
 Type=dbus
 BusName=com.endlessm.Metrics
 ExecStart=@libexecdir@/eos-metrics-event-recorder

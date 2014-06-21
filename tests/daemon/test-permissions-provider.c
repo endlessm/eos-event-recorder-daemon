@@ -9,6 +9,8 @@
 #include <glib.h>
 #include <gio/gio.h>
 
+#define MAX_TEST_TIMEOUT_SEC 5
+
 #define CONFIG_FILE_ENABLED_CONTENTS \
   "[global]\n" \
   "enabled=true\n"
@@ -40,6 +42,14 @@ on_notify_daemon_enabled (GObject    *test_object,
       emer_permissions_provider_get_daemon_enabled (EMER_PERMISSIONS_PROVIDER (test_object));
   fixture->notify_daemon_called = TRUE;
   g_main_loop_quit (fixture->main_loop);
+}
+
+static void
+abort_hung_test (void)
+{
+  g_critical ("Test timed out after " G_STRINGIFY (MAX_TEST_TIMEOUT_SEC)
+              " seconds.");
+  g_assert_not_reached ();
 }
 
 /* Pass NULL to config_file_contents if you don't want to create a file on disk.
@@ -81,10 +91,10 @@ setup (Fixture      *fixture,
   g_signal_connect (fixture->test_object, "notify::daemon-enabled",
                     G_CALLBACK (on_notify_daemon_enabled), fixture);
 
-  /* Failsafe: quit any hung async tests after 5 seconds. */
-  fixture->failsafe_source_id = g_timeout_add_seconds (5,
-                                                       (GSourceFunc) g_main_loop_quit,
-                                                       fixture->main_loop);
+  /* Failsafe: quit any hung async tests after MAX_TEST_TIMEOUT_SEC seconds. */
+  fixture->failsafe_source_id = g_timeout_add_seconds (MAX_TEST_TIMEOUT_SEC,
+                                                       (GSourceFunc) abort_hung_test,
+                                                       NULL);
 }
 
 static void

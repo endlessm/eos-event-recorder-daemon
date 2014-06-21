@@ -168,7 +168,7 @@ test_daemon_does_not_record_singular_event_if_not_allowed (Fixture      *fixture
   guint num_calls =
     mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
 
-  mock_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
+  emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
   test_daemon_can_record_singular_event (fixture, unused);
 
   /* FIXME: nothing can currently be asserted about whether the EmerDaemon tries
@@ -185,7 +185,7 @@ test_daemon_does_not_record_aggregate_event_if_not_allowed (Fixture      *fixtur
   guint num_calls =
     mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
 
-  mock_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
+  emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
   test_daemon_can_record_aggregate_events (fixture, unused);
 
   /* FIXME: See note above. */
@@ -200,7 +200,7 @@ test_daemon_does_not_record_event_sequence_if_not_allowed (Fixture      *fixture
   guint num_calls =
     mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
 
-  mock_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
+  emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
   test_daemon_can_record_event_sequence (fixture, unused);
 
   /* FIXME: See note above. */

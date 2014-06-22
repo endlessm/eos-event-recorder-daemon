@@ -81,7 +81,9 @@ typedef struct EmtrEventRecorderPrivate
   EmerEventRecorderServer *dbus_proxy;
 } EmtrEventRecorderPrivate;
 
-G_DEFINE_TYPE_WITH_PRIVATE (EmtrEventRecorder, emtr_event_recorder, G_TYPE_OBJECT)
+G_DEFINE_TYPE_WITH_PRIVATE (EmtrEventRecorder, emtr_event_recorder, G_TYPE_OBJECT);
+static EmtrEventRecorder *singleton;
+G_LOCK_DEFINE_STATIC (singleton);
 
 /* Callback to make the finish call after async D-Bus calls */
 typedef gboolean (*FinishCallback) (EmerEventRecorderServer *, GAsyncResult *, GError **);
@@ -90,6 +92,11 @@ static void
 emtr_event_recorder_finalize (GObject *object)
 {
   EmtrEventRecorder *self = EMTR_EVENT_RECORDER (object);
+  G_LOCK (singleton);
+  if (self == singleton)
+    singleton = NULL;
+  G_UNLOCK (singleton);
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
@@ -364,9 +371,6 @@ emtr_event_recorder_new (void)
 EmtrEventRecorder *
 emtr_event_recorder_get_default (void)
 {
-  static EmtrEventRecorder *singleton;
-  G_LOCK_DEFINE_STATIC (singleton);
-
   G_LOCK (singleton);
   if (singleton == NULL)
     singleton = g_object_new (EMTR_TYPE_EVENT_RECORDER, NULL);

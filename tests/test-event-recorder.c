@@ -75,8 +75,19 @@ test_event_recorder_get_default_is_singleton (void)
   EmtrEventRecorder *event_recorder1 = emtr_event_recorder_get_default ();
   EmtrEventRecorder *event_recorder2 = emtr_event_recorder_get_default ();
   g_assert (event_recorder1 == event_recorder2);
-  // A singleton shouldn't be unref'd.
+  g_object_unref (event_recorder1);
 }
+
+static void
+test_event_recorder_singleton_call_after_unref (void)
+{
+  write_testing_machine_id ();
+  EmtrEventRecorder *p1 = emtr_event_recorder_get_default ();
+  g_object_unref (p1);
+  EmtrEventRecorder *p2 = emtr_event_recorder_get_default ();
+  g_object_unref (p2);
+}
+
 
 static void
 test_event_recorder_record_event (struct RecorderFixture *fixture,
@@ -219,6 +230,8 @@ add_event_recorder_tests (void)
                           test_event_recorder_new_succeeds);
   g_test_add_func ("/event-recorder/get-default-is-singleton", 
                    test_event_recorder_get_default_is_singleton);
+  g_test_add_func ("/event-recorder/singleton-call-after-unref",
+                   test_event_recorder_singleton_call_after_unref);
   ADD_RECORDER_TEST_FUNC ("/event-recorder/record-event",
                           test_event_recorder_record_event);
   ADD_RECORDER_TEST_FUNC ("/event-recorder/record-events",

@@ -122,7 +122,8 @@ static gboolean   store_metric_list                     (EmerPersistentCache *se
                                                          capacity_t          *capacity,
                                                          const gchar         *variant_type_string);
 
-static gboolean   update_boot_offset                    (EmerPersistentCache *self);
+static gboolean   update_boot_offset                    (EmerPersistentCache *self,
+                                                         gboolean             always_update_timestamps);
 
 static gboolean   update_cache_version_number           (GCancellable        *cancellable,
                                                          GError             **error);
@@ -274,6 +275,39 @@ emer_persistent_cache_new (GCancellable *cancellable,
                          cancellable,
                          error,
                          NULL);
+}
+
+/*
+ * Gets the boot time offset and stores it in the out parameter offset.
+ * If the always_update_timstamps parameter is FALSE, this will not perform
+ * writes to disk to update the timestamps during this operation unless the boot
+ * id is out of date, or some corruption is detected which forces a rewrite of
+ * the boot timing metafile.
+ *
+ * Will return TRUE on success. Will return FALSE on failure, will not set the
+ * offset in the out parameter and will set the GError if error is not NULL.
+ */
+gboolean
+emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
+                                            gint64              *offset,
+                                            GError             **error,
+                                            gboolean             always_update_timestamps)
+{
+  g_return_val_if_fail (error != NULL || *error != NULL, FALSE);
+
+  // When always_update_timestamps is FALSE, the timestamps won't be written
+  // unless the boot offset in the metadata file is being overwritten.
+  if (!update_boot_offset (self, always_update_timestamps))
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                   "Couldn't read boot offset.");
+      return FALSE;
+    }
+
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+  *offset = priv->boot_offset;
+  return TRUE;
 }
 
 /*
@@ -543,7 +577,8 @@ reset_boot_timing_metafile (EmerPersistentCache *self,
  * network send occurs (an hourly event).
  */
 static gboolean
-update_boot_offset (EmerPersistentCache *self)
+update_boot_offset (EmerPersistentCache *self,
+                    gboolean             always_update_timestamps)
 {
   gint64 relative_time, absolute_time;
   if (!get_current_time (CLOCK_BOOTTIME, &relative_time) ||
@@ -581,9 +616,11 @@ update_boot_offset (EmerPersistentCache *self)
 
   if (priv->boot_offset_initialized)
     {
-      gboolean write_success = save_timing_metadata (key_file, &relative_time,
-                                                     &absolute_time, NULL,
-                                                     NULL, NULL, &error);
+      gboolean write_success = TRUE;
+      if (always_update_timestamps)
+        write_success = save_timing_metadata (key_file, &relative_time,
+                                              &absolute_time, NULL, NULL, NULL,
+                                              &error);
       g_key_file_unref (key_file);
 
       if (!write_success)
@@ -619,9 +656,11 @@ update_boot_offset (EmerPersistentCache *self)
 
   if (uuid_compare (saved_boot_id, system_boot_id) == 0)
     {
-      gboolean write_success =
-        save_timing_metadata (key_file, &relative_time, &absolute_time, NULL,
-                              NULL, NULL, &error);
+      gboolean write_success = TRUE;
+      if (always_update_timestamps)
+        write_success = save_timing_metadata (key_file, &relative_time,
+                                              &absolute_time, NULL, NULL, NULL,
+                                              &error);
       g_key_file_unref (key_file);
 
       if (!write_success)
@@ -666,10 +705,10 @@ update_boot_offset (EmerPersistentCache *self)
 
 /*
  * Takes an already open GKeyFile and cached timestamps and computes the
- * new and correct relative offset, storing it in the out parameter. Returns
- * TRUE if this is done successfully, and returns FALSE if there is an error
- * loading the stored timestamps from the metafile, which are needed to compute
- * the correct relative offset.
+ * new and correct boot offset, storing it in the out parameter.
+ * Returns TRUE if this is done successfully, and returns FALSE if there is an
+ * error loading the stored timestamps from the metafile, which are needed to
+ * compute the correct boot offset.
  */
 static gboolean
 compute_boot_offset (GKeyFile *key_file,
@@ -689,7 +728,7 @@ compute_boot_offset (GKeyFile *key_file,
     {
       gchar *full_path = g_strconcat (CACHE_DIRECTORY, BOOT_TIMING_METAFILE,
                                       NULL);
-      g_critical ("Failed to read relative offset from metafile %s . "
+      g_critical ("Failed to read boot offset from metafile %s . "
                   "Error: %s.", full_path, error->message);
       g_free (full_path);
       g_error_free (error);
@@ -1168,7 +1207,7 @@ emer_persistent_cache_store_metrics (EmerPersistentCache  *self,
                                      gint                 *num_sequence_metrics_stored,
                                      capacity_t           *capacity)
 {
-  if (!update_boot_offset (self))
+  if (!update_boot_offset (self, TRUE)) // Always update timestamps.
     {
       g_critical ("Couldn't update the boot offset, dropping metrics.");
       return FALSE;

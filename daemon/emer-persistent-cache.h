@@ -98,6 +98,11 @@ struct _EmerPersistentCacheClass
 
 GType                emer_persistent_cache_get_type                          (void) G_GNUC_CONST;
 
+gboolean            emer_persistent_cache_get_boot_time_offset               (EmerPersistentCache  *self,
+                                                                              gint64               *offset,
+                                                                              GError              **error,
+                                                                              gboolean              always_update_timestamps);
+
 EmerPersistentCache *emer_persistent_cache_get_default                       (GCancellable         *cancellable,
                                                                               GError              **error);
 

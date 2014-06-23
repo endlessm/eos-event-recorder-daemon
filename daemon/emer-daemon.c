@@ -34,41 +34,6 @@ prevent testing code from sending metrics to the production server. */
  */
 #define NETWORK_ATTEMPT_LIMIT 8
 
-typedef struct _EventValue
-{
-  // Time elapsed in nanoseconds from an unspecified starting point.
-  gint64 relative_timestamp;
-
-  GVariant *auxiliary_payload;
-} EventValue;
-
-typedef struct _SingularEvent
-{
-  guint32 user_id;
-  uuid_t event_id;
-  EventValue event_value;
-} SingularEvent;
-
-typedef struct _AggregateEvent
-{
-  SingularEvent event;
-  gint64 num_events;
-} AggregateEvent;
-
-typedef struct _SequenceEvent
-{
-  guint32 user_id;
-  uuid_t event_id;
-
-  /*
-   * The first element is the start event, the last element is the stop event,
-   * and any elements in between are progress events. The elements are ordered
-   * chronologically.
-   */
-  EventValue *event_values;
-
-  gsize num_event_values;
-} SequenceEvent;
 
 typedef struct _NetworkCallbackData
 {
@@ -134,28 +99,6 @@ enum
 };
 
 static GParamSpec *emer_daemon_props[NPROPS] = { NULL, };
-
-static void
-free_singular_event (SingularEvent *singular)
-{
-  GVariant *auxiliary_payload = singular->event_value.auxiliary_payload;
-  if (auxiliary_payload != NULL)
-    g_variant_unref (auxiliary_payload);
-}
-
-static void
-free_sequence_event (SequenceEvent *sequence)
-{
-  for (gint i = 0; i < sequence->num_event_values; ++i)
-    {
-      GVariant *curr_auxiliary_payload =
-        sequence->event_values[i].auxiliary_payload;
-      if (curr_auxiliary_payload != NULL)
-        g_variant_unref (curr_auxiliary_payload);
-    }
-
-  g_free (sequence->event_values);
-}
 
 static void
 free_network_callback_data (NetworkCallbackData *callback_data)
@@ -383,7 +326,7 @@ get_singulars_builder (EmerDaemonPrivate *priv,
                              &event_id_builder,
                              curr_event_value.relative_timestamp,
                              curr_event_value.auxiliary_payload);
-      free_singular_event (curr_singular);
+      trash_singular_event (curr_singular);
     }
   priv->num_singulars_buffered = 0;
 
@@ -403,9 +346,9 @@ get_aggregates_builder (EmerDaemonPrivate *priv,
   for (gint i = 0; i < num_aggregates; ++i)
     {
       AggregateEvent *curr_aggregate = aggregate_buffer + i;
-      GVariantBuilder event_id_builder;
-      get_uuid_builder (curr_aggregate->event.event_id, &event_id_builder);
       SingularEvent curr_event = curr_aggregate->event;
+      GVariantBuilder event_id_builder;
+      get_uuid_builder (curr_event.event_id, &event_id_builder);
       EventValue curr_event_value = curr_event.event_value;
       g_variant_builder_add (aggregates_builder, "(uayxxmv)",
                              curr_event.user_id,
@@ -413,7 +356,7 @@ get_aggregates_builder (EmerDaemonPrivate *priv,
                              curr_aggregate->num_events,
                              curr_event_value.relative_timestamp,
                              curr_event_value.auxiliary_payload);
-      free_singular_event (&curr_aggregate->event);
+      trash_aggregate_event (curr_aggregate);
     }
   priv->num_aggregates_buffered = 0;
 
@@ -450,7 +393,7 @@ get_sequences_builder (EmerDaemonPrivate *priv,
       g_variant_builder_add (sequences_builder, "(uaya(xmv))",
                              curr_sequence->user_id, &event_id_builder,
                              &event_values_builder);
-      free_sequence_event (curr_sequence);
+      trash_sequence_event (curr_sequence);
     }
   priv->num_sequences_buffered = 0;
 
@@ -890,28 +833,13 @@ emer_daemon_finalize (GObject *object)
   g_clear_object(&priv->machine_id_provider);
   g_clear_object (&priv->permissions_provider);
 
-  SingularEvent *singular_buffer = priv->singular_buffer;
-  gint num_singulars = priv->num_singulars_buffered;
-  for (gint i = 0; i < num_singulars; ++i)
-    free_singular_event (singular_buffer + i);
-
-  g_free (singular_buffer);
+  free_singular_buffer (priv->singular_buffer, priv->num_singulars_buffered);
   g_mutex_clear (&priv->singular_buffer_lock);
 
-  AggregateEvent *aggregate_buffer = priv->aggregate_buffer;
-  gint num_aggregates = priv->num_aggregates_buffered;
-  for (gint i = 0; i < num_aggregates; ++i)
-    free_singular_event (&aggregate_buffer[i].event);
-
-  g_free (aggregate_buffer);
+  free_aggregate_buffer (priv->aggregate_buffer, priv->num_aggregates_buffered);
   g_mutex_clear (&priv->aggregate_buffer_lock);
 
-  SequenceEvent *sequence_buffer = priv->sequence_buffer;
-  gint num_sequences = priv->num_sequences_buffered;
-  for (gint i = 0; i < num_sequences; ++i)
-    free_sequence_event (sequence_buffer + i);
-
-  g_free (sequence_buffer);
+  free_sequence_buffer (priv->sequence_buffer, priv->num_sequences_buffered);
   g_mutex_clear (&priv->sequence_buffer_lock);
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->finalize (object);

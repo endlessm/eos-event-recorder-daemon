@@ -48,7 +48,6 @@ static gboolean   cache_has_room                        (EmerPersistentCache *se
                                                          gsize                size);
 
 static gboolean   compute_boot_offset                   (EmerPersistentCache *self,
-                                                         GKeyFile            *key_file,
                                                          gint64               relative_time,
                                                          gint64               absolute_time,
                                                          gint64              *relative_offset);
@@ -110,7 +109,6 @@ static gboolean   reset_boot_timing_metafile            (EmerPersistentCache *se
                                                          gint64              *absolute_time_ptr);
 
 static gboolean   save_timing_metadata                  (EmerPersistentCache *self,
-                                                         GKeyFile            *key_file,
                                                          const gint64        *relative_time_ptr,
                                                          const gint64        *absolute_time_ptr,
                                                          const gint64        *relative_offset_ptr,
@@ -153,6 +151,8 @@ typedef struct _EmerPersistentCachePrivate
 
   uuid_t saved_boot_id;
   gboolean boot_id_initialized;
+
+  GKeyFile *boot_timing_key_file;
 
   guint64 cache_size;
   capacity_t capacity;
@@ -259,6 +259,7 @@ emer_persistent_cache_finalize (GObject *object)
 
   g_object_unref (priv->boot_id_provider);
   g_free (priv->boot_metafile_path);
+  g_key_file_unref (priv->boot_timing_key_file);
 
   G_OBJECT_CLASS (emer_persistent_cache_parent_class)->finalize (object);
 }
@@ -294,6 +295,7 @@ emer_persistent_cache_init (EmerPersistentCache *self)
   priv->capacity = CAPACITY_LOW;
   priv->boot_metafile_path = g_strconcat (CACHE_DIRECTORY, BOOT_TIMING_METAFILE,
                                           NULL);
+  priv->boot_timing_key_file = g_key_file_new ();
 }
 
 static gboolean
@@ -405,7 +407,6 @@ emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
  */
 static gboolean
 save_timing_metadata (EmerPersistentCache *self,
-                      GKeyFile            *key_file,
                       const gint64        *relative_time_ptr,
                       const gint64        *absolute_time_ptr,
                       const gint64        *relative_offset_ptr,
@@ -413,39 +414,41 @@ save_timing_metadata (EmerPersistentCache *self,
                       const gboolean      *was_reset_ptr,
                       GError             **out_error)
 {
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
   if (relative_time_ptr != NULL)
-    g_key_file_set_int64 (key_file,
+    g_key_file_set_int64 (priv->boot_timing_key_file,
                           CACHE_TIMING_GROUP_NAME,
                           CACHE_RELATIVE_TIME_KEY,
                           *relative_time_ptr);
 
   if (absolute_time_ptr != NULL)
-    g_key_file_set_int64 (key_file,
+    g_key_file_set_int64 (priv->boot_timing_key_file,
                           CACHE_TIMING_GROUP_NAME,
                           CACHE_ABSOLUTE_TIME_KEY,
                           *absolute_time_ptr);
 
   if (relative_offset_ptr != NULL)
-    g_key_file_set_int64 (key_file,
+    g_key_file_set_int64 (priv->boot_timing_key_file,
                           CACHE_TIMING_GROUP_NAME,
                           CACHE_RELATIVE_OFFSET_KEY,
                           *relative_offset_ptr);
 
   if (boot_id_string != NULL)
-    g_key_file_set_string (key_file,
+    g_key_file_set_string (priv->boot_timing_key_file,
                            CACHE_TIMING_GROUP_NAME,
                            CACHE_LAST_BOOT_ID_KEY,
                            boot_id_string);
 
   if (was_reset_ptr != NULL)
-    g_key_file_set_boolean (key_file,
+    g_key_file_set_boolean (priv->boot_timing_key_file,
                             CACHE_TIMING_GROUP_NAME,
                             CACHE_WAS_RESET_KEY,
                             *was_reset_ptr);
 
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
-  if (!g_key_file_save_to_file (key_file, priv->boot_metafile_path, out_error))
+  if (!g_key_file_save_to_file (priv->boot_timing_key_file,
+                                priv->boot_metafile_path, out_error))
     {
       g_prefix_error (out_error, "Failed to write to metafile: %s .",
                       priv->boot_metafile_path);
@@ -477,8 +480,7 @@ get_saved_boot_id (EmerPersistentCache *self,
       return TRUE;
     }
 
-  GKeyFile *key_file = g_key_file_new ();
-  if (!g_key_file_load_from_file (key_file,
+  if (!g_key_file_load_from_file (priv->boot_timing_key_file,
                                   priv->boot_metafile_path,
                                   G_KEY_FILE_NONE,
                                   error))
@@ -488,14 +490,14 @@ get_saved_boot_id (EmerPersistentCache *self,
       return FALSE;
     }
 
-  gchar *id_as_string = g_key_file_get_string (key_file,
+  gchar *id_as_string = g_key_file_get_string (priv->boot_timing_key_file,
                                                CACHE_TIMING_GROUP_NAME,
                                                CACHE_LAST_BOOT_ID_KEY,
                                                error);
   if (id_as_string == NULL)
     {
-      g_critical ("Failed to read boot_id from %s .", priv->boot_metafile_path);
-      g_key_file_unref (key_file);
+      g_prefix_error (error, "Failed to read boot_id from %s .",
+                      priv->boot_metafile_path);
       return FALSE;
     }
 
@@ -508,7 +510,6 @@ get_saved_boot_id (EmerPersistentCache *self,
       g_prefix_error (error, "Failed to parse the saved boot id: %s.",
                       id_as_string);
       g_free (id_as_string);
-      g_key_file_unref (key_file);
       return FALSE;
     }
 
@@ -594,15 +595,12 @@ reset_boot_timing_metafile (EmerPersistentCache *self,
   gchar system_boot_id_string[BOOT_ID_FILE_LENGTH];
   uuid_unparse_lower (system_boot_id, system_boot_id_string);
 
-  GKeyFile *key_file = g_key_file_new ();
-
   gint64 reset_offset = 0;
   gboolean was_reset = TRUE;
   gboolean write_success =
-    save_timing_metadata (self, key_file, relative_time_ptr, absolute_time_ptr,
+    save_timing_metadata (self, relative_time_ptr, absolute_time_ptr,
                           &reset_offset, system_boot_id_string, &was_reset,
                           &error);
-  g_key_file_unref (key_file);
 
   if (!write_success)
     {
@@ -649,9 +647,8 @@ update_boot_offset (EmerPersistentCache *self,
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  GKeyFile *key_file = g_key_file_new ();
   GError *error = NULL;
-  if (!g_key_file_load_from_file (key_file,
+  if (!g_key_file_load_from_file (priv->boot_timing_key_file,
                                   priv->boot_metafile_path,
                                   G_KEY_FILE_NONE,
                                   &error))
@@ -663,8 +660,7 @@ update_boot_offset (EmerPersistentCache *self,
           g_warning ("Got an unexpected error trying to load %s . Error: %s.",
                      priv->boot_metafile_path, error->message);
         }
-      g_clear_error (&error);
-      g_key_file_unref (key_file);
+      g_error_free (error);
       return reset_boot_timing_metafile (self, &relative_time, &absolute_time);
     }
 
@@ -672,10 +668,9 @@ update_boot_offset (EmerPersistentCache *self,
     {
       gboolean write_success = TRUE;
       if (always_update_timestamps)
-        write_success = save_timing_metadata (self, key_file, &relative_time,
+        write_success = save_timing_metadata (self, &relative_time,
                                               &absolute_time, NULL, NULL, NULL,
                                               &error);
-      g_key_file_unref (key_file);
 
       if (!write_success)
         {
@@ -687,15 +682,13 @@ update_boot_offset (EmerPersistentCache *self,
       return TRUE;
     }
 
-  gint64 relative_offset = g_key_file_get_int64 (key_file,
+  gint64 relative_offset = g_key_file_get_int64 (priv->boot_timing_key_file,
                                                  CACHE_TIMING_GROUP_NAME,
                                                  CACHE_RELATIVE_OFFSET_KEY,
                                                  &error);
   if (error != NULL)
     {
-      g_clear_error (&error);
-      g_key_file_unref (key_file);
-
+      g_error_free (error);
       return reset_boot_timing_metafile (self, &relative_time, &absolute_time);
     }
 
@@ -703,8 +696,9 @@ update_boot_offset (EmerPersistentCache *self,
   if (!get_saved_boot_id (self, saved_boot_id, &error) ||
       !get_system_boot_id (self, system_boot_id, &error))
     {
-      g_key_file_unref (key_file);
-      g_error_free (error); // Error already reported.
+      g_critical ("Failed to access boot ids for comparison. Error: %s",
+                  error->message);
+      g_error_free (error);
       return FALSE;
     }
 
@@ -712,10 +706,9 @@ update_boot_offset (EmerPersistentCache *self,
     {
       gboolean write_success = TRUE;
       if (always_update_timestamps)
-        write_success = save_timing_metadata (self, key_file, &relative_time,
+        write_success = save_timing_metadata (self, &relative_time,
                                               &absolute_time, NULL, NULL, NULL,
                                               &error);
-      g_key_file_unref (key_file);
 
       if (!write_success)
         {
@@ -727,22 +720,18 @@ update_boot_offset (EmerPersistentCache *self,
       return TRUE;
     }
 
-  if (!compute_boot_offset (self, key_file, relative_time, absolute_time,
+  if (!compute_boot_offset (self, relative_time, absolute_time,
                             &relative_offset))
-    {
-      g_key_file_unref (key_file);
-      return FALSE; // Error already reported.
-    }
+    return FALSE;
 
   gchar system_boot_id_string[BOOT_ID_FILE_LENGTH];
   uuid_unparse_lower (system_boot_id, system_boot_id_string);
 
   gboolean was_reset = FALSE;
   gboolean write_success =
-    save_timing_metadata (self, key_file, &relative_time, &absolute_time,
-                          &relative_offset, system_boot_id_string,
-                          &was_reset, &error);
-  g_key_file_unref (key_file);
+    save_timing_metadata (self, &relative_time, &absolute_time,
+                          &relative_offset, system_boot_id_string, &was_reset,
+                          &error);
 
   if (!write_success)
     {
@@ -766,21 +755,20 @@ update_boot_offset (EmerPersistentCache *self,
  */
 static gboolean
 compute_boot_offset (EmerPersistentCache *self,
-                     GKeyFile            *key_file,
                      gint64               relative_time,
                      gint64               absolute_time,
                      gint64              *relative_offset)
 {
   GError *error = NULL;
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
 
   /* The amount of time elapsed between the origin boot and the boot with
      the stored ID. */
-  gint64 stored_offset = g_key_file_get_int64 (key_file,
+  gint64 stored_offset = g_key_file_get_int64 (priv->boot_timing_key_file,
                                                CACHE_TIMING_GROUP_NAME,
                                                CACHE_RELATIVE_OFFSET_KEY,
                                                &error);
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
   if (error != NULL)
     {
       g_critical ("Failed to read relative offset from metafile %s . "
@@ -789,10 +777,9 @@ compute_boot_offset (EmerPersistentCache *self,
       return FALSE;
     }
 
-  gint64 stored_relative_time = g_key_file_get_int64 (key_file,
-                                                      CACHE_TIMING_GROUP_NAME,
-                                                      CACHE_RELATIVE_TIME_KEY,
-                                                      &error);
+  gint64 stored_relative_time =
+    g_key_file_get_int64 (priv->boot_timing_key_file, CACHE_TIMING_GROUP_NAME,
+                          CACHE_RELATIVE_TIME_KEY, &error);
   if (error != NULL)
     {
       g_critical ("Failed to read relative time from metafile %s . "
@@ -801,10 +788,9 @@ compute_boot_offset (EmerPersistentCache *self,
       return FALSE;
     }
 
-  gint64 stored_absolute_time = g_key_file_get_int64 (key_file,
-                                                      CACHE_TIMING_GROUP_NAME,
-                                                      CACHE_ABSOLUTE_TIME_KEY,
-                                                      &error);
+  gint64 stored_absolute_time =
+    g_key_file_get_int64 (priv->boot_timing_key_file, CACHE_TIMING_GROUP_NAME,
+                          CACHE_ABSOLUTE_TIME_KEY, &error);
   if (error != NULL)
     {
       g_critical ("Failed to read absolute time from metafile %s . "

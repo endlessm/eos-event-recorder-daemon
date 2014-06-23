@@ -18,11 +18,9 @@
 #include "emer-permissions-provider.h"
 #include "shared/metrics-util.h"
 
-// TODO: Once we have a production proxy server, update this constant
-// accordingly.
 /* The URI of the metrics production proxy server. Is kept in a #define to
 prevent testing code from sending metrics to the production server. */
-#define PRODUCTION_SERVER_URI "http://metrics-test.endlessm-sf.com:8080/"
+#define PRODUCTION_SERVER_URI "https://metrics.endlessm.com/"
 
 /*
  * The minimum number of seconds to wait before attempting the first retry of a

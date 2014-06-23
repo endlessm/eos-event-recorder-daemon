@@ -84,7 +84,8 @@ static gboolean   get_saved_boot_id                     (EmerPersistentCache *se
                                                          uuid_t               boot_id,
                                                          GError             **error);
 
-static gboolean   get_system_boot_id                    (uuid_t               boot_id,
+static gboolean   get_system_boot_id                    (EmerPersistentCache *self,
+                                                         uuid_t               boot_id,
                                                          GError             **error);
 
 static void       emer_persistent_cache_initable_init   (GInitableIface      *iface);
@@ -115,6 +116,9 @@ static gboolean   save_timing_metadata                  (GKeyFile            *ke
                                                          const gboolean      *was_reset_ptr,
                                                          GError              **out_error);
 
+static void       set_boot_id_provider                  (EmerPersistentCache *self,
+                                                         EmerBootIdProvider  *boot_id_provider);
+
 static gboolean   store_metric_list                     (EmerPersistentCache *self,
                                                          GFile               *file,
                                                          GVariant           **list,
@@ -138,6 +142,8 @@ typedef struct GVariantWritable
 
 typedef struct _EmerPersistentCachePrivate
 {
+  EmerBootIdProvider *boot_id_provider;
+
   gint64 boot_offset;
   gboolean boot_offset_initialized;
 
@@ -200,9 +206,78 @@ static gint MAX_CACHE_SIZE = 102400; // 100 kB
  */
 static gchar* CACHE_DIRECTORY = "/var/cache/metrics/";
 
+enum {
+  PROP_0,
+  PROP_BOOT_ID_PROVIDER,
+  NPROPS
+};
+
+static GParamSpec *emer_persistent_cache_props[NPROPS] = { NULL, };
+
+static void
+set_boot_id_provider (EmerPersistentCache *self,
+                      EmerBootIdProvider  *boot_id_provider)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  if (priv->boot_id_provider == NULL)
+    priv->boot_id_provider = emer_boot_id_provider_new ();
+  else
+    priv->boot_id_provider = g_object_ref (boot_id_provider);
+}
+
+static void
+emer_persistent_cache_set_property (GObject      *object,
+                                    guint         property_id,
+                                    const GValue *value,
+                                    GParamSpec   *pspec)
+{
+  EmerPersistentCache *self = EMER_PERSISTENT_CACHE (object);
+
+  switch (property_id)
+    {
+    case PROP_BOOT_ID_PROVIDER:
+      set_boot_id_provider (self, g_value_get_object (value));
+      break;
+
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+    }
+}
+
+static void
+emer_persistent_cache_finalize (GObject *object)
+{
+  EmerPersistentCache *self = EMER_PERSISTENT_CACHE (object);
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  g_object_unref (priv->boot_id_provider);
+
+  G_OBJECT_CLASS (emer_persistent_cache_parent_class)->finalize (object);
+}
+
 static void
 emer_persistent_cache_class_init (EmerPersistentCacheClass *klass)
 {
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+
+  object_class->set_property = emer_persistent_cache_set_property;
+  object_class->finalize = emer_persistent_cache_finalize;
+
+  /* Blurb string is good enough default documentation for this */
+  emer_persistent_cache_props[PROP_BOOT_ID_PROVIDER] =
+    g_param_spec_object ("boot-id-provider", "Boot id provider",
+                         "The provider for the system boot id used to establish"
+                         " whether the current boot is the same as the previous"
+                         " boot encountered when last writing to the Persistent"
+                         " Cache.",
+                         EMER_TYPE_BOOT_ID_PROVIDER,
+                         G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
+
+  g_object_class_install_properties (object_class, NPROPS,
+                                     emer_persistent_cache_props);
 }
 
 static void
@@ -264,16 +339,18 @@ emer_persistent_cache_get_default (GCancellable *cancellable,
  * but if set to 0, the production value will be used.
  */
 EmerPersistentCache*
-emer_persistent_cache_new (GCancellable *cancellable,
-                           GError      **error,
-                           gchar        *custom_directory,
-                           gint          custom_cache_size)
+emer_persistent_cache_new (GCancellable       *cancellable,
+                           GError            **error,
+                           gchar              *custom_directory,
+                           gint                custom_cache_size,
+                           EmerBootIdProvider *boot_id_provider)
 {
   MAX_CACHE_SIZE = custom_cache_size;
   CACHE_DIRECTORY = custom_directory;
   return g_initable_new (EMER_TYPE_PERSISTENT_CACHE,
                          cancellable,
                          error,
+                         "boot-id-provider", boot_id_provider,
                          NULL);
 }
 
@@ -437,46 +514,24 @@ get_saved_boot_id (EmerPersistentCache *self,
 }
 
 /*
- * Reads the Operating System's boot id from disk, returning it via the out
- * parameter boot_id.  Returns FALSE on failure -- if it is an I/O failure, it
- * will also set the GError. Returns TRUE on success.
+ * Reads the Operating System's boot id from disk or cached value, returning it
+ * via the out parameter boot_id.  Returns FALSE on failure and sets the GError.
+ * Returns TRUE on success.
  */
 static gboolean
-get_system_boot_id (uuid_t   boot_id,
-                    GError **error)
+get_system_boot_id (EmerPersistentCache *self,
+                    uuid_t               boot_id,
+                    GError             **error)
 {
-  gchar *file_contents;
-  gsize file_contents_length;
-  if (!g_file_get_contents (SYSTEM_BOOT_ID_FILE, &file_contents,
-                            &file_contents_length, error))
-    {
-      g_prefix_error (error, "Failed to read from file: %s .",
-                      SYSTEM_BOOT_ID_FILE);
-      return FALSE;
-    }
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
 
-  /* Strangely, with both the keyfile and the system file, a newline is appended
-     and retrieved when a uuid is changed to a string and stored on disk.
-     We chomp it off here because uuid_parse will fail otherwise. */
-  if (file_contents_length != BOOT_ID_FILE_LENGTH)
+  if (!emer_boot_id_provider_get_id (priv->boot_id_provider, boot_id))
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                   "Length was: %d but expected length: %d.",
-                   file_contents_length, BOOT_ID_FILE_LENGTH);
-      g_free (file_contents);
+                   "Failed to get the boot ID from the EmerBootIdProvider.");
       return FALSE;
     }
-  g_strchomp (file_contents);
-
-  if (uuid_parse (file_contents, boot_id) != 0)
-    {
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                   "Failed to parse the uuid from the system.");
-      g_free (file_contents);
-      return FALSE;
-    }
-
-  g_free (file_contents);
   return TRUE;
 }
 
@@ -528,7 +583,7 @@ reset_boot_timing_metafile (EmerPersistentCache *self,
     }
 
   uuid_t system_boot_id;
-  if (!get_system_boot_id (system_boot_id, &error))
+  if (!get_system_boot_id (self, system_boot_id, &error))
     {
       g_critical ("Failed to reset boot metadata. Error: %s", error->message);
       g_error_free (error);
@@ -647,7 +702,7 @@ update_boot_offset (EmerPersistentCache *self,
 
   uuid_t saved_boot_id, system_boot_id;
   if (!get_saved_boot_id (self, saved_boot_id, &error) ||
-      !get_system_boot_id (system_boot_id, &error))
+      !get_system_boot_id (self, system_boot_id, &error))
     {
       g_key_file_unref (key_file);
       g_error_free (error); // Error already reported.

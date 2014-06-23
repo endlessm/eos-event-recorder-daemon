@@ -8,6 +8,8 @@
 #include <glib-object.h>
 #include <gio/gio.h>
 
+#include "daemon/emer-boot-id-provider.h"
+
 G_BEGIN_DECLS
 
 #define EMER_TYPE_PERSISTENT_CACHE emer_persistent_cache_get_type()
@@ -126,7 +128,8 @@ gboolean             emer_persistent_cache_store_metrics                     (Em
 EmerPersistentCache *emer_persistent_cache_new                               (GCancellable         *cancellable,
                                                                               GError              **error,
                                                                               gchar                *custom_directory,
-                                                                              gint                  custom_cache_size);
+                                                                              gint                  custom_cache_size,
+                                                                              EmerBootIdProvider   *boot_id_provider);
 /*
  * Function should only be used in testing code, NOT in production code.
  */

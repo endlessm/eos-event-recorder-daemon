@@ -81,6 +81,7 @@ tests_daemon_test_permissions_provider_LDADD = $(DAEMON_TEST_LIBS)
 tests_daemon_test_persistent_cache_SOURCES = \
 	tests/daemon/test-persistent-cache.c \
 	daemon/emer-persistent-cache.c daemon/emer-persistent-cache.h \
+	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
 	shared/metrics-util.c shared/metrics-util.h \
 	$(NULL)
 tests_daemon_test_persistent_cache_CPPFLAGS = \

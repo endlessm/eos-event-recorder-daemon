@@ -67,14 +67,15 @@ teardown (gboolean     *unused,
   g_unlink (TEST_DIRECTORY CACHE_PREFIX SEQUENCE_SUFFIX);
   g_unlink (TEST_DIRECTORY CACHE_PREFIX LOCAL_CACHE_VERSION_METAFILE);
   g_unlink (TEST_DIRECTORY BOOT_TIMING_METAFILE);
+  g_rmdir (TEST_DIRECTORY);
 }
 
 static void
 setup (gboolean     *unused,
        gconstpointer dontuseme)
 {
-  g_mkdir (TEST_DIRECTORY, 0777); // All permissions are granted by 0777.
   teardown (unused, dontuseme);
+  g_mkdir (TEST_DIRECTORY, 0777); // All permissions are granted by 0777.
   write_mock_system_boot_id_file ();
 }
 

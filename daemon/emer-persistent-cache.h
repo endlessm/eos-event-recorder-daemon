@@ -8,6 +8,8 @@
 #include <glib-object.h>
 #include <gio/gio.h>
 
+#include "daemon/emer-boot-id-provider.h"
+
 G_BEGIN_DECLS
 
 #define EMER_TYPE_PERSISTENT_CACHE emer_persistent_cache_get_type()
@@ -39,7 +41,7 @@ G_BEGIN_DECLS
  * The name of the meta-file containing the relative time, absolute time, and
  * boot id meta-data.
  */
-#define BOOT_TIMING_METAFILE "boot_timing_metafile"
+#define BOOT_OFFSET_METAFILE "boot_offset_metafile"
 
 /*
  * The prefix for all metrics cache files.
@@ -67,7 +69,7 @@ G_BEGIN_DECLS
 #define CACHE_ABSOLUTE_TIME_KEY   "absolute_time"
 #define CACHE_RELATIVE_TIME_KEY   "relative_time"
 #define CACHE_LAST_BOOT_ID_KEY    "boot_id"
-#define CACHE_RELATIVE_OFFSET_KEY "relative_time_offset"
+#define CACHE_BOOT_OFFSET_KEY     "boot_offset"
 #define CACHE_WAS_RESET_KEY       "was_reset"
 
 typedef struct _EmerPersistentCache EmerPersistentCache;
@@ -126,7 +128,8 @@ gboolean             emer_persistent_cache_store_metrics                     (Em
 EmerPersistentCache *emer_persistent_cache_new                               (GCancellable         *cancellable,
                                                                               GError              **error,
                                                                               gchar                *custom_directory,
-                                                                              gint                  custom_cache_size);
+                                                                              gint                  custom_cache_size,
+                                                                              EmerBootIdProvider   *boot_id_provider);
 /*
  * Function should only be used in testing code, NOT in production code.
  */

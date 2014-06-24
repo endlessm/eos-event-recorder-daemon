@@ -8,13 +8,26 @@
 
 #include "shared/metrics-util.h"
 
-static gchar *TEST_DIRECTORY = "/tmp/metrics_testing/";
+#define TEST_DIRECTORY "/tmp/metrics_testing/"
+
+#define TEST_SYSTEM_BOOT_ID_FILE "system_boot_id_file"
 
 // Generated via uuidgen.
+#define FAKE_SYSTEM_BOOT_ID "1ca14ab8-bed6-4bc0-8369-484518d22a31\n"
 #define FAKE_BOOT_ID "baccd4dd-9765-4eb2-a2a0-03c6623471e6\n"
-#define FAKE_RELATIVE_OFFSET 4000000000 // 4 seconds
+#define FAKE_BOOT_OFFSET 4000000000 // 4 seconds
 
 #define TEST_SIZE 1024000
+
+/*
+ * The expected size in bytes of the boot id file we want to mock, located at
+ * /proc/sys/kernel/random/boot_id. The file should be 32 lower-case hexadecimal
+ * characters interspersed with 4 hyphens and terminated with a newline
+ * character.
+ *
+ * Exact format: "%08x-%04x-%04x-%04x-%012x\n"
+ */
+#define BOOT_FILE_LENGTH 37
 
 // TODO: Replace this with a reasonable value once it is used.
 #define MAX_BYTES_TO_READ 0
@@ -25,7 +38,7 @@ static gchar *TEST_DIRECTORY = "/tmp/metrics_testing/";
 
 #define DEFAULT_KEY_FILE_DATA \
   "[time]\n" \
-  "relative_time_offset=0\n" \
+  "boot_offset=0\n" \
   "was_reset=true\n" \
   "absolute_time=1403195800943262692\n" \
   "relative_time=2516952859775\n" \
@@ -34,24 +47,51 @@ static gchar *TEST_DIRECTORY = "/tmp/metrics_testing/";
 // ---- Helper functions come first ----
 
 static void
-tear_down_file (const gchar *dir,
-                const gchar *file)
+write_mock_system_boot_id_file (void)
 {
-  gchar *combo = g_strconcat (dir, file, NULL);
-  g_unlink (combo);
-  g_free (combo);
+  GFile *file = g_file_new_for_path (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
+  GError *error = NULL;
+  g_file_replace_contents (file, FAKE_SYSTEM_BOOT_ID, BOOT_FILE_LENGTH, NULL,
+                           FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL,
+                           NULL, &error);
+  g_assert_no_error (error);
+  g_object_unref (file);
 }
 
 static void
-tear_down_files (gboolean     *unused,
-                 gconstpointer dontuseme)
+teardown (gboolean     *unused,
+          gconstpointer dontuseme)
 {
-  tear_down_file (TEST_DIRECTORY, CACHE_PREFIX INDIVIDUAL_SUFFIX);
-  tear_down_file (TEST_DIRECTORY, CACHE_PREFIX AGGREGATE_SUFFIX);
-  tear_down_file (TEST_DIRECTORY, CACHE_PREFIX SEQUENCE_SUFFIX);
-  tear_down_file (TEST_DIRECTORY, CACHE_PREFIX LOCAL_CACHE_VERSION_METAFILE);
-  tear_down_file (TEST_DIRECTORY, BOOT_TIMING_METAFILE);
+  g_unlink (TEST_DIRECTORY CACHE_PREFIX INDIVIDUAL_SUFFIX);
+  g_unlink (TEST_DIRECTORY CACHE_PREFIX AGGREGATE_SUFFIX);
+  g_unlink (TEST_DIRECTORY CACHE_PREFIX SEQUENCE_SUFFIX);
+  g_unlink (TEST_DIRECTORY CACHE_PREFIX LOCAL_CACHE_VERSION_METAFILE);
+  g_unlink (TEST_DIRECTORY BOOT_OFFSET_METAFILE);
   g_rmdir (TEST_DIRECTORY);
+}
+
+static void
+setup (gboolean     *unused,
+       gconstpointer dontuseme)
+{
+  teardown (unused, dontuseme);
+  g_mkdir (TEST_DIRECTORY, 0777); // All permissions are granted by 0777.
+  write_mock_system_boot_id_file ();
+}
+
+static EmerPersistentCache *
+make_testing_cache (void)
+{
+  GError *error = NULL;
+  EmerBootIdProvider *boot_id_provider =
+    emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
+                                                          &error,
+                                                          TEST_DIRECTORY,
+                                                          TEST_SIZE,
+                                                          boot_id_provider);
+  g_assert_no_error (error);
+  return cache;
 }
 
 /*
@@ -62,7 +102,7 @@ static GKeyFile *
 load_testing_key_file (void)
 {
   GKeyFile *key_file = g_key_file_new ();
-  gchar *full_path = g_strconcat (TEST_DIRECTORY, BOOT_TIMING_METAFILE, NULL);
+  gchar *full_path = g_strconcat (TEST_DIRECTORY, BOOT_OFFSET_METAFILE, NULL);
   g_assert (g_key_file_load_from_file (key_file, full_path, G_KEY_FILE_NONE,
                                        NULL));
   return key_file;
@@ -79,14 +119,13 @@ set_boot_offset_in_metafile (gint64 new_offset)
 
   g_key_file_set_int64 (key_file,
                         CACHE_TIMING_GROUP_NAME,
-                        CACHE_RELATIVE_OFFSET_KEY,
+                        CACHE_BOOT_OFFSET_KEY,
                         new_offset);
 
-  gchar *full_path = g_strconcat (TEST_DIRECTORY, BOOT_TIMING_METAFILE, NULL);
-  g_assert (g_key_file_save_to_file (key_file, full_path, NULL));
-
+  g_assert (g_key_file_save_to_file (key_file,
+                                     TEST_DIRECTORY BOOT_OFFSET_METAFILE,
+                                     NULL));
   g_key_file_unref (key_file);
-  g_free (full_path);
 }
 
 /*
@@ -102,9 +141,9 @@ write_default_key_file_to_disk (void)
   g_assert (g_key_file_load_from_data (key_file, DEFAULT_KEY_FILE_DATA, -1,
                                        G_KEY_FILE_NONE, NULL));
 
-  gchar *full_path = g_strconcat (TEST_DIRECTORY, BOOT_TIMING_METAFILE, NULL);
-  g_assert (g_key_file_save_to_file (key_file, full_path, NULL));
-  g_free (full_path);
+  g_assert (g_key_file_save_to_file (key_file,
+                                     TEST_DIRECTORY BOOT_OFFSET_METAFILE,
+                                     NULL));
 }
 
 /*
@@ -121,11 +160,10 @@ set_boot_id_in_metafile (gchar *new_boot_id)
                          CACHE_LAST_BOOT_ID_KEY,
                          new_boot_id);
 
-  gchar *full_path = g_strconcat (TEST_DIRECTORY, BOOT_TIMING_METAFILE, NULL);
-  g_assert (g_key_file_save_to_file (key_file, full_path, NULL));
-
+  g_assert (g_key_file_save_to_file (key_file,
+                                     TEST_DIRECTORY BOOT_OFFSET_METAFILE,
+                                     NULL));
   g_key_file_unref (key_file);
-  g_free (full_path);
 }
 
 /*
@@ -137,12 +175,12 @@ remove_offset (void)
 {
   GKeyFile *key_file = load_testing_key_file ();
   g_assert (g_key_file_remove_key (key_file, CACHE_TIMING_GROUP_NAME,
-                                   CACHE_RELATIVE_OFFSET_KEY, NULL));
+                                   CACHE_BOOT_OFFSET_KEY, NULL));
 
-  gchar *full_path = g_strconcat (TEST_DIRECTORY, BOOT_TIMING_METAFILE, NULL);
-  g_assert (g_key_file_save_to_file (key_file, full_path, NULL));
+  g_assert (g_key_file_save_to_file (key_file,
+                                     TEST_DIRECTORY BOOT_OFFSET_METAFILE,
+                                     NULL));
   g_key_file_unref (key_file);
-  g_free (full_path);
 }
 
 /*
@@ -155,7 +193,7 @@ read_offset (void)
   GError *error = NULL;
   gint64 stored_offset = g_key_file_get_int64 (key_file,
                                                CACHE_TIMING_GROUP_NAME,
-                                               CACHE_RELATIVE_OFFSET_KEY,
+                                               CACHE_BOOT_OFFSET_KEY,
                                                &error);
   g_key_file_unref (key_file);
   g_assert (error == NULL);
@@ -620,10 +658,7 @@ test_persistent_cache_new_succeeds (gboolean     *unused,
                                     gconstpointer dontuseme)
 {
   GError *error = NULL;
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          &error,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
   g_assert (cache != NULL);
   g_object_unref (cache);
   if (error != NULL)
@@ -635,10 +670,7 @@ static void
 test_persistent_cache_store_one_individual_event_succeeds (gboolean     *unused,
                                                            gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
   capacity_t capacity;
   gboolean success = store_single_individual_event (cache, &capacity);
   g_object_unref (cache);
@@ -650,10 +682,7 @@ static void
 test_persistent_cache_store_one_aggregate_event_succeeds (gboolean     *unused,
                                                           gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
   capacity_t capacity;
   gboolean success = store_single_aggregate_event (cache, &capacity);
   g_object_unref (cache);
@@ -665,10 +694,7 @@ static void
 test_persistent_cache_store_one_sequence_event_succeeds (gboolean     *unused,
                                                          gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
   capacity_t capacity;
   gboolean success = store_single_sequence_event (cache, &capacity);
   g_object_unref (cache);
@@ -680,10 +706,7 @@ static void
 test_persistent_cache_store_one_of_each_succeeds (gboolean     *unused,
                                                   gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
   GVariant *ind = make_individual_event (0);
   GVariant *agg = make_aggregate_event (0);
   GVariant *seq = make_sequence_event (0);
@@ -725,10 +748,7 @@ static void
 test_persistent_cache_store_many_succeeds (gboolean     *unused,
                                            gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
 
   gint num_individual_events_made;
   gint num_aggregate_events_made;
@@ -755,10 +775,13 @@ test_persistent_cache_store_when_full_succeeds (gboolean     *unused,
                                                 gconstpointer dontuseme)
 {
   gint space_in_bytes = 3000;
+  EmerBootIdProvider *boot_id_provider =
+    emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
   EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
                                                           NULL,
                                                           TEST_DIRECTORY,
-                                                          space_in_bytes);
+                                                          space_in_bytes,
+                                                          boot_id_provider);
   capacity_t capacity = CAPACITY_LOW;
 
   // Store a ton, until it is full.
@@ -793,6 +816,7 @@ test_persistent_cache_store_when_full_succeeds (gboolean     *unused,
     }
 
   g_object_unref (cache);
+  g_object_unref (boot_id_provider);
   g_assert (capacity == CAPACITY_MAX);
 }
 
@@ -800,10 +824,7 @@ static void
 test_persistent_cache_drain_one_individual_succeeds (gboolean     *unused,
                                                      gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
   GVariant *var = make_individual_event (1);
   GVariant *var_array[] = {var, NULL};
   GVariant *empty_array[] = {NULL};
@@ -849,10 +870,7 @@ static void
 test_persistent_cache_drain_one_aggregate_succeeds (gboolean     *unused,
                                                     gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
   GVariant *var = make_aggregate_event (1);
   GVariant *var_array[] = {var, NULL};
   GVariant *empty_array[] = {NULL};
@@ -898,10 +916,7 @@ static void
 test_persistent_cache_drain_one_sequence_succeeds (gboolean     *unused,
                                                    gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
   GVariant *var = make_sequence_event (1);
   GVariant *var_array[] = {var, NULL};
   GVariant *empty_array[] = {NULL};
@@ -947,10 +962,7 @@ static void
 test_persistent_cache_drain_many_succeeds (gboolean     *unused,
                                            gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
 
   // Fill it up first.
   GVariant **ind_array;
@@ -1004,10 +1016,7 @@ test_persistent_cache_drain_empty_succeeds (gboolean     *unused,
                                             gconstpointer dontuseme)
 {
   // Don't store anything.
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
   GVariant **ind_array;
   GVariant **agg_array;
   GVariant **seq_array;
@@ -1031,10 +1040,7 @@ static void
 test_persistent_cache_purges_when_out_of_date_succeeds (gboolean     *unused,
                                                         gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
   gint num_individual_events_made;
   gint num_aggregate_events_made;
   gint num_sequence_events_made;
@@ -1051,10 +1057,7 @@ test_persistent_cache_purges_when_out_of_date_succeeds (gboolean     *unused,
   g_object_unref (cache);
   g_assert (success);
 
-  EmerPersistentCache *cache2 = emer_persistent_cache_new (NULL,
-                                                           NULL,
-                                                           TEST_DIRECTORY,
-                                                           TEST_SIZE);
+  EmerPersistentCache *cache2 = make_testing_cache ();
   // Metrics should all be purged now.
   GVariant **ind_array;
   GVariant **agg_array;
@@ -1083,10 +1086,7 @@ static void
 test_persistent_cache_wipes_metrics_when_boot_offset_corrupted (gboolean     *unused,
                                                                 gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
 
   write_default_key_file_to_disk ();
 
@@ -1100,10 +1100,7 @@ test_persistent_cache_wipes_metrics_when_boot_offset_corrupted (gboolean     *un
 
   // Reset cached metadata.
   g_object_unref (cache);
-  EmerPersistentCache *cache2 = emer_persistent_cache_new (NULL,
-                                                           NULL,
-                                                           TEST_DIRECTORY,
-                                                           TEST_SIZE);
+  EmerPersistentCache *cache2 = make_testing_cache ();
 
   // This call should detect corruption and wipe the cache of all previous
   // events. However, this new aggregate event should be stored.
@@ -1132,10 +1129,7 @@ static void
 test_persistent_cache_resets_boot_metafile_when_boot_offset_corrupted (gboolean     *unused,
                                                                        gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
 
   write_default_key_file_to_disk ();
 
@@ -1169,10 +1163,7 @@ static void
 test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean     *unused,
                                                                     gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
   capacity_t capacity;
   store_single_individual_event (cache, &capacity);
 
@@ -1185,10 +1176,7 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
   g_object_unref (cache);
   set_boot_id_in_metafile (FAKE_BOOT_ID);
 
-  EmerPersistentCache *cache2 = emer_persistent_cache_new (NULL,
-                                                           NULL,
-                                                           TEST_DIRECTORY,
-                                                           TEST_SIZE);
+  EmerPersistentCache *cache2 = make_testing_cache ();
 
   // This call should have to compute the boot offset itself.
   store_single_aggregate_event (cache2, &capacity);
@@ -1200,10 +1188,7 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
   g_assert_false (read_whether_boot_offset_is_reset_value ());
 
   g_object_unref (cache2);
-  EmerPersistentCache *cache3 = emer_persistent_cache_new (NULL,
-                                                           NULL,
-                                                           TEST_DIRECTORY,
-                                                           TEST_SIZE);
+  EmerPersistentCache *cache3 = make_testing_cache ();
 
   store_single_individual_event (cache3, &capacity);
 
@@ -1228,10 +1213,7 @@ static void
 test_persistent_cache_computes_reasonable_offset (gboolean *unused,
                                                   gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
   capacity_t capacity;
   store_single_individual_event (cache, &capacity);
 
@@ -1243,10 +1225,7 @@ test_persistent_cache_computes_reasonable_offset (gboolean *unused,
             get_current_time (CLOCK_REALTIME, &absolute_time));
 
   g_object_unref (cache);
-  EmerPersistentCache *cache2 = emer_persistent_cache_new (NULL,
-                                                           NULL,
-                                                           TEST_DIRECTORY,
-                                                           TEST_SIZE);
+  EmerPersistentCache *cache2 = make_testing_cache ();
 
   // Mutate boot id externally because we cannot actually reboot in a test case.
   set_boot_id_in_metafile (FAKE_BOOT_ID);
@@ -1277,10 +1256,7 @@ static void
 test_persistent_cache_rebuilds_boot_metafile (gboolean     *unused,
                                               gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
   capacity_t capacity;
   store_single_individual_event (cache, &capacity);
 
@@ -1309,10 +1285,7 @@ static void
 test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
                                                 gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE);
+  EmerPersistentCache *cache = make_testing_cache ();
   write_default_key_file_to_disk ();
 
   capacity_t capacity;
@@ -1330,7 +1303,7 @@ test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
 
   // This value should never be read because the persistent cache should read
   // from its cached value next call.
-  set_boot_offset_in_metafile (FAKE_RELATIVE_OFFSET);
+  set_boot_offset_in_metafile (FAKE_BOOT_OFFSET);
 
   // This call should read the offset from its cached value, not the new one
   // from disk.
@@ -1355,7 +1328,7 @@ main (int                argc,
 
 // We are using a gboolean as a fixture type, but it will go unused.
 #define ADD_CACHE_TEST_FUNC(path, func) \
-  g_test_add((path), gboolean, NULL, tear_down_files, (func), tear_down_files)
+  g_test_add((path), gboolean, NULL, setup, (func), teardown)
 
   ADD_CACHE_TEST_FUNC ("/persistent-cache/new-succeeds",
                        test_persistent_cache_new_succeeds);

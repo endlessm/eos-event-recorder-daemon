@@ -1,0 +1,4 @@
+# The metrics permissions config file has a non-standard owner (root:metrics)
+# and a non-standard permissions (664).
+eos-metrics-event-recorder binary: wrong-file-owner-uid-or-gid
+eos-metrics-event-recorder binary: non-standard-file-perm

@@ -81,8 +81,12 @@ tests_daemon_test_permissions_provider_LDADD = $(DAEMON_TEST_LIBS)
 tests_daemon_test_persistent_cache_SOURCES = \
 	tests/daemon/test-persistent-cache.c \
 	daemon/emer-persistent-cache.c daemon/emer-persistent-cache.h \
+	shared/metrics-util.c shared/metrics-util.h \
 	$(NULL)
-tests_daemon_test_persistent_cache_CPPFLAGS = $(DAEMON_TEST_FLAGS)
+tests_daemon_test_persistent_cache_CPPFLAGS = \
+	$(DAEMON_TEST_FLAGS) \
+	-D_POSIX_C_SOURCE=199309L \
+	$(NULL)
 tests_daemon_test_persistent_cache_LDADD = $(DAEMON_TEST_LIBS)
 
 javascript_tests = \

@@ -31,6 +31,9 @@ data/com.endlessm.Metrics.service: data/com.endlessm.Metrics.service.in
 	$(edit) $< >$@.tmp && \
 	mv $@.tmp $@
 
+policydir = ${datadir}/polkit-1/actions
+dist_policy_DATA = data/com.endlessm.Metrics.policy
+
 systembussecuritypolicydir = ${sysconfdir}/dbus-1/system.d
 dist_systembussecuritypolicy_DATA = data/com.endlessm.Metrics.conf
 

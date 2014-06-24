@@ -6,6 +6,8 @@
 #include <glib-object.h>
 #include <glib-unix.h>
 #include <gio/gio.h>
+#include <polkit/polkit.h>
+#include <string.h>
 
 #include "emer-daemon.h"
 #include "emer-event-recorder-server.h"
@@ -60,6 +62,74 @@ on_record_event_sequence (EmerEventRecorderServer *server,
 }
 
 static gboolean
+on_set_enabled (EmerEventRecorderServer *server,
+                GDBusMethodInvocation   *invocation,
+                gboolean                 enabled,
+                EmerDaemon              *daemon)
+{
+  emer_event_recorder_server_set_enabled (server, enabled);
+  emer_event_recorder_server_complete_set_enabled (server, invocation);
+  return TRUE;
+}
+
+/* This handler is run in a separate thread, so all operations can be
+synchronous. */
+static gboolean
+on_authorize_method_check (GDBusInterfaceSkeleton *interface,
+                           GDBusMethodInvocation  *invocation,
+                           EmerDaemon             *daemon)
+{
+  const gchar *method_name =
+    g_dbus_method_invocation_get_method_name (invocation);
+  if (strcmp (method_name, "SetEnabled") != 0)
+    return TRUE;
+
+  GError *error = NULL;
+  PolkitAuthority *authority = polkit_authority_get_sync (NULL /*GCancellable*/,
+                                                          &error);
+  if (authority == NULL)
+    {
+      g_critical ("Could not get PolicyKit authority: %s", error->message);
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      g_error_free (error);
+      return FALSE;
+    }
+
+  const gchar *sender_name = g_dbus_method_invocation_get_sender (invocation);
+  PolkitSubject *subject = polkit_system_bus_name_new (sender_name);
+
+  PolkitAuthorizationResult *result =
+    polkit_authority_check_authorization_sync (authority,
+                                               subject,
+                                               "com.endlessm.Metrics.SetEnabled",
+                                               NULL /*PolkitDetails*/,
+                                               POLKIT_CHECK_AUTHORIZATION_FLAGS_NONE,
+                                               NULL /*GCancellable*/,
+                                               &error);
+  g_object_unref (authority);
+  g_object_unref (subject);
+  if (result == NULL)
+    {
+      g_critical ("Could not get PolicyKit authorization result: %s", error->message);
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      g_error_free (error);
+      return FALSE;
+    }
+
+  gboolean authorized = polkit_authorization_result_get_is_authorized (result);
+  if (!authorized)
+    {
+      g_dbus_method_invocation_return_error (invocation,
+                                             G_DBUS_ERROR,
+                                             G_DBUS_ERROR_AUTH_FAILED,
+                                             "Disabling metrics is only allowed from system settings");
+    }
+
+  g_object_unref (result);
+  return authorized;
+}
+
+static gboolean
 quit_main_loop (GMainLoop *main_loop)
 {
   g_main_loop_quit (main_loop);
@@ -81,6 +151,10 @@ on_bus_acquired (GDBusConnection *system_bus,
                     G_CALLBACK (on_record_aggregate_event), daemon);
   g_signal_connect (server, "handle-record-event-sequence",
                     G_CALLBACK (on_record_event_sequence), daemon);
+  g_signal_connect (server, "handle-set-enabled",
+                    G_CALLBACK (on_set_enabled), daemon);
+  g_signal_connect (server, "g-authorize-method",
+                    G_CALLBACK (on_authorize_method_check), daemon);
 
   EmerPermissionsProvider *permissions =
     emer_daemon_get_permissions_provider (daemon);

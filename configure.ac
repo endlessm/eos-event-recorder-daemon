@@ -76,6 +76,7 @@ AC_SUBST(EMTR_LT_VERSION_INFO)
 GOBJECT_REQUIREMENT="gobject-2.0"
 GIO_REQUIREMENT="gio-unix-2.0 >= 2.40"
 JSON_REQUIREMENT="json-glib-1.0 >= 0.16"
+POLKIT_REQUIREMENT="polkit-gobject-1"
 SOUP_REQUIREMENT="libsoup-2.4 >= 2.42"
 UUID_REQUIREMENT="uuid"
 # These go into the pkg-config file as Requires: and Requires.private:
@@ -88,6 +89,9 @@ EMTR_REQUIRED_MODULES="$GOBJECT_REQUIREMENT"
 EMTR_REQUIRED_MODULES_PRIVATE="$GIO_REQUIREMENT $JSON_REQUIREMENT $SOUP_REQUIREMENT $UUID_REQUIREMENT"
 AC_SUBST(EMTR_REQUIRED_MODULES)
 AC_SUBST(EMTR_REQUIRED_MODULES_PRIVATE)
+# Server requirements
+# Server doesn't install a pkg-config file, no need to separate requirements.
+EMER_REQUIRED_MODULES="$GIO_REQUIREMENT $GOBJECT_REQUIREMENT $POLKIT_REQUIREMENT $SOUP_REQUIREMENT $UUID_REQUIREMENT"
 # This indicates a required dbus mocking interface for unit testing.
 AX_PYTHON_MODULE([dbusmock], [required])
 
@@ -194,11 +198,8 @@ AC_SUBST([systemdsystemunitdir])
 PKG_CHECK_MODULES([EOSMETRICS], [
     $EMTR_REQUIRED_MODULES
     $EMTR_REQUIRED_MODULES_PRIVATE])
-dnl These requirements are the same for now, until the functionality is
-dnl separated from one into the other
-PKG_CHECK_MODULES([EOSMETRICS_EVENT_RECORDER], [
-    $EMTR_REQUIRED_MODULES
-    $EMTR_REQUIRED_MODULES_PRIVATE])
+
+PKG_CHECK_MODULES([EOSMETRICS_EVENT_RECORDER], [$EMER_REQUIRED_MODULES])
 
 AC_CACHE_SAVE
 

@@ -41,7 +41,7 @@ G_BEGIN_DECLS
  * The name of the meta-file containing the relative time, absolute time, and
  * boot id meta-data.
  */
-#define BOOT_OFFSET_METAFILE "boot_timing_metafile"
+#define BOOT_OFFSET_METAFILE "boot_offset_metafile"
 
 /*
  * The prefix for all metrics cache files.

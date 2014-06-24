@@ -50,7 +50,7 @@ static gboolean   cache_has_room                        (EmerPersistentCache *se
 static gboolean   compute_boot_offset                   (EmerPersistentCache *self,
                                                          gint64               relative_time,
                                                          gint64               absolute_time,
-                                                         gint64              *relative_offset);
+                                                         gint64              *boot_offset);
 
 static GVariant*  correct_relative_timestamp            (GVariant            *uncorrected_event,
                                                          const gchar         *variant_type_string,
@@ -111,7 +111,7 @@ static gboolean   reset_boot_timing_metafile            (EmerPersistentCache *se
 static gboolean   save_timing_metadata                  (EmerPersistentCache *self,
                                                          const gint64        *relative_time_ptr,
                                                          const gint64        *absolute_time_ptr,
-                                                         const gint64        *relative_offset_ptr,
+                                                         const gint64        *boot_offset_ptr,
                                                          const gchar         *boot_id_string,
                                                          const gboolean      *was_reset_ptr,
                                                          GError              **out_error);
@@ -409,7 +409,7 @@ static gboolean
 save_timing_metadata (EmerPersistentCache *self,
                       const gint64        *relative_time_ptr,
                       const gint64        *absolute_time_ptr,
-                      const gint64        *relative_offset_ptr,
+                      const gint64        *boot_offset_ptr,
                       const gchar         *boot_id_string,
                       const gboolean      *was_reset_ptr,
                       GError             **out_error)
@@ -429,11 +429,11 @@ save_timing_metadata (EmerPersistentCache *self,
                           CACHE_ABSOLUTE_TIME_KEY,
                           *absolute_time_ptr);
 
-  if (relative_offset_ptr != NULL)
+  if (boot_offset_ptr != NULL)
     g_key_file_set_int64 (priv->boot_offset_key_file,
                           CACHE_TIMING_GROUP_NAME,
                           CACHE_BOOT_OFFSET_KEY,
-                          *relative_offset_ptr);
+                          *boot_offset_ptr);
 
   if (boot_id_string != NULL)
     g_key_file_set_string (priv->boot_offset_key_file,
@@ -682,10 +682,9 @@ update_boot_offset (EmerPersistentCache *self,
       return TRUE;
     }
 
-  gint64 relative_offset = g_key_file_get_int64 (priv->boot_offset_key_file,
-                                                 CACHE_TIMING_GROUP_NAME,
-                                                 CACHE_BOOT_OFFSET_KEY,
-                                                 &error);
+  gint64 boot_offset = g_key_file_get_int64 (priv->boot_offset_key_file,
+                                             CACHE_TIMING_GROUP_NAME,
+                                             CACHE_BOOT_OFFSET_KEY, &error);
   if (error != NULL)
     {
       g_error_free (error);
@@ -720,8 +719,7 @@ update_boot_offset (EmerPersistentCache *self,
       return TRUE;
     }
 
-  if (!compute_boot_offset (self, relative_time, absolute_time,
-                            &relative_offset))
+  if (!compute_boot_offset (self, relative_time, absolute_time, &boot_offset))
     return FALSE;
 
   gchar system_boot_id_string[BOOT_ID_FILE_LENGTH];
@@ -729,9 +727,8 @@ update_boot_offset (EmerPersistentCache *self,
 
   gboolean was_reset = FALSE;
   gboolean write_success =
-    save_timing_metadata (self, &relative_time, &absolute_time,
-                          &relative_offset, system_boot_id_string, &was_reset,
-                          &error);
+    save_timing_metadata (self, &relative_time, &absolute_time, &boot_offset,
+                          system_boot_id_string, &was_reset, &error);
 
   if (!write_success)
     {
@@ -741,7 +738,7 @@ update_boot_offset (EmerPersistentCache *self,
       return reset_boot_timing_metafile (self, &relative_time, &absolute_time);
     }
 
-  priv->boot_offset = relative_offset;
+  priv->boot_offset = boot_offset;
   priv->boot_offset_initialized = TRUE;
   return TRUE;
 }
@@ -757,7 +754,7 @@ static gboolean
 compute_boot_offset (EmerPersistentCache *self,
                      gint64               relative_time,
                      gint64               absolute_time,
-                     gint64              *relative_offset)
+                     gint64              *boot_offset)
 {
   GError *error = NULL;
   EmerPersistentCachePrivate *priv =
@@ -820,7 +817,7 @@ compute_boot_offset (EmerPersistentCache *self,
 
   /* Our best estimate of the amount of time elapsed between the origin boot and
      the current boot. This is the new boot offset. */
-  *relative_offset = time_since_origin_boot - relative_time;
+  *boot_offset = time_since_origin_boot - relative_time;
 
   return TRUE;
 }

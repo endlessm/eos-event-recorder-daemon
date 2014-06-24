@@ -73,7 +73,7 @@ static void
 setup (gboolean     *unused,
        gconstpointer dontuseme)
 {
-  g_mkdir (TEST_DIRECTORY, 0777);
+  g_mkdir (TEST_DIRECTORY, 0777); // All permissions are granted by 0777.
   teardown (unused, dontuseme);
   write_mock_system_boot_id_file ();
 }

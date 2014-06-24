@@ -12,6 +12,7 @@ static gchar *TEST_DIRECTORY = "/tmp/metrics_testing/";
 
 // Generated via uuidgen.
 #define FAKE_BOOT_ID "baccd4dd-9765-4eb2-a2a0-03c6623471e6\n"
+#define FAKE_RELATIVE_OFFSET 4000000000 // 4 seconds
 
 #define TEST_SIZE 1024000
 
@@ -65,6 +66,27 @@ load_testing_key_file (void)
   g_assert (g_key_file_load_from_file (key_file, full_path, G_KEY_FILE_NONE,
                                        NULL));
   return key_file;
+}
+
+/*
+ * Will overwrite the contents of the boot id metafile's boot offset with a
+ * given new_offset.
+ */
+static void
+set_boot_offset_in_metafile (gint64 new_offset)
+{
+  GKeyFile *key_file = load_testing_key_file ();
+
+  g_key_file_set_int64 (key_file,
+                        CACHE_TIMING_GROUP_NAME,
+                        CACHE_RELATIVE_OFFSET_KEY,
+                        new_offset);
+
+  gchar *full_path = g_strconcat (TEST_DIRECTORY, BOOT_TIMING_METAFILE, NULL);
+  g_assert (g_key_file_save_to_file (key_file, full_path, NULL));
+
+  g_key_file_unref (key_file);
+  g_free (full_path);
 }
 
 /*
@@ -1279,6 +1301,52 @@ test_persistent_cache_rebuilds_boot_metafile (gboolean     *unused,
   g_object_unref (cache);
 }
 
+/*
+ * Tests if the cached value is read when present, by changing what is on disk
+ * to a different value in between calls to the same cache.
+ */
+static void
+test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
+                                                gconstpointer dontuseme)
+{
+  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
+                                                          NULL,
+                                                          TEST_DIRECTORY,
+                                                          TEST_SIZE);
+  write_default_key_file_to_disk ();
+
+  capacity_t capacity;
+  store_single_individual_event (cache, &capacity);
+
+  gint64 first_offset;
+  GError *error = NULL;
+  g_assert (emer_persistent_cache_get_boot_time_offset (cache, &first_offset,
+                                                        &error, FALSE));
+  g_assert_no_error (error);
+
+  gint64 absolute_time, relative_time;
+  g_assert (get_current_time (CLOCK_BOOTTIME, &relative_time) &&
+            get_current_time (CLOCK_REALTIME, &absolute_time));
+
+  // This value should never be read because the persistent cache should read
+  // from its cached value next call.
+  set_boot_offset_in_metafile (FAKE_RELATIVE_OFFSET);
+
+  // This call should read the offset from its cached value, not the new one
+  // from disk.
+  store_single_individual_event (cache, &capacity);
+
+  g_assert (boot_timestamp_is_valid (relative_time, absolute_time));
+
+  gint64 second_offset;
+  g_assert (emer_persistent_cache_get_boot_time_offset (cache, &second_offset,
+                                                        &error, FALSE));
+  g_assert_no_error (error);
+  g_assert (first_offset == second_offset);
+
+  g_object_unref (cache);
+}
+
 int
 main (int                argc,
       const char * const argv[])
@@ -1325,6 +1393,8 @@ main (int                argc,
                        test_persistent_cache_resets_boot_metafile_when_boot_offset_corrupted);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/wipes-metrics-when-boot-offset-corrupted",
                        test_persistent_cache_wipes_metrics_when_boot_offset_corrupted);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/reads-cached-boot-offset",
+                       test_persistent_cache_reads_cached_boot_offset);
 #undef ADD_CACHE_TEST_FUNC
 
   return g_test_run ();

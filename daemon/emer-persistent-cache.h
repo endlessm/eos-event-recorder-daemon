@@ -41,7 +41,7 @@ G_BEGIN_DECLS
  * The name of the meta-file containing the relative time, absolute time, and
  * boot id meta-data.
  */
-#define BOOT_TIMING_METAFILE "boot_timing_metafile"
+#define BOOT_OFFSET_METAFILE "boot_timing_metafile"
 
 /*
  * The prefix for all metrics cache files.
@@ -69,7 +69,7 @@ G_BEGIN_DECLS
 #define CACHE_ABSOLUTE_TIME_KEY   "absolute_time"
 #define CACHE_RELATIVE_TIME_KEY   "relative_time"
 #define CACHE_LAST_BOOT_ID_KEY    "boot_id"
-#define CACHE_RELATIVE_OFFSET_KEY "relative_time_offset"
+#define CACHE_BOOT_OFFSET_KEY     "boot_offset"
 #define CACHE_WAS_RESET_KEY       "was_reset"
 
 typedef struct _EmerPersistentCache EmerPersistentCache;

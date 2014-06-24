@@ -293,7 +293,7 @@ emer_persistent_cache_init (EmerPersistentCache *self)
     emer_persistent_cache_get_instance_private (self);
   priv->cache_size = 0L;
   priv->capacity = CAPACITY_LOW;
-  priv->boot_metafile_path = g_strconcat (CACHE_DIRECTORY, BOOT_TIMING_METAFILE,
+  priv->boot_metafile_path = g_strconcat (CACHE_DIRECTORY, BOOT_OFFSET_METAFILE,
                                           NULL);
   priv->boot_offset_key_file = g_key_file_new ();
 }
@@ -432,7 +432,7 @@ save_timing_metadata (EmerPersistentCache *self,
   if (relative_offset_ptr != NULL)
     g_key_file_set_int64 (priv->boot_offset_key_file,
                           CACHE_TIMING_GROUP_NAME,
-                          CACHE_RELATIVE_OFFSET_KEY,
+                          CACHE_BOOT_OFFSET_KEY,
                           *relative_offset_ptr);
 
   if (boot_id_string != NULL)
@@ -684,7 +684,7 @@ update_boot_offset (EmerPersistentCache *self,
 
   gint64 relative_offset = g_key_file_get_int64 (priv->boot_offset_key_file,
                                                  CACHE_TIMING_GROUP_NAME,
-                                                 CACHE_RELATIVE_OFFSET_KEY,
+                                                 CACHE_BOOT_OFFSET_KEY,
                                                  &error);
   if (error != NULL)
     {
@@ -767,7 +767,7 @@ compute_boot_offset (EmerPersistentCache *self,
      the stored ID. */
   gint64 stored_offset = g_key_file_get_int64 (priv->boot_offset_key_file,
                                                CACHE_TIMING_GROUP_NAME,
-                                               CACHE_RELATIVE_OFFSET_KEY,
+                                               CACHE_BOOT_OFFSET_KEY,
                                                &error);
   if (error != NULL)
     {

@@ -15,7 +15,7 @@
 // Generated via uuidgen.
 #define FAKE_SYSTEM_BOOT_ID "1ca14ab8-bed6-4bc0-8369-484518d22a31\n"
 #define FAKE_BOOT_ID "baccd4dd-9765-4eb2-a2a0-03c6623471e6\n"
-#define FAKE_RELATIVE_OFFSET 4000000000 // 4 seconds
+#define FAKE_BOOT_OFFSET 4000000000 // 4 seconds
 
 #define TEST_SIZE 1024000
 
@@ -38,7 +38,7 @@
 
 #define DEFAULT_KEY_FILE_DATA \
   "[time]\n" \
-  "relative_time_offset=0\n" \
+  "boot_offset=0\n" \
   "was_reset=true\n" \
   "absolute_time=1403195800943262692\n" \
   "relative_time=2516952859775\n" \
@@ -66,7 +66,7 @@ teardown (gboolean     *unused,
   g_unlink (TEST_DIRECTORY CACHE_PREFIX AGGREGATE_SUFFIX);
   g_unlink (TEST_DIRECTORY CACHE_PREFIX SEQUENCE_SUFFIX);
   g_unlink (TEST_DIRECTORY CACHE_PREFIX LOCAL_CACHE_VERSION_METAFILE);
-  g_unlink (TEST_DIRECTORY BOOT_TIMING_METAFILE);
+  g_unlink (TEST_DIRECTORY BOOT_OFFSET_METAFILE);
   g_rmdir (TEST_DIRECTORY);
 }
 
@@ -102,7 +102,7 @@ static GKeyFile *
 load_testing_key_file (void)
 {
   GKeyFile *key_file = g_key_file_new ();
-  gchar *full_path = g_strconcat (TEST_DIRECTORY, BOOT_TIMING_METAFILE, NULL);
+  gchar *full_path = g_strconcat (TEST_DIRECTORY, BOOT_OFFSET_METAFILE, NULL);
   g_assert (g_key_file_load_from_file (key_file, full_path, G_KEY_FILE_NONE,
                                        NULL));
   return key_file;
@@ -119,11 +119,11 @@ set_boot_offset_in_metafile (gint64 new_offset)
 
   g_key_file_set_int64 (key_file,
                         CACHE_TIMING_GROUP_NAME,
-                        CACHE_RELATIVE_OFFSET_KEY,
+                        CACHE_BOOT_OFFSET_KEY,
                         new_offset);
 
   g_assert (g_key_file_save_to_file (key_file,
-                                     TEST_DIRECTORY BOOT_TIMING_METAFILE,
+                                     TEST_DIRECTORY BOOT_OFFSET_METAFILE,
                                      NULL));
   g_key_file_unref (key_file);
 }
@@ -142,7 +142,7 @@ write_default_key_file_to_disk (void)
                                        G_KEY_FILE_NONE, NULL));
 
   g_assert (g_key_file_save_to_file (key_file,
-                                     TEST_DIRECTORY BOOT_TIMING_METAFILE,
+                                     TEST_DIRECTORY BOOT_OFFSET_METAFILE,
                                      NULL));
 }
 
@@ -161,7 +161,7 @@ set_boot_id_in_metafile (gchar *new_boot_id)
                          new_boot_id);
 
   g_assert (g_key_file_save_to_file (key_file,
-                                     TEST_DIRECTORY BOOT_TIMING_METAFILE,
+                                     TEST_DIRECTORY BOOT_OFFSET_METAFILE,
                                      NULL));
   g_key_file_unref (key_file);
 }
@@ -175,10 +175,10 @@ remove_offset (void)
 {
   GKeyFile *key_file = load_testing_key_file ();
   g_assert (g_key_file_remove_key (key_file, CACHE_TIMING_GROUP_NAME,
-                                   CACHE_RELATIVE_OFFSET_KEY, NULL));
+                                   CACHE_BOOT_OFFSET_KEY, NULL));
 
   g_assert (g_key_file_save_to_file (key_file,
-                                     TEST_DIRECTORY BOOT_TIMING_METAFILE,
+                                     TEST_DIRECTORY BOOT_OFFSET_METAFILE,
                                      NULL));
   g_key_file_unref (key_file);
 }
@@ -193,7 +193,7 @@ read_offset (void)
   GError *error = NULL;
   gint64 stored_offset = g_key_file_get_int64 (key_file,
                                                CACHE_TIMING_GROUP_NAME,
-                                               CACHE_RELATIVE_OFFSET_KEY,
+                                               CACHE_BOOT_OFFSET_KEY,
                                                &error);
   g_key_file_unref (key_file);
   g_assert (error == NULL);
@@ -1303,7 +1303,7 @@ test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
 
   // This value should never be read because the persistent cache should read
   // from its cached value next call.
-  set_boot_offset_in_metafile (FAKE_RELATIVE_OFFSET);
+  set_boot_offset_in_metafile (FAKE_BOOT_OFFSET);
 
   // This call should read the offset from its cached value, not the new one
   // from disk.

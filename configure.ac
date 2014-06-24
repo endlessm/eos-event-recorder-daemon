@@ -76,6 +76,7 @@ AC_SUBST(EMTR_LT_VERSION_INFO)
 GOBJECT_REQUIREMENT="gobject-2.0"
 GIO_REQUIREMENT="gio-unix-2.0 >= 2.40"
 JSON_REQUIREMENT="json-glib-1.0 >= 0.16"
+POLKIT_REQUIREMENT="polkit-gobject-1"
 SOUP_REQUIREMENT="libsoup-2.4 >= 2.42"
 UUID_REQUIREMENT="uuid"
 # These go into the pkg-config file as Requires: and Requires.private:
@@ -90,7 +91,7 @@ AC_SUBST(EMTR_REQUIRED_MODULES)
 AC_SUBST(EMTR_REQUIRED_MODULES_PRIVATE)
 # Server requirements
 # Server doesn't install a pkg-config file, no need to separate requirements.
-EMER_REQUIRED_MODULES="$GIO_REQUIREMENT $GOBJECT_REQUIREMENT $SOUP_REQUIREMENT $UUID_REQUIREMENT"
+EMER_REQUIRED_MODULES="$GIO_REQUIREMENT $GOBJECT_REQUIREMENT $POLKIT_REQUIREMENT $SOUP_REQUIREMENT $UUID_REQUIREMENT"
 # This indicates a required dbus mocking interface for unit testing.
 AX_PYTHON_MODULE([dbusmock], [required])
 

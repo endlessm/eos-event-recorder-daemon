@@ -29,33 +29,49 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         # FIXME find a better way to wait for the service to come up
         time.sleep(1)
 
+        # Spawn an external process for polkit authorization
+        (self.polkit_popen, self.polkit_obj) = self.spawn_server_template('polkitd',
+            stdout=subprocess.PIPE)
+
         metrics_object = self.dbus_con.get_object('com.endlessm.Metrics',
             '/com/endlessm/Metrics')
         self.interface = dbus.Interface(metrics_object, _METRICS_IFACE)
 
     def tearDown(self):
+        self.polkit_popen.terminate()
         self.daemon.terminate()
+        self.polkit_popen.wait()
 
     def test_opt_out_readable(self):
         """Make sure the Enabled property exists."""
         self.interface.Get(_METRICS_IFACE, 'Enabled',
             dbus_interface=dbus.PROPERTIES_IFACE)
 
-    def test_opt_out_writable(self):
+    def test_opt_out_not_writable(self):
+        """Make sure the Enabled property is not writable."""
+        with self.assertRaisesRegexp(dbus.DBusException, 'org\.freedesktop\.DBus\.Error\.InvalidArgs'):
+            self.interface.Set(_METRICS_IFACE, 'Enabled', False,
+                dbus_interface=dbus.PROPERTIES_IFACE)
+
+    def test_set_enabled_authorized(self):
         """
-        Make sure the Enabled property is writable and its value persists.
-        Currently this will cause the event recorder process to print an error
-        because it can't write to the config file in /etc because it's not
-        running as root; but that's OK.
+        Make sure the Enabled property's value persists and accessing SetEnabled
+        succeeds when it is set to allowed.
         """
-        self.interface.Set(_METRICS_IFACE, 'Enabled', True,
-            dbus_interface=dbus.PROPERTIES_IFACE)
+        self.polkit_obj.SetAllowed(['com.endlessm.Metrics.SetEnabled'])
+        self.interface.SetEnabled(True)
         self.assertTrue(self.interface.Get(_METRICS_IFACE, 'Enabled',
             dbus_interface=dbus.PROPERTIES_IFACE))
-        self.interface.Set(_METRICS_IFACE, 'Enabled', False,
-            dbus_interface=dbus.PROPERTIES_IFACE)
+        self.interface.SetEnabled(False)
         self.assertFalse(self.interface.Get(_METRICS_IFACE, 'Enabled',
             dbus_interface=dbus.PROPERTIES_IFACE))
+
+    def test_set_enabled_unauthorized(self):
+        """
+        Make sure that accessing SetEnabled fails if not explicitly authorized.
+        """
+        with self.assertRaisesRegexp(dbus.DBusException, 'org\.freedesktop\.DBus\.Error\.AuthFailed'):
+            self.interface.SetEnabled(True)
 
 
 if __name__ == '__main__':

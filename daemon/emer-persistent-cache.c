@@ -104,7 +104,7 @@ static gboolean   purge_cache_files                     (EmerPersistentCache *se
                                                          GCancellable        *cancellable,
                                                          GError             **error);
 
-static gboolean   reset_boot_timing_metafile            (EmerPersistentCache *self,
+static gboolean   reset_boot_offset_metafile            (EmerPersistentCache *self,
                                                          gint64              *relative_time_ptr,
                                                          gint64              *absolute_time_ptr);
 
@@ -551,7 +551,7 @@ get_system_boot_id (EmerPersistentCache *self,
  * Returns FALSE and writes nothing to disk on failure. Returns TRUE on success.
  */
 static gboolean
-reset_boot_timing_metafile (EmerPersistentCache *self,
+reset_boot_offset_metafile (EmerPersistentCache *self,
                             gint64              *relative_time_ptr,
                             gint64              *absolute_time_ptr)
 {
@@ -661,7 +661,7 @@ update_boot_offset (EmerPersistentCache *self,
                      priv->boot_metafile_path, error->message);
         }
       g_error_free (error);
-      return reset_boot_timing_metafile (self, &relative_time, &absolute_time);
+      return reset_boot_offset_metafile (self, &relative_time, &absolute_time);
     }
 
   if (priv->boot_offset_initialized)
@@ -688,7 +688,7 @@ update_boot_offset (EmerPersistentCache *self,
   if (error != NULL)
     {
       g_error_free (error);
-      return reset_boot_timing_metafile (self, &relative_time, &absolute_time);
+      return reset_boot_offset_metafile (self, &relative_time, &absolute_time);
     }
 
   uuid_t saved_boot_id, system_boot_id;
@@ -735,7 +735,7 @@ update_boot_offset (EmerPersistentCache *self,
       g_warning ("Failed to write computed boot offset. Resetting cache. "
                  "Error: %s.", error->message);
       g_error_free (error);
-      return reset_boot_timing_metafile (self, &relative_time, &absolute_time);
+      return reset_boot_offset_metafile (self, &relative_time, &absolute_time);
     }
 
   priv->boot_offset = boot_offset;

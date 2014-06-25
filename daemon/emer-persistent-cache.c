@@ -320,39 +320,27 @@ emer_persistent_cache_initable_init (GInitableIface *iface)
 
 /*
  * Constructor for creating a new Persistent Cache.
- * Returns a singleton instance of a Persistent Cache.
  * Please use this in production instead of the testing constructor!
  */
-EmerPersistentCache*
-emer_persistent_cache_get_default (GCancellable *cancellable,
-                                   GError      **error)
+EmerPersistentCache *
+emer_persistent_cache_new (GCancellable *cancellable,
+                           GError      **error)
 {
-  static EmerPersistentCache *singleton_cache;
-  G_LOCK_DEFINE_STATIC (singleton_cache);
-
-  G_LOCK (singleton_cache);
-  if (singleton_cache == NULL)
-    singleton_cache = g_initable_new (EMER_TYPE_PERSISTENT_CACHE,
-                                      cancellable,
-                                      error,
-                                      NULL);
-  G_UNLOCK (singleton_cache);
-
-  return singleton_cache;
+  return g_initable_new (EMER_TYPE_PERSISTENT_CACHE, cancellable, error, NULL);
 }
 
 /*
- * You should use emer_persistent_cache_get_default() instead of this function.
+ * You should use emer_persistent_cache_new() instead of this function.
  * Function should only be used in testing code, NOT in production code.
  * Should always use a custom directory.  A custom cache size may be specified,
  * but if set to 0, the production value will be used.
  */
-EmerPersistentCache*
-emer_persistent_cache_new (GCancellable       *cancellable,
-                           GError            **error,
-                           gchar              *custom_directory,
-                           gint                custom_cache_size,
-                           EmerBootIdProvider *boot_id_provider)
+EmerPersistentCache *
+emer_persistent_cache_new_full (GCancellable       *cancellable,
+                                GError            **error,
+                                gchar              *custom_directory,
+                                gint                custom_cache_size,
+                                EmerBootIdProvider *boot_id_provider)
 {
   MAX_CACHE_SIZE = custom_cache_size;
   CACHE_DIRECTORY = custom_directory;

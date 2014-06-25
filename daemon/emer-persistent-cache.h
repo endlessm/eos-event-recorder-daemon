@@ -98,38 +98,38 @@ struct _EmerPersistentCacheClass
   GObjectClass parent_class;
 };
 
-GType                emer_persistent_cache_get_type                          (void) G_GNUC_CONST;
+GType               emer_persistent_cache_get_type                           (void) G_GNUC_CONST;
 
-gboolean            emer_persistent_cache_get_boot_time_offset               (EmerPersistentCache  *self,
-                                                                              gint64               *offset,
-                                                                              GError              **error,
-                                                                              gboolean              always_update_timestamps);
+gboolean            emer_persistent_cache_get_boot_time_offset               (EmerPersistentCache *self,
+                                                                              gint64              *offset,
+                                                                              GError             **error,
+                                                                              gboolean             always_update_timestamps);
 
-EmerPersistentCache *emer_persistent_cache_get_default                       (GCancellable         *cancellable,
-                                                                              GError              **error);
+EmerPersistentCache *emer_persistent_cache_new                               (GCancellable        *cancellable,
+                                                                              GError             **error);
 
-gboolean             emer_persistent_cache_drain_metrics                     (EmerPersistentCache  *self,
-                                                                              GVariant           ***list_of_individual_metrics,
-                                                                              GVariant           ***list_of_aggregate_metrics,
-                                                                              GVariant           ***list_of_sequence_metrics,
-                                                                              gint                  max_num_bytes);
+gboolean             emer_persistent_cache_drain_metrics                     (EmerPersistentCache *self,
+                                                                              GVariant          ***list_of_individual_metrics,
+                                                                              GVariant          ***list_of_aggregate_metrics,
+                                                                              GVariant          ***list_of_sequence_metrics,
+                                                                              gint                 max_num_bytes);
 
-gboolean             emer_persistent_cache_store_metrics                     (EmerPersistentCache  *self,
-                                                                              GVariant            **list_of_individual_metrics,
-                                                                              GVariant            **list_of_aggregate_metrics,
-                                                                              GVariant            **list_of_sequence_metrics,
-                                                                              gint                 *num_individual_metrics_stored,
-                                                                              gint                 *num_aggregate_metrics_stored,
-                                                                              gint                 *num_sequence_metrics_stored,
-                                                                              capacity_t           *capacity);
+gboolean             emer_persistent_cache_store_metrics                     (EmerPersistentCache *self,
+                                                                              GVariant           **list_of_individual_metrics,
+                                                                              GVariant           **list_of_aggregate_metrics,
+                                                                              GVariant           **list_of_sequence_metrics,
+                                                                              gint                *num_individual_metrics_stored,
+                                                                              gint                *num_aggregate_metrics_stored,
+                                                                              gint                *num_sequence_metrics_stored,
+                                                                              capacity_t          *capacity);
 /*
  * Function should only be used in testing code, NOT in production code.
  */
-EmerPersistentCache *emer_persistent_cache_new                               (GCancellable         *cancellable,
-                                                                              GError              **error,
-                                                                              gchar                *custom_directory,
-                                                                              gint                  custom_cache_size,
-                                                                              EmerBootIdProvider   *boot_id_provider);
+EmerPersistentCache *emer_persistent_cache_new_full                          (GCancellable        *cancellable,
+                                                                              GError             **error,
+                                                                              gchar               *custom_directory,
+                                                                              gint                 custom_cache_size,
+                                                                              EmerBootIdProvider  *boot_id_provider);
 /*
  * Function should only be used in testing code, NOT in production code.
  */

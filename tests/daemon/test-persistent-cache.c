@@ -85,11 +85,9 @@ make_testing_cache (void)
   GError *error = NULL;
   EmerBootIdProvider *boot_id_provider =
     emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          &error,
-                                                          TEST_DIRECTORY,
-                                                          TEST_SIZE,
-                                                          boot_id_provider);
+  EmerPersistentCache *cache =
+    emer_persistent_cache_new_full (NULL, &error, TEST_DIRECTORY, TEST_SIZE,
+                                    boot_id_provider);
   g_assert_no_error (error);
   return cache;
 }
@@ -777,11 +775,9 @@ test_persistent_cache_store_when_full_succeeds (gboolean     *unused,
   gint space_in_bytes = 3000;
   EmerBootIdProvider *boot_id_provider =
     emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
-  EmerPersistentCache *cache = emer_persistent_cache_new (NULL,
-                                                          NULL,
-                                                          TEST_DIRECTORY,
-                                                          space_in_bytes,
-                                                          boot_id_provider);
+  EmerPersistentCache *cache =
+    emer_persistent_cache_new_full (NULL, NULL, TEST_DIRECTORY, space_in_bytes,
+                                    boot_id_provider);
   capacity_t capacity = CAPACITY_LOW;
 
   // Store a ton, until it is full.

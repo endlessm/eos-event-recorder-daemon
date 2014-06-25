@@ -9,6 +9,7 @@
 #include <gio/gio.h>
 
 #include "daemon/emer-boot-id-provider.h"
+#include "shared/metrics-util.h"
 
 G_BEGIN_DECLS
 
@@ -115,12 +116,15 @@ gboolean             emer_persistent_cache_drain_metrics                     (Em
                                                                               gint                 max_num_bytes);
 
 gboolean             emer_persistent_cache_store_metrics                     (EmerPersistentCache *self,
-                                                                              GVariant           **list_of_individual_metrics,
-                                                                              GVariant           **list_of_aggregate_metrics,
-                                                                              GVariant           **list_of_sequence_metrics,
-                                                                              gint                *num_individual_metrics_stored,
-                                                                              gint                *num_aggregate_metrics_stored,
-                                                                              gint                *num_sequence_metrics_stored,
+                                                                              SingularEvent       *singular_buffer,
+                                                                              AggregateEvent      *aggregate_buffer,
+                                                                              SequenceEvent       *sequence_buffer,
+                                                                              gint                 num_singulars_buffered,
+                                                                              gint                 num_aggregates_buffered,
+                                                                              gint                 num_sequences_buffered,
+                                                                              gint                *num_singulars_stored,
+                                                                              gint                *num_aggregates_stored,
+                                                                              gint                *num_sequences_stored,
                                                                               capacity_t          *capacity);
 /*
  * Function should only be used in testing code, NOT in production code.

@@ -35,104 +35,114 @@
  * the new version number.
  */
 
-static gboolean   append_metric                         (EmerPersistentCache *self,
-                                                         GFile               *file,
-                                                         GVariant            *metric,
-                                                         const gchar         *variant_type_string);
+static gboolean   append_metric                          (EmerPersistentCache *self,
+                                                          GFile               *file,
+                                                          GVariant            *metric);
 
-static gboolean   apply_cache_versioning                (EmerPersistentCache *self,
-                                                         GCancellable        *cancellable,
-                                                         GError             **error);
+static gboolean   apply_cache_versioning                 (EmerPersistentCache *self,
+                                                          GCancellable        *cancellable,
+                                                          GError             **error);
 
-static gboolean   cache_has_room                        (EmerPersistentCache *self,
-                                                         gsize                size);
+static gboolean   cache_has_room                         (EmerPersistentCache *self,
+                                                          gsize                size);
 
-static gboolean   compute_boot_offset                   (EmerPersistentCache *self,
-                                                         gint64               relative_time,
-                                                         gint64               absolute_time,
-                                                         gint64              *boot_offset);
+static gboolean   compute_boot_offset                    (EmerPersistentCache *self,
+                                                          gint64               relative_time,
+                                                          gint64               absolute_time,
+                                                          gint64              *boot_offset);
 
-static GVariant*  correct_relative_timestamp            (GVariant            *uncorrected_event,
-                                                         const gchar         *variant_type_string,
-                                                         gint64               boot_offset);
+static void       correct_relative_timestamp_aggregate   (AggregateEvent      *aggregate,
+                                                          gint64               boot_offset);
 
-static GVariant*  correct_relative_timestamp_aggregate  (GVariant            *uncorrected_event,
-                                                         gint64               boot_offset);
+static void       correct_relative_timestamp_event_value (EventValue          *event_value,
+                                                          gint64               boot_offset);
 
-static GVariant*  correct_relative_timestamp_individual (GVariant            *uncorrected_event,
-                                                         gint64               boot_offset);
+static void       correct_relative_timestamp_singular    (SingularEvent       *singular,
+                                                          gint64               boot_offset);
 
-static GVariant*  correct_relative_timestamp_sequence   (GVariant            *uncorrected_event,
-                                                         gint64               boot_offset);
+static void       correct_relative_timestamp_sequence    (SequenceEvent       *sequence,
+                                                          gint64               boot_offset);
 
-static void       correct_timestamp_from_iter           (GVariantIter        *iter,
-                                                         GVariantBuilder     *builder,
-                                                         gint64               boot_offset);
+static gboolean   drain_metrics_file                     (EmerPersistentCache *self,
+                                                          GVariant          ***return_list,
+                                                          gchar               *path_ending,
+                                                          gchar               *variant_type);
 
-static gboolean   drain_metrics_file                    (EmerPersistentCache *self,
-                                                         GVariant          ***return_list,
-                                                         gchar               *path_ending,
-                                                         gchar               *variant_type);
+static void       emer_persistent_cache_initable_init    (GInitableIface      *iface);
 
-static GVariant*  flip_bytes_if_big_endian_machine      (GVariant            *variant);
+static gboolean   emer_persistent_cache_may_fail_init    (GInitable           *self,
+                                                          GCancellable        *cancellable,
+                                                          GError             **error);
 
-static void       free_variant_list                     (GVariant           **list);
+static GVariant * flip_bytes_if_big_endian_machine       (GVariant            *variant);
 
-static GFile*     get_cache_file                        (gchar               *path_ending);
+static void       free_variant_list                      (GVariant           **list);
 
-static gboolean   get_saved_boot_id                     (EmerPersistentCache *self,
-                                                         uuid_t               boot_id,
-                                                         GError             **error);
+static GFile *    get_cache_file                         (gchar               *path_ending);
 
-static gboolean   get_system_boot_id                    (EmerPersistentCache *self,
-                                                         uuid_t               boot_id,
-                                                         GError             **error);
+static gboolean   get_saved_boot_id                      (EmerPersistentCache *self,
+                                                          uuid_t               boot_id,
+                                                          GError             **error);
 
-static void       emer_persistent_cache_initable_init   (GInitableIface      *iface);
+static gboolean   get_system_boot_id                     (EmerPersistentCache *self,
+                                                          uuid_t               boot_id,
+                                                          GError             **error);
 
-static gboolean   load_cache_size                       (EmerPersistentCache *self,
-                                                         GCancellable        *cancellable,
-                                                         GError             **error);
+static gboolean   load_cache_size                        (EmerPersistentCache *self,
+                                                          GCancellable        *cancellable,
+                                                          GError             **error);
 
-static gboolean   load_local_cache_version              (gint64              *version);
+static gboolean   load_local_cache_version               (gint64              *version);
 
-static gboolean   emer_persistent_cache_may_fail_init   (GInitable           *self,
-                                                         GCancellable        *cancellable,
-                                                         GError             **error);
+static gboolean   purge_cache_files                      (EmerPersistentCache *self,
+                                                          GCancellable        *cancellable,
+                                                          GError             **error);
 
-static gboolean   purge_cache_files                     (EmerPersistentCache *self,
-                                                         GCancellable        *cancellable,
-                                                         GError             **error);
+static gboolean   reset_boot_offset_metafile             (EmerPersistentCache *self,
+                                                          gint64              *relative_time_ptr,
+                                                          gint64              *absolute_time_ptr);
 
-static gboolean   reset_boot_offset_metafile            (EmerPersistentCache *self,
-                                                         gint64              *relative_time_ptr,
-                                                         gint64              *absolute_time_ptr);
+static gboolean   save_timing_metadata                   (EmerPersistentCache *self,
+                                                          const gint64        *relative_time_ptr,
+                                                          const gint64        *absolute_time_ptr,
+                                                          const gint64        *boot_offset_ptr,
+                                                          const gchar         *boot_id_string,
+                                                          const gboolean      *was_reset_ptr,
+                                                          GError              **error);
 
-static gboolean   save_timing_metadata                  (EmerPersistentCache *self,
-                                                         const gint64        *relative_time_ptr,
-                                                         const gint64        *absolute_time_ptr,
-                                                         const gint64        *boot_offset_ptr,
-                                                         const gchar         *boot_id_string,
-                                                         const gboolean      *was_reset_ptr,
-                                                         GError              **out_error);
+static void       set_boot_id_provider                   (EmerPersistentCache *self,
+                                                          EmerBootIdProvider  *boot_id_provider);
 
-static void       set_boot_id_provider                  (EmerPersistentCache *self,
-                                                         EmerBootIdProvider  *boot_id_provider);
+static gboolean   store_aggregates                       (EmerPersistentCache *self,
+                                                          AggregateEvent      *aggregate_buffer,
+                                                          gint                 num_aggregates_buffered,
+                                                          gint                *num_aggregates_stored,
+                                                          capacity_t          *capacity);
 
-static gboolean   store_metric_list                     (EmerPersistentCache *self,
-                                                         GFile               *file,
-                                                         GVariant           **list,
-                                                         gint                *num_variants_stored,
-                                                         capacity_t          *capacity,
-                                                         const gchar         *variant_type_string);
+static gboolean   store_event                            (EmerPersistentCache *self,
+                                                          GFile               *file,
+                                                          GVariant            *event,
+                                                          capacity_t          *capacity);
 
-static gboolean   update_boot_offset                    (EmerPersistentCache *self,
-                                                         gboolean             always_update_timestamps);
+static gboolean   store_singulars                        (EmerPersistentCache *self,
+                                                          SingularEvent       *singular_buffer,
+                                                          gint                 num_singulars_buffered,
+                                                          gint                *num_singulars_stored,
+                                                          capacity_t          *capacity);
 
-static gboolean   update_cache_version_number           (GCancellable        *cancellable,
-                                                         GError             **error);
+static gboolean   store_sequences                        (EmerPersistentCache *self,
+                                                          SequenceEvent       *sequence_buffer,
+                                                          gint                 num_sequences_buffered,
+                                                          gint                *num_sequences_stored,
+                                                          capacity_t          *capacity);
 
-static capacity_t update_capacity                       (EmerPersistentCache *self);
+static gboolean   update_boot_offset                     (EmerPersistentCache *self,
+                                                          gboolean             always_update_timestamps);
+
+static gboolean   update_cache_version_number            (GCancellable        *cancellable,
+                                                          GError             **error);
+
+static capacity_t update_capacity                        (EmerPersistentCache *self);
 
 typedef struct GVariantWritable
 {
@@ -811,161 +821,51 @@ compute_boot_offset (EmerPersistentCache *self,
 }
 
 /*
- * Helper function specific to individual metrics.
- * See: correct_relative_timestamp()
- */
-static GVariant *
-correct_relative_timestamp_individual (GVariant *uncorrected_event,
-                                       gint64    boot_offset)
-{
-  guint32 user_id;
-  GVariantIter *machine_id_iter;
-  gint64 old_timestamp;
-  gboolean has_payload;
-  GVariant *payload;
-  g_variant_get (uncorrected_event, INDIVIDUAL_TYPE, &user_id, &machine_id_iter,
-                 &old_timestamp, &has_payload, &payload);
-
-  GVariantBuilder machine_id_builder;
-  get_builder_from_iter (machine_id_iter, &machine_id_builder,
-                         G_VARIANT_TYPE ("ay"));
-  g_variant_iter_free (machine_id_iter);
-
-  gint64 corrected_timestamp = old_timestamp + boot_offset;
-
-  // g_variant_new() takes ownership of payload.
-  GVariant *corrected_event = g_variant_new (INDIVIDUAL_TYPE, user_id,
-                                             &machine_id_builder,
-                                             corrected_timestamp, has_payload,
-                                             payload);
-  return corrected_event;
-}
-
-/*
- * Helper function specific to aggregate metrics.
- * See: correct_relative_timestamp()
- */
-static GVariant *
-correct_relative_timestamp_aggregate (GVariant *uncorrected_event,
-                                      gint64    boot_offset)
-{
-  guint32 user_id;
-  GVariantIter *machine_id_iter;
-  gint64 count;
-  gint64 old_timestamp;
-  gboolean has_payload;
-  GVariant *payload;
-  g_variant_get (uncorrected_event, AGGREGATE_TYPE, &user_id,
-                 &machine_id_iter, &count, &old_timestamp, &has_payload,
-                 &payload);
-
-  GVariantBuilder machine_id_builder;
-  get_builder_from_iter (machine_id_iter, &machine_id_builder,
-                         G_VARIANT_TYPE ("ay"));
-  g_variant_iter_free (machine_id_iter);
-
-  gint64 corrected_timestamp = old_timestamp + boot_offset;
-
-  // g_variant_new() takes ownership of payload.
-  GVariant *corrected_event = g_variant_new (AGGREGATE_TYPE, user_id,
-                                             &machine_id_builder, count,
-                                             corrected_timestamp, has_payload,
-                                             payload);
-  return corrected_event;
-}
-
-/*
- * Helper function specific to sequence metrics.
- * See: correct_relative_timestamp()
- */
-static GVariant *
-correct_relative_timestamp_sequence (GVariant *uncorrected_event,
-                                     gint64    boot_offset)
-{
-  guint32 user_id;
-  GVariantIter *machine_id_iter;
-  GVariantIter *event_iter;
-  g_variant_get (uncorrected_event, SEQUENCE_TYPE, &user_id,
-                 &machine_id_iter, &event_iter);
-
-  GVariantBuilder machine_id_builder;
-  get_builder_from_iter (machine_id_iter, &machine_id_builder,
-                         G_VARIANT_TYPE ("ay"));
-  g_variant_iter_free (machine_id_iter);
-
-  GVariantBuilder event_builder;
-  correct_timestamp_from_iter (event_iter, &event_builder, boot_offset);
-  g_variant_iter_free (event_iter);
-
-  return g_variant_new (SEQUENCE_TYPE, user_id, &machine_id_builder,
-                        &event_builder);
-}
-
-/*
- * Creates a new GVariant with the contents of the uncorrected_event the same
- * except for the relative time, which is adjusted according to the boot_offset.
- * If the boot_offset is 0, the same GVariant is returned, but is ref'd so it
- * may be treated the same as a new GVariant.
- *
- * The variant_type_string dictates how the GVariant will be unpacked and
- * reconstituted.  Acceptable values are defined in the header file:
- *   INDIVIDUAL_TYPE, AGGREGATE_TYPE, and SEQUENCE_TYPE.
- * Other values will result in a g_error() call.
- */
-static GVariant *
-correct_relative_timestamp (GVariant    *uncorrected_event,
-                            const gchar *variant_type_string,
-                            gint64       boot_offset)
-{
-  if (boot_offset == 0)
-    {
-      g_variant_ref_sink (uncorrected_event);
-      return uncorrected_event;
-    }
-
-  if (g_strcmp0 (variant_type_string, "(uayxmv)") == 0)
-    return correct_relative_timestamp_individual (uncorrected_event,
-                                                  boot_offset);
-  else if (g_strcmp0 (variant_type_string, "(uayxxmv)") == 0)
-    return correct_relative_timestamp_aggregate (uncorrected_event,
-                                                 boot_offset);
-  else if (g_strcmp0 (variant_type_string, "(uaya(xmv))") == 0)
-    return correct_relative_timestamp_sequence (uncorrected_event, boot_offset);
-
-  g_error ("Bad variant type string given.");
-}
-
-/*
- * Takes a GVariantIter of array of timestamp-and-maybe-payload type, adjusts
- * all timestamps within it by the given offset, and returns it as a
- * GVariantBuilder.
+ * Adds the boot_offset to the relative timestamp of the given event_value.
+ * Modifies event_value in place.
  */
 static void
-correct_timestamp_from_iter (GVariantIter    *iter,
-                             GVariantBuilder *builder,
-                             gint64           boot_offset)
+correct_relative_timestamp_event_value (EventValue *event_value,
+                                        gint64      boot_offset)
 {
-  g_variant_builder_init (builder, G_VARIANT_TYPE ("a(xmv)"));
-  while (TRUE)
-    {
-      GVariant *curr_elem = g_variant_iter_next_value (iter);
-      if (curr_elem == NULL)
-        break;
-      gint64 old_timestamp;
-      gboolean has_payload;
-      GVariant *payload;
-      g_variant_get (curr_elem, "(xmv)", &old_timestamp, &has_payload,
-                     &payload);
-      g_variant_unref (curr_elem);
+  event_value->relative_timestamp += boot_offset;
+}
 
-      gint64 corrected_timestamp = old_timestamp + boot_offset;
+/*
+ * Adds the boot_offset to the relative timestamp of the given singular.
+ * Modifies singular in place.
+ */
+static void
+correct_relative_timestamp_singular (SingularEvent *singular,
+                                     gint64         boot_offset)
+{
+  EventValue *event_value = &singular->event_value;
+  correct_relative_timestamp_event_value (event_value, boot_offset);
+}
 
-      // g_variant_new() takes ownership of payload.
-      GVariant *corrected_event = g_variant_new ("(xmv)", &corrected_timestamp,
-                                                 &has_payload, payload);
+/*
+ * Adds the boot_offset to the relative timestamp of the given aggregate.
+ * Modifies aggregate in place.
+ */
+static void
+correct_relative_timestamp_aggregate (AggregateEvent *aggregate,
+                                      gint64          boot_offset)
+{
+  SingularEvent *event = &aggregate->event;
+  correct_relative_timestamp_singular (event, boot_offset);
+}
 
-      g_variant_builder_add_value (builder, corrected_event);
-    }
+/*
+ * Adds the boot_offset to the relative timestamp of the given sequence.
+ * Modifies sequence in place.
+ */
+static void
+correct_relative_timestamp_sequence (SequenceEvent *sequence,
+                                     gint64         boot_offset)
+{
+  for (gsize i = 0; i < sequence->num_event_values; i++)
+    correct_relative_timestamp_event_value (sequence->event_values + i,
+                                            boot_offset);
 }
 
 /*
@@ -1154,131 +1054,228 @@ free_variant_list (GVariant **list)
 }
 
 /*
- * Attempts to write a NULL-terminated list of GVariant metrics to a given file.
- * Will update num_variants_stored and capacity given to it. Automatically
- * increments priv->cache_size. Returns %FALSE if any metrics failed due to
- * I/O error. %TRUE otherwise. Regardless of success or failure,
- * num_variants_stored and the capacity will be correctly set.
+ * Attempts to write an event to a given file.
+ * Will update capacity given to it. Automatically increments priv->cache_size.
+ * Returns %FALSE if the write fails on account of I/O error. Returns %TRUE
+ * otherwise. Regardless of success or failure, capacity will be correctly set.
  */
 static gboolean
-store_metric_list (EmerPersistentCache *self,
-                   GFile               *file,
-                   GVariant           **list,
-                   gint                *num_variants_stored,
-                   capacity_t          *capacity,
-                   const gchar         *variant_type_string)
+store_event (EmerPersistentCache *self,
+             GFile               *file,
+             GVariant            *event,
+             capacity_t          *capacity)
 {
-  gboolean success = TRUE;
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
-  if (list == NULL)
-    g_error ("Attempted to store a GVariant list that was actually "
-             "a NULL pointer!");
 
-  gint i;
-  for (i = 0; list[i] != NULL; i++)
+  gboolean success;
+
+  gsize event_size_on_disk = sizeof (gsize) + g_variant_get_size (event);
+  if (cache_has_room (self, event_size_on_disk))
     {
-      GVariant *current_metric = list[i];
-      gsize metric_size = sizeof (gsize) + g_variant_get_size (current_metric);
-      if (cache_has_room (self, metric_size))
-        {
-          success = append_metric (self, file, current_metric,
-                                   variant_type_string);
-          if (!success)
-            {
-              g_critical ("Failed to write metric. Dropping some metrics.");
-              break;
-            }
-          priv->cache_size += metric_size;
-        }
+      success = append_metric (self, file, event);
+      if (!success)
+        g_critical ("Failed to write event.");
       else
+        priv->cache_size += event_size_on_disk;
+    }
+  else
+    {
+      priv->capacity = CAPACITY_MAX;
+      success = TRUE;
+    }
+
+  *capacity = update_capacity (self);
+  return success;
+}
+
+static gboolean
+store_singulars (EmerPersistentCache *self,
+                 SingularEvent       *singular_buffer,
+                 gint                 num_singulars_buffered,
+                 gint                *num_singulars_stored,
+                 capacity_t          *capacity)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+  GFile *singulars_file = get_cache_file (INDIVIDUAL_SUFFIX);
+
+  gboolean stored_singulars = TRUE;
+  gint i;
+  for (i = 0; i < num_singulars_buffered; i++)
+    {
+      SingularEvent *curr_singular = singular_buffer + i;
+      correct_relative_timestamp_singular (curr_singular, priv->boot_offset);
+      GVariant *curr_singular_variant = singular_to_variant (curr_singular);
+      stored_singulars =
+        store_event (self, singulars_file, curr_singular_variant, capacity);
+      if (!stored_singulars)
         {
-          // This is how we know we are at max capacity --
-          // we've been dropping metrics.
-          priv->capacity = CAPACITY_MAX;
+          /*
+           * If we failed to store the singular, undo the modification to its
+           * relative timestamp for consistency with the rest of the singulars
+           * that haven't been stored.
+           */
+          correct_relative_timestamp_singular (curr_singular,
+                                               -priv->boot_offset);
           break;
         }
     }
 
-  *capacity = update_capacity (self);
-  *num_variants_stored = i;
-  return success;
+  g_object_unref (singulars_file);
+  *num_singulars_stored = i;
+  return stored_singulars;
+}
+
+static gboolean
+store_aggregates (EmerPersistentCache *self,
+                  AggregateEvent      *aggregate_buffer,
+                  gint                 num_aggregates_buffered,
+                  gint                *num_aggregates_stored,
+                  capacity_t          *capacity)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+  GFile *aggregates_file = get_cache_file (AGGREGATE_SUFFIX);
+
+  gboolean stored_aggregates = TRUE;
+  gint i;
+  for (i = 0; i < num_aggregates_buffered; i++)
+    {
+      AggregateEvent *curr_aggregate = aggregate_buffer + i;
+      correct_relative_timestamp_aggregate (curr_aggregate, priv->boot_offset);
+      GVariant *curr_aggregate_variant = aggregate_to_variant (curr_aggregate);
+      stored_aggregates =
+        store_event (self, aggregates_file, curr_aggregate_variant, capacity);
+      if (!stored_aggregates)
+        {
+          /*
+           * If we failed to store the aggregate, undo the modification to its
+           * relative timestamp for consistency with the rest of the aggregates
+           * that haven't been stored.
+           */
+          correct_relative_timestamp_aggregate (curr_aggregate,
+                                                -priv->boot_offset);
+          break;
+        }
+    }
+
+  g_object_unref (aggregates_file);
+  *num_aggregates_stored = i;
+  return stored_aggregates;
+}
+
+static gboolean
+store_sequences (EmerPersistentCache *self,
+                 SequenceEvent       *sequence_buffer,
+                 gint                 num_sequences_buffered,
+                 gint                *num_sequences_stored,
+                 capacity_t          *capacity)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+  GFile *sequences_file = get_cache_file (SEQUENCE_SUFFIX);
+
+  gboolean stored_sequences = TRUE;
+  gint i;
+  for (i = 0; i < num_sequences_buffered; i++)
+    {
+      SequenceEvent *curr_sequence = sequence_buffer + i;
+      correct_relative_timestamp_sequence (curr_sequence, priv->boot_offset);
+      GVariant *curr_sequence_variant = sequence_to_variant (curr_sequence);
+      stored_sequences =
+        store_event (self, sequences_file, curr_sequence_variant, capacity);
+      if (!stored_sequences)
+        {
+          /*
+           * If we failed to store the sequence, undo the modifications to its
+           * relative timestamps for consistency with the rest of the sequences
+           * that haven't been stored.
+           */
+          correct_relative_timestamp_sequence (curr_sequence,
+                                               -priv->boot_offset);
+          break;
+        }
+    }
+
+  g_object_unref (sequences_file);
+  *num_sequences_stored = i;
+  return stored_sequences;
 }
 
 /*
- * Will store all metrics passed to it onto disk if doing so would not exceed
- * its space limitation.  Each list must be NULL-terminated or NULL itself.
+ * Will persistently store all metrics passed to it if doing so would not exceed
+ * the persistent cache's space quota.
  * Will return the capacity of the cache via the out parameter 'capacity'.
  * Returns %TRUE on success, even if the metrics are intentionally dropped due
  * to space limitations.  Returns %FALSE only on I/O error.
  *
- * Regardless of success or failure, num_individual_metrics_stored,
- * num_aggregate_metrics_stored, num_sequence_metrics_stored, and capacity will
- * be correctly set.
+ * Regardless of success or failure, num_singulars_stored,
+ * num_aggregates_stored, num_sequences_stored, and capacity will be correctly
+ * set.
  *
- * GVariants are assumed to be in the native endianness of the machine.
+ * This function adjusts in place the relative timestamps of the events it
+ * successfully stores (and only those events) to ensure they are consistent
+ * across boots. The buffers are always processed in order, so, for example,
+ * after this function returns, the first *num_singulars_stored elements of
+ * singular_buffer will have corrected relative timestamps, and the last
+ * num_singulars_buffered - *num_singulars_stored elements will retain their
+ * original timestamps.
  */
 gboolean
 emer_persistent_cache_store_metrics (EmerPersistentCache  *self,
-                                     GVariant            **list_of_individual_metrics,
-                                     GVariant            **list_of_aggregate_metrics,
-                                     GVariant            **list_of_sequence_metrics,
-                                     gint                 *num_individual_metrics_stored,
-                                     gint                 *num_aggregate_metrics_stored,
-                                     gint                 *num_sequence_metrics_stored,
+                                     SingularEvent        *singular_buffer,
+                                     AggregateEvent       *aggregate_buffer,
+                                     SequenceEvent        *sequence_buffer,
+                                     gint                  num_singulars_buffered,
+                                     gint                  num_aggregates_buffered,
+                                     gint                  num_sequences_buffered,
+                                     gint                 *num_singulars_stored,
+                                     gint                 *num_aggregates_stored,
+                                     gint                 *num_sequences_stored,
                                      capacity_t           *capacity)
 {
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  /*
+   * Initialize the out parameters in case we return early. They may be updated
+   * by store_singulars, store_aggregates, and store_sequences below.
+   */
+  *capacity = priv->capacity;
+  *num_singulars_stored = 0;
+  *num_aggregates_stored = 0;
+  *num_sequences_stored = 0;
+
   if (!update_boot_offset (self, TRUE)) // Always update timestamps.
     {
       g_critical ("Couldn't update the boot offset, dropping metrics.");
       return FALSE;
     }
-  GFile *ind_file = get_cache_file (INDIVIDUAL_SUFFIX);
-  gboolean ind_success = store_metric_list (self,
-                                            ind_file,
-                                            list_of_individual_metrics,
-                                            num_individual_metrics_stored,
-                                            capacity,
-                                            INDIVIDUAL_TYPE);
-  g_object_unref (ind_file);
-  if (!ind_success)
-    {
-      *num_aggregate_metrics_stored = 0;
-      *num_sequence_metrics_stored = 0;
-      return FALSE;
-    }
 
-  GFile *agg_file = get_cache_file (AGGREGATE_SUFFIX);
-  gboolean agg_success = store_metric_list (self,
-                                            agg_file,
-                                            list_of_aggregate_metrics,
-                                            num_aggregate_metrics_stored,
-                                            capacity,
-                                            AGGREGATE_TYPE);
-  g_object_unref (agg_file);
-  if (!agg_success)
-    {
-      *num_sequence_metrics_stored = 0;
-      return FALSE;
-    }
+  gboolean singulars_stored = store_singulars (self,
+                                               singular_buffer,
+                                               num_singulars_buffered,
+                                               num_singulars_stored,
+                                               capacity);
+  if (!singulars_stored || *capacity == CAPACITY_MAX)
+    return singulars_stored;
 
-  GFile *seq_file = get_cache_file (SEQUENCE_SUFFIX);
-  gboolean seq_success = store_metric_list (self,
-                                            seq_file,
-                                            list_of_sequence_metrics,
-                                            num_sequence_metrics_stored,
-                                            capacity,
-                                            SEQUENCE_TYPE);
-  g_object_unref (seq_file);
-  if (!seq_success)
-    return FALSE;
+  gboolean aggregates_stored = store_aggregates (self,
+                                                 aggregate_buffer,
+                                                 num_aggregates_buffered,
+                                                 num_aggregates_stored,
+                                                 capacity);
+  if (!aggregates_stored || *capacity == CAPACITY_MAX)
+    return aggregates_stored;
 
   /*
-   * num_individual_metrics_stored, num_aggregate_metrics_stored,
-   * num_sequence_metrics_stored, and capacity are updated within
-   * store_metric_list.
+   * num_singulars_stored, num_aggregates_stored, num_sequences_stored, and
+   * capacity may be updated within store_singulars, store_aggregates, and
+   * store_sequences.
    */
-  return TRUE;
+  return store_sequences (self, sequence_buffer, num_sequences_buffered,
+                          num_sequences_stored, capacity);
 }
 
 /*
@@ -1408,16 +1405,8 @@ load_local_cache_version (gint64 *version)
 static gboolean
 append_metric (EmerPersistentCache *self,
                GFile               *file,
-               GVariant            *metric,
-               const gchar         *variant_type_string)
+               GVariant            *metric)
 {
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
-
-  g_variant_ref_sink (metric);
-  GVariant *corrected_metric =
-    correct_relative_timestamp (metric, variant_type_string, priv->boot_offset);
-
   GError *error = NULL;
   GFileOutputStream *stream = g_file_append_to (file,
                                                 G_FILE_CREATE_NONE,
@@ -1433,10 +1422,9 @@ append_metric (EmerPersistentCache *self,
       return FALSE;
     }
 
-  g_variant_ref_sink (corrected_metric);
-  GVariant *native_endian_metric =
-    flip_bytes_if_big_endian_machine (corrected_metric);
-  g_variant_unref (corrected_metric);
+  g_variant_ref_sink (metric);
+  GVariant *native_endian_metric = flip_bytes_if_big_endian_machine (metric);
+  g_variant_unref (metric);
 
   GVariantWritable writable;
   writable.length = g_variant_get_size (native_endian_metric);

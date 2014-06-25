@@ -273,183 +273,361 @@ boot_timestamp_is_valid (gint64 previous_relative_timestamp,
           stored_absolute_timestamp   <= after_absolute_timestamp);
 }
 
-static GVariant *
-make_individual_event (gint choice)
+static void
+event_value_own (EventValue *event_value)
 {
-  GVariantBuilder builder;
-  g_variant_builder_init (&builder, G_VARIANT_TYPE ("ay"));
-  gint64 x;
-  guint32 u;
-  GVariant *mv;
-
-  if (choice == 0)
-    {
-      u = 234u;
-      g_variant_builder_add (&builder, "y", 0xde);
-      g_variant_builder_add (&builder, "y", 0xad);
-      g_variant_builder_add (&builder, "y", 0xbe);
-      g_variant_builder_add (&builder, "y", 0xef);
-      x = G_GINT64_CONSTANT (42);
-      mv = g_variant_new_string ("murphy");
-    }
-  else if (choice == 1)
-    {
-      u = 121u;
-      g_variant_builder_add (&builder, "y", 0x01);
-      g_variant_builder_add (&builder, "y", 0x23);
-      g_variant_builder_add (&builder, "y", 0x45);
-      g_variant_builder_add (&builder, "y", 0x67);
-      g_variant_builder_add (&builder, "y", 0x89);
-      x = G_GINT64_CONSTANT (999);
-      mv = g_variant_new_int32 (404);
-    }
-  else if (choice == 2)
-    {
-      u = 555u;
-      g_variant_builder_add (&builder, "y", 0x4b);
-      x = G_GINT64_CONSTANT (12012);
-      mv = g_variant_new_string ("I am a banana!");
-    }
-  else if (choice == 3)
-    {
-      u = 411u;
-      g_variant_builder_add (&builder, "y", 0x55);
-      g_variant_builder_add (&builder, "y", 0x2c);
-      x = G_GINT64_CONSTANT (-128);
-      mv = g_variant_new_int32 (64);
-    }
-  else
-    {
-      g_error ("Tried to use a choice for make_individual_event that hasn't "
-               "been programmed.");
-    }
-
-  return g_variant_new (INDIVIDUAL_TYPE, u, &builder, x, mv);
+  GVariant *auxiliary_payload = event_value->auxiliary_payload;
+  if (auxiliary_payload != NULL)
+    g_variant_ref_sink (auxiliary_payload);
 }
 
-static GVariant *
-make_aggregate_event (gint choice)
+static void
+singular_event_own (SingularEvent *singular)
 {
-  GVariantBuilder builder;
-  g_variant_builder_init (&builder, G_VARIANT_TYPE ("ay"));
-  gint64 x1;
-  gint64 x2;
-  GVariant *mv;
-  guint32 u;
-
-  if (choice == 0)
-    {
-      u = 12u;
-      g_variant_builder_add (&builder, "y", 0xde);
-      g_variant_builder_add (&builder, "y", 0xaf);
-      g_variant_builder_add (&builder, "y", 0x00);
-      g_variant_builder_add (&builder, "y", 0x01);
-      x1 = G_GINT64_CONSTANT (9876);
-      x2 = G_GINT64_CONSTANT (111);
-      mv = g_variant_new_string ("meepo");
-    }
-  else if (choice == 1)
-    {
-      u = 1019u;
-      g_variant_builder_add (&builder, "y", 0x33);
-      g_variant_builder_add (&builder, "y", 0x44);
-      g_variant_builder_add (&builder, "y", 0x95);
-      g_variant_builder_add (&builder, "y", 0x2a);
-      x1 = G_GINT64_CONSTANT (-333);
-      x2 = G_GINT64_CONSTANT (1);
-      mv = g_variant_new_string ("My spoon is too big.");
-    }
-  else if (choice == 2)
-    {
-      u = 5u;
-      g_variant_builder_add (&builder, "y", 0x33);
-      g_variant_builder_add (&builder, "y", 0x44);
-      g_variant_builder_add (&builder, "y", 0x95);
-      g_variant_builder_add (&builder, "y", 0x2a);
-      g_variant_builder_add (&builder, "y", 0xb4);
-      g_variant_builder_add (&builder, "y", 0x9c);
-      g_variant_builder_add (&builder, "y", 0x2d);
-      g_variant_builder_add (&builder, "y", 0x14);
-      g_variant_builder_add (&builder, "y", 0x45);
-      g_variant_builder_add (&builder, "y", 0xaa);
-      x1 = G_GINT64_CONSTANT (5965);
-      x2 = G_GINT64_CONSTANT (-3984);
-      mv = g_variant_new_string ("!^@#@#^#$");
-    }
-  else
-    {
-      g_error ("Tried to use a choice for make_aggregate_event that hasn't "
-               "been programmed.");
-    }
-
-  return g_variant_new (AGGREGATE_TYPE, u, &builder, x1, x2, mv);
+  EventValue *event_value = &singular->event_value;
+  event_value_own (event_value);
 }
 
-static GVariant *
-make_sequence_event (gint choice)
+static void
+aggregate_event_own (AggregateEvent *aggregate)
 {
-  GVariantBuilder builder_of_ay;
-  g_variant_builder_init (&builder_of_ay, G_VARIANT_TYPE ("ay"));
-  GVariantBuilder builder_of_axmv;
-  g_variant_builder_init (&builder_of_axmv, G_VARIANT_TYPE ("a(xmv)"));
-  guint32 u;
+  SingularEvent *event = &aggregate->event;
+  singular_event_own (event);
+}
 
-  if (choice == 0)
-    {
-      u = 1277u;
-      g_variant_builder_add (&builder_of_ay, "y", 0x13);
-      g_variant_builder_add (&builder_of_ay, "y", 0x37);
-      gint64 x1 = G_GINT64_CONSTANT (1876);
-      GVariant *mv1 = g_variant_new_double (3.14159);
-      gint64 x2 = G_GINT64_CONSTANT (0);
-      GVariant *mv2 = g_variant_new_string ("negative-1-point-steve");
-      gint64 x3 = G_GINT64_CONSTANT (-1);
-      GVariant *mv3 = NULL;
-      g_variant_builder_add (&builder_of_axmv, "(xmv)", x1, mv1);
-      g_variant_builder_add (&builder_of_axmv, "(xmv)", x2, mv2);
-      g_variant_builder_add (&builder_of_axmv, "(xmv)", x3, mv3);
-    }
-  else if (choice == 1)
-    {
-      u = 91912u;
-      g_variant_builder_add (&builder_of_ay, "y", 0x13);
-      g_variant_builder_add (&builder_of_ay, "y", 0x37);
-      g_variant_builder_add (&builder_of_ay, "y", 0xd0);
-      g_variant_builder_add (&builder_of_ay, "y", 0x0d);
-      gint64 x1 = G_GINT64_CONSTANT (7);
-      GVariant *mv1 = g_variant_new_double (2.71828); // Guess this number!
-      gint64 x2 = G_GINT64_CONSTANT (67352);
-      GVariant *mv2 = g_variant_new_string ("Help! I'm trapped in a testing string!");
-      g_variant_builder_add (&builder_of_axmv, "(xmv)", x1, mv1);
-      g_variant_builder_add (&builder_of_axmv, "(xmv)", x2, mv2);
-    }
-  else if (choice == 2)
-    {
-      u = 113u;
-      g_variant_builder_add (&builder_of_ay, "y", 0xe1);
-      gint64 x1 = G_GINT64_CONSTANT (747);
-      GVariant *mv1 = NULL;
-      gint64 x2 = G_GINT64_CONSTANT (57721);
-      GVariant *mv2 = g_variant_new_string ("Secret message to the Russians: "
-                                            "The 'rooster' has 'laid' an "
-                                            "'egg'.");
-      gint64 x3 = G_GINT64_CONSTANT (-100);
-      GVariant *mv3 = g_variant_new_double (120.20569);
-      gint64 x4 = G_GINT64_CONSTANT (127384);
-      GVariant *mv4 = g_variant_new_double (-2.685452);
+static void
+sequence_event_own (SequenceEvent *sequence)
+{
+  for (gint i = 0; i < sequence->num_event_values; i++)
+    event_value_own (sequence->event_values + i);
+}
 
-      g_variant_builder_add (&builder_of_axmv, "(xmv)", x1, mv1);
-      g_variant_builder_add (&builder_of_axmv, "(xmv)", x2, mv2);
-      g_variant_builder_add (&builder_of_axmv, "(xmv)", x3, mv3);
-      g_variant_builder_add (&builder_of_axmv, "(xmv)", x4, mv4);
-    }
-  else
-    {
-      g_error ("Tried to use a choice for make_sequence_event that hasn't "
-               "been programmed.");
-    }
+static void
+singular_buffer_own (SingularEvent *singular_buffer,
+                     gint           num_singulars_buffered)
+{
+  for (gint i = 0; i < num_singulars_buffered; i++)
+    singular_event_own (singular_buffer + i);
+}
 
-  return g_variant_new (SEQUENCE_TYPE, u, &builder_of_ay, &builder_of_axmv);
+static void
+aggregate_buffer_own (AggregateEvent *aggregate_buffer,
+                      gint            num_aggregates_buffered)
+{
+  for (gint i = 0; i < num_aggregates_buffered; i++)
+    aggregate_event_own (aggregate_buffer + i);
+}
+
+static void
+sequence_buffer_own (SequenceEvent *sequence_buffer,
+                     gint           num_sequences_buffered)
+{
+  for (gint i = 0; i < num_sequences_buffered; i++)
+    sequence_event_own (sequence_buffer + i);
+}
+
+static void
+make_event_value (gint        choice,
+                  EventValue *event_value)
+{
+  switch (choice)
+    {
+    case 0:
+      {
+        EventValue value =
+          { G_GINT64_CONSTANT (1876), g_variant_new_double (3.14159) };
+        *event_value = value;
+        break;
+      }
+
+    case 1:
+      {
+        EventValue value =
+          {
+            G_GINT64_CONSTANT (0),
+            g_variant_new_string ("negative-1-point-steve")
+          };
+        *event_value = value;
+        break;
+      }
+
+    case 2:
+      {
+        EventValue value = { G_GINT64_CONSTANT (-1), NULL };
+        *event_value = value;
+        break;
+      }
+
+    case 3:
+      {
+        EventValue value =
+          { G_GINT64_CONSTANT (7), g_variant_new_double (2.71828) };
+        *event_value = value;
+        break;
+      }
+
+    case 4:
+      {
+        EventValue value =
+          {
+            G_GINT64_CONSTANT (67352),
+            g_variant_new_string ("Help! I'm trapped in a testing string!")
+          };
+        *event_value = value;
+        break;
+      }
+
+    case 5:
+      {
+        EventValue value = { G_GINT64_CONSTANT (747), NULL };
+        *event_value = value;
+        break;
+      }
+
+    case 6:
+      {
+        EventValue value =
+          {
+            G_GINT64_CONSTANT (57721),
+            g_variant_new_string ("Secret message to the Russians: The "
+                                  "'rooster' has 'laid' an 'egg'.")
+          };
+        *event_value = value;
+        break;
+      }
+
+    case 7:
+      {
+        EventValue value =
+          { G_GINT64_CONSTANT (-100), g_variant_new_double (120.20569) };
+        *event_value = value;
+        break;
+      }
+
+    case 8:
+      {
+        EventValue value =
+          { G_GINT64_CONSTANT (127384), g_variant_new_double (-2.685452) };
+        *event_value = value;
+        break;
+      }
+
+    default:
+      {
+        g_error ("Tried to use a choice for make_event_values that hasn't been "
+                 "programmed.");
+      }
+    }
+}
+
+static void
+make_singular_event (gint           choice,
+                     SingularEvent *singular)
+{
+  switch (choice)
+    {
+    case 0:
+      {
+        EventValue event_value =
+          { G_GINT64_CONSTANT (42), g_variant_new_string ("murphy") };
+        SingularEvent singular_event =
+          {
+            234u,
+            { 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe,
+              0xef, 0xde, 0xad, 0xbe, 0xef },
+            event_value
+          };
+        *singular = singular_event;
+        break;
+      }
+
+    case 1:
+      {
+        EventValue event_value =
+          { G_GINT64_CONSTANT (999), g_variant_new_int32 (404) };
+        SingularEvent singular_event =
+          {
+            121u,
+            { 0x01, 0x23, 0x45, 0x67, 0x89, 0x01, 0x23, 0x45, 0x67, 0x89, 0x01,
+              0x23, 0x45, 0x67, 0x89, 0x01 },
+            event_value
+          };
+        *singular = singular_event;
+        break;
+      }
+
+    case 2:
+      {
+        EventValue event_value =
+          {
+            G_GINT64_CONSTANT (12012),
+            g_variant_new_string ("I am a banana!")
+          };
+        SingularEvent singular_event =
+          {
+            555u,
+            { 0x4b, 0x4b, 0x4b, 0x4b, 0x4b, 0x4b, 0x4b, 0x4b, 0x4b, 0x4b, 0x4b,
+              0x4b, 0x4b, 0x4b, 0x4b, 0x4b },
+            event_value
+          };
+        *singular = singular_event;
+        break;
+      }
+
+    case 3:
+      {
+        EventValue event_value =
+          { G_GINT64_CONSTANT (-128), g_variant_new_int32 (64) };
+        SingularEvent singular_event =
+          {
+            411u,
+            { 0x55, 0x2c, 0x55, 0x2c, 0x55, 0x2c, 0x55, 0x2c, 0x55, 0x2c, 0x55,
+              0x2c, 0x55, 0x2c, 0x55, 0x2c },
+            event_value
+          };
+        *singular = singular_event;
+        break;
+      }
+
+    default:
+      {
+        g_error ("Tried to use a choice for make_singular_event that hasn't "
+                 "been programmed.");
+      }
+    }
+}
+
+static void
+make_aggregate_event (gint            choice,
+                      AggregateEvent *aggregate)
+{
+  switch (choice)
+    {
+    case 0:
+      {
+        EventValue event_value =
+          { G_GINT64_CONSTANT (9876), g_variant_new_string ("meepo") };
+        SingularEvent event =
+          {
+            12u,
+            { 0xde, 0xaf, 0x00, 0x01, 0xde, 0xaf, 0x00, 0x01, 0xde, 0xaf, 0x00,
+              0x01, 0xde, 0xaf, 0x00, 0x01 },
+            event_value
+          };
+        AggregateEvent aggregate_event = { event, G_GINT64_CONSTANT (111) };
+        *aggregate = aggregate_event;
+        break;
+      }
+
+    case 1:
+      {
+        EventValue event_value =
+          {
+            G_GINT64_CONSTANT (-333),
+            g_variant_new_string ("My spoon is too big.")
+          };
+        SingularEvent event =
+          {
+            1019u,
+            { 0x33, 0x44, 0x95, 0x2a, 0x33, 0x44, 0x95, 0x2a, 0x33, 0x44, 0x95,
+              0x2a, 0x33, 0x44, 0x95, 0x2a },
+            event_value
+          };
+        AggregateEvent aggregate_event = { event, G_GINT64_CONSTANT (1) };
+        *aggregate = aggregate_event;
+        break;
+      }
+
+    case 2:
+      {
+        EventValue event_value =
+          { G_GINT64_CONSTANT (5965), g_variant_new_string ("!^@#@#^#$") };
+        SingularEvent event =
+          {
+            5u,
+            { 0x33, 0x44, 0x95, 0x2a, 0xb4, 0x9c, 0x2d, 0x14, 0x45, 0xaa, 0x33,
+              0x44, 0x95, 0x2a, 0xb4, 0x9c },
+            event_value
+          };
+        AggregateEvent aggregate_event = { event, G_GINT64_CONSTANT (-3984) };
+        *aggregate = aggregate_event;
+        break;
+      }
+
+    default:
+      {
+        g_error ("Tried to use a choice for make_aggregate_event that hasn't "
+                 "been programmed.");
+      }
+    }
+}
+
+static void
+make_sequence_event (gint           choice,
+                     SequenceEvent *sequence)
+{
+  switch (choice)
+    {
+    case 0:
+      {
+        EventValue *event_values = g_new (EventValue, 3);
+        for (gint i = 0; i < 3; i++)
+          make_event_value (i, event_values + i);
+
+        SequenceEvent sequence_event =
+          {
+            1277u,
+            { 0x13, 0x37, 0x13, 0x37, 0x13, 0x37, 0x13, 0x37, 0x13, 0x37, 0x13,
+              0x37, 0x13, 0x37, 0x13, 0x37 },
+            event_values,
+            3
+          };
+        *sequence = sequence_event;
+        break;
+      }
+
+    case 1:
+      {
+        EventValue *event_values = g_new (EventValue, 2);
+        for (gint i = 0; i < 2; i++)
+          make_event_value (i + 3, event_values + i);
+
+        SequenceEvent sequence_event =
+          {
+            91912u,
+            { 0x13, 0x37, 0xd0, 0x0d, 0x13, 0x37, 0xd0, 0x0d, 0x13, 0x37, 0xd0,
+              0x0d, 0x13, 0x37, 0xd0, 0x0d },
+            event_values,
+            2
+          };
+        *sequence = sequence_event;
+        break;
+      }
+
+    case 2:
+      {
+        EventValue *event_values = g_new (EventValue, 4);
+        for (gint i = 0; i < 4; i++)
+          make_event_value (i + 5, event_values + i);
+
+        SequenceEvent sequence_event =
+          {
+            113u,
+            { 0xe1, 0xe1, 0xe1, 0xe1, 0xe1, 0xe1, 0xe1, 0xe1, 0xe1, 0xe1, 0xe1,
+              0xe1, 0xe1, 0xe1, 0xe1, 0xe1 },
+            event_values,
+            4
+          };
+        *sequence = sequence_event;
+        break;
+      }
+
+    default:
+      {
+        g_error ("Tried to use a choice for make_sequence_event that hasn't "
+                 "been programmed.");
+      }
+    }
 }
 
 /*
@@ -460,21 +638,24 @@ static gboolean
 store_single_singular_event (EmerPersistentCache *cache,
                              capacity_t          *capacity)
 {
-  GVariant *var = make_individual_event (0);
-  GVariant *var_array[] = {var, NULL};
-  GVariant *empty_array[] = {NULL};
+  SingularEvent singular_array[1];
+  make_singular_event (0, singular_array);
+
+  AggregateEvent aggregate_array[] = {};
+  SequenceEvent sequence_array [] = {};
 
   gint num_singulars_stored, num_aggregates_stored, num_sequences_stored;
 
-  gboolean success = emer_persistent_cache_store_metrics (cache,
-                                                          var_array,
-                                                          empty_array,
-                                                          empty_array,
-                                                          &num_singulars_stored,
-                                                          &num_aggregates_stored,
-                                                          &num_sequences_stored,
-                                                          capacity);
-  g_variant_unref (var);
+  gboolean success =
+    emer_persistent_cache_store_metrics (cache,
+                                         singular_array,
+                                         aggregate_array,
+                                         sequence_array,
+                                         1, 0, 0,
+                                         &num_singulars_stored,
+                                         &num_aggregates_stored,
+                                         &num_sequences_stored,
+                                         capacity);
 
   g_assert (num_singulars_stored == 1);
   g_assert (num_aggregates_stored == 0);
@@ -491,21 +672,25 @@ static gboolean
 store_single_aggregate_event (EmerPersistentCache *cache,
                               capacity_t          *capacity)
 {
-  GVariant *var = make_aggregate_event (0);
-  GVariant *var_array[] = {var, NULL};
-  GVariant *empty_array[] = {NULL};
+  SingularEvent singular_array[] = {};
+
+  AggregateEvent aggregate_array[1];
+  make_aggregate_event (0, aggregate_array);
+
+  SequenceEvent sequence_array[] = {};
 
   gint num_singulars_stored, num_aggregates_stored, num_sequences_stored;
 
-  gboolean success = emer_persistent_cache_store_metrics (cache,
-                                                          empty_array,
-                                                          var_array,
-                                                          empty_array,
-                                                          &num_singulars_stored,
-                                                          &num_aggregates_stored,
-                                                          &num_sequences_stored,
-                                                          capacity);
-  g_variant_unref (var);
+  gboolean success =
+    emer_persistent_cache_store_metrics (cache,
+                                         singular_array,
+                                         aggregate_array,
+                                         sequence_array,
+                                         0, 1, 0,
+                                         &num_singulars_stored,
+                                         &num_aggregates_stored,
+                                         &num_sequences_stored,
+                                         capacity);
 
   g_assert (num_singulars_stored == 0);
   g_assert (num_aggregates_stored == 1);
@@ -522,21 +707,24 @@ static gboolean
 store_single_sequence_event (EmerPersistentCache *cache,
                              capacity_t          *capacity)
 {
-  GVariant *var = make_sequence_event (0);
-  GVariant *var_array[] = {var, NULL};
-  GVariant *empty_array[] = {NULL};
+  SingularEvent singular_array[] = {};
+  AggregateEvent aggregate_array[] = {};
+
+  SequenceEvent sequence_array[1];
+  make_sequence_event (0, sequence_array);
 
   gint num_singulars_stored, num_aggregates_stored, num_sequences_stored;
 
-  gboolean success = emer_persistent_cache_store_metrics (cache,
-                                                          empty_array,
-                                                          empty_array,
-                                                          var_array,
-                                                          &num_singulars_stored,
-                                                          &num_aggregates_stored,
-                                                          &num_sequences_stored,
-                                                          capacity);
-  g_variant_unref (var);
+  gboolean success =
+    emer_persistent_cache_store_metrics (cache,
+                                         singular_array,
+                                         aggregate_array,
+                                         sequence_array,
+                                         0, 0, 1,
+                                         &num_singulars_stored,
+                                         &num_aggregates_stored,
+                                         &num_sequences_stored,
+                                         capacity);
 
   g_assert (num_singulars_stored == 0);
   g_assert (num_aggregates_stored == 0);
@@ -546,24 +734,27 @@ store_single_sequence_event (EmerPersistentCache *cache,
 }
 
 static void
-make_many_events (GVariant ***inds,
-                  GVariant ***aggs,
-                  GVariant ***seqs)
+make_many_events (SingularEvent  **singular_array,
+                  AggregateEvent **aggregate_array,
+                  SequenceEvent  **sequence_array,
+                  gint            *num_singulars_made,
+                  gint            *num_aggregates_made,
+                  gint            *num_sequences_made)
 {
-  *inds = g_new (GVariant *, 5 * sizeof (GVariant *));
-  for (gint i = 0; i < 4; i++)
-    (*inds)[i] = make_individual_event (i);
-  (*inds)[4] = NULL;
+  *num_singulars_made = 4;
+  *singular_array = g_new (SingularEvent, *num_singulars_made);
+  for (gint i = 0; i < *num_singulars_made; i++)
+    make_singular_event (i, *singular_array + i);
 
-  *aggs = g_new (GVariant *, 4 * sizeof (GVariant *));
-  for (gint i = 0; i < 3; i++)
-    (*aggs)[i] = make_aggregate_event (i);
-  (*aggs)[3] = NULL;
+  *num_aggregates_made = 3;
+  *aggregate_array = g_new (AggregateEvent, *num_aggregates_made);
+  for (gint i = 0; i < *num_aggregates_made; i++)
+    make_aggregate_event (i, *aggregate_array + i);
 
-  *seqs = g_new (GVariant *, 4 * sizeof (GVariant *));
-  for (gint i = 0; i < 3; i++)
-    (*seqs)[i] = make_sequence_event (i);
-  (*seqs)[3] = NULL;
+  *num_sequences_made = 3;
+  *sequence_array = g_new (SequenceEvent, *num_sequences_made);
+  for (gint i = 0; i < *num_sequences_made; i++)
+    make_sequence_event (i, *sequence_array + i);
 }
 
 static void
@@ -595,52 +786,81 @@ store_many (EmerPersistentCache *cache,
             gint                *num_sequences_stored,
             capacity_t          *capacity)
 {
-  GVariant **var_ind_array;
-  GVariant **var_agg_array;
-  GVariant **var_seq_array;
+  SingularEvent *singular_array;
+  AggregateEvent *aggregate_array;
+  SequenceEvent *sequence_array;
 
-  make_many_events (&var_ind_array, &var_agg_array, &var_seq_array);
-
-  *num_singulars_made = c_array_len (var_ind_array);
-  *num_aggregates_made = c_array_len (var_agg_array);
-  *num_sequences_made = c_array_len (var_seq_array);
+  make_many_events (&singular_array,
+                    &aggregate_array,
+                    &sequence_array,
+                    num_singulars_made,
+                    num_aggregates_made,
+                    num_sequences_made);
 
   gboolean success = emer_persistent_cache_store_metrics (cache,
-                                                          var_ind_array,
-                                                          var_agg_array,
-                                                          var_seq_array,
+                                                          singular_array,
+                                                          aggregate_array,
+                                                          sequence_array,
+                                                          *num_singulars_made,
+                                                          *num_aggregates_made,
+                                                          *num_sequences_made,
                                                           num_singulars_stored,
                                                           num_aggregates_stored,
                                                           num_sequences_stored,
                                                           capacity);
 
-  free_variant_c_array (var_ind_array);
-  free_variant_c_array (var_agg_array);
-  free_variant_c_array (var_seq_array);
+  g_free (singular_array);
+  g_free (aggregate_array);
+  for (gint i = 0; i < *num_sequences_made; i++)
+    g_free (sequence_array[i].event_values);
+  g_free (sequence_array);
 
   return success;
 }
 
-static gboolean
-check_all_gvariants_equal (GVariant **this_array,
-                           GVariant **other_array)
+static void
+assert_singulars_equal_variants (SingularEvent *singular_array,
+                                 gint           singular_array_length,
+                                 GVariant     **variants)
 {
-  g_assert (this_array != NULL);
-  g_assert (other_array != NULL);
-
-  for (gint i = 0; this_array[i] != NULL || other_array[i] != NULL; i++)
+  for (gint i = 0; i < singular_array_length || variants[i] != NULL; i++)
     {
-      if (this_array[i] == NULL || other_array[i] == NULL)
-        g_error ("Array lengths are not equal.");
+      g_assert (i < singular_array_length && variants[i] != NULL);
 
-      if (!g_variant_equal (this_array[i], other_array[i]))
-        {
-          gchar *this_one = g_variant_print (this_array[i], TRUE);
-          gchar *other_one = g_variant_print (other_array[i], TRUE);
-          g_error ("%s is not equal to %s.", this_one, other_one);
-        }
+      GVariant *singular_variant = singular_to_variant (singular_array + i);
+      g_assert (g_variant_equal (singular_variant, variants[i]));
+      g_variant_unref (singular_variant);
     }
-  return TRUE;
+}
+
+static void
+assert_aggregates_equal_variants (AggregateEvent *aggregate_array,
+                                  gint            aggregate_array_length,
+                                  GVariant      **variants)
+{
+  for (gint i = 0; i < aggregate_array_length || variants[i] != NULL; i++)
+    {
+      g_assert (i < aggregate_array_length && variants[i] != NULL);
+
+      GVariant *aggregate_variant = aggregate_to_variant (aggregate_array + i);
+      g_assert (g_variant_equal (aggregate_variant, variants[i]));
+      g_variant_unref (aggregate_variant);
+    }
+}
+
+static void
+assert_sequences_equal_variants (SequenceEvent *sequence_array,
+                                 gint           sequence_array_length,
+                                 GVariant     **variants)
+{
+  for (gint i = 0; i < sequence_array_length || variants[i] != NULL; i++)
+    {
+      g_assert (i < sequence_array_length && variants[i] != NULL);
+
+      GVariant *sequence_variant = sequence_to_variant (sequence_array + i);
+      g_assert (g_variant_equal (sequence_variant, variants[i]));
+      g_variant_unref (sequence_variant);
+    }
 }
 
 // ----- Actual Test Cases below ------
@@ -699,31 +919,32 @@ test_persistent_cache_store_one_of_each_succeeds (gboolean     *unused,
                                                   gconstpointer dontuseme)
 {
   EmerPersistentCache *cache = make_testing_cache ();
-  GVariant *ind = make_individual_event (0);
-  GVariant *agg = make_aggregate_event (0);
-  GVariant *seq = make_sequence_event (0);
 
-  GVariant *ind_a[] = {ind, NULL};
-  GVariant *agg_a[] = {agg, NULL};
-  GVariant *seq_a[] = {seq, NULL};
+  SingularEvent singular_array[1];
+  make_singular_event (0, singular_array);
+
+  AggregateEvent aggregate_array[1];
+  make_aggregate_event (0, aggregate_array);
+
+  SequenceEvent sequence_array[1];
+  make_sequence_event (0, sequence_array);
 
   gint num_singulars_stored, num_aggregates_stored, num_sequences_stored;
-
   capacity_t capacity;
 
-  gboolean success = emer_persistent_cache_store_metrics (cache,
-                                                          ind_a,
-                                                          agg_a,
-                                                          seq_a,
-                                                          &num_singulars_stored,
-                                                          &num_aggregates_stored,
-                                                          &num_sequences_stored,
-                                                          &capacity);
+  gboolean success =
+    emer_persistent_cache_store_metrics (cache,
+                                         singular_array,
+                                         aggregate_array,
+                                         sequence_array,
+                                         1, 1, 1,
+                                         &num_singulars_stored,
+                                         &num_aggregates_stored,
+                                         &num_sequences_stored,
+                                         &capacity);
   g_object_unref (cache);
 
-  g_variant_unref (ind);
-  g_variant_unref (agg);
-  g_variant_unref (seq);
+  g_free (sequence_array[0].event_values);
 
   g_assert (success);
 
@@ -803,17 +1024,22 @@ test_persistent_cache_drain_one_singular_event_succeeds (gboolean     *unused,
                                                          gconstpointer dontuseme)
 {
   EmerPersistentCache *cache = make_testing_cache ();
-  GVariant *var = make_individual_event (1);
-  GVariant *var_array[] = {var, NULL};
-  GVariant *empty_array[] = {NULL};
+
+  SingularEvent singulars_stored[1];
+  make_singular_event (1, singulars_stored);
+  singular_event_own (singulars_stored);
+
+  AggregateEvent aggregates_stored[] = {};
+  SequenceEvent sequences_stored[] = {};
 
   gint num_singulars_stored, num_aggregates_stored, num_sequences_stored;
   capacity_t capacity;
 
   emer_persistent_cache_store_metrics (cache,
-                                       var_array,
-                                       empty_array,
-                                       empty_array,
+                                       singulars_stored,
+                                       aggregates_stored,
+                                       sequences_stored,
+                                       1, 0, 0,
                                        &num_singulars_stored,
                                        &num_aggregates_stored,
                                        &num_sequences_stored,
@@ -828,10 +1054,12 @@ test_persistent_cache_drain_one_singular_event_succeeds (gboolean     *unused,
   g_object_unref (cache);
 
   g_assert (success);
-  g_assert (check_all_gvariants_equal (var_array, singulars_drained));
-  g_assert (check_all_gvariants_equal (empty_array, aggregates_drained));
-  g_assert (check_all_gvariants_equal (empty_array, sequences_drained));
-  g_variant_unref (var);
+
+  assert_singulars_equal_variants (singulars_stored, 1, singulars_drained);
+  g_assert (c_array_len (aggregates_drained) == 0);
+  g_assert (c_array_len (sequences_drained) == 0);
+
+  trash_singular_event (singulars_stored);
 
   free_variant_c_array (singulars_drained);
   free_variant_c_array (aggregates_drained);
@@ -843,18 +1071,23 @@ test_persistent_cache_drain_one_aggregate_event_succeeds (gboolean     *unused,
                                                           gconstpointer dontuseme)
 {
   EmerPersistentCache *cache = make_testing_cache ();
-  GVariant *var = make_aggregate_event (1);
-  GVariant *var_array[] = {var, NULL};
-  GVariant *empty_array[] = {NULL};
 
+  SingularEvent singulars_stored[] = {};
+
+  AggregateEvent aggregates_stored[1];
+  make_aggregate_event (1, aggregates_stored);
+  aggregate_event_own (aggregates_stored);
+
+  SequenceEvent sequences_stored[] = {};
 
   gint num_singulars_stored, num_aggregates_stored, num_sequences_stored;
   capacity_t capacity;
 
   emer_persistent_cache_store_metrics (cache,
-                                       empty_array,
-                                       var_array,
-                                       empty_array,
+                                       singulars_stored,
+                                       aggregates_stored,
+                                       sequences_stored,
+                                       0, 1, 0,
                                        &num_singulars_stored,
                                        &num_aggregates_stored,
                                        &num_sequences_stored,
@@ -869,11 +1102,12 @@ test_persistent_cache_drain_one_aggregate_event_succeeds (gboolean     *unused,
   g_object_unref (cache);
 
   g_assert (success);
-  g_assert (check_all_gvariants_equal (empty_array, singulars_drained));
-  g_assert (check_all_gvariants_equal (var_array, aggregates_drained));
-  g_assert (check_all_gvariants_equal (empty_array, sequences_drained));
-  g_variant_unref (var);
 
+  g_assert (c_array_len (singulars_drained) == 0);
+  assert_aggregates_equal_variants (aggregates_stored, 1, aggregates_drained);
+  g_assert (c_array_len (sequences_drained) == 0);
+
+  trash_aggregate_event (aggregates_stored);
 
   free_variant_c_array (singulars_drained);
   free_variant_c_array (aggregates_drained);
@@ -885,22 +1119,28 @@ test_persistent_cache_drain_one_sequence_event_succeeds (gboolean     *unused,
                                                          gconstpointer dontuseme)
 {
   EmerPersistentCache *cache = make_testing_cache ();
-  GVariant *var = make_sequence_event (1);
-  GVariant *var_array[] = {var, NULL};
-  GVariant *empty_array[] = {NULL};
 
+  SingularEvent singulars_stored[] = {};
+  AggregateEvent aggregates_stored[] = {};
+
+  SequenceEvent sequences_stored[1];
+  make_sequence_event (1, sequences_stored);
+  sequence_event_own (sequences_stored);
 
   gint num_singulars_stored, num_aggregates_stored, num_sequences_stored;
   capacity_t capacity;
 
   emer_persistent_cache_store_metrics (cache,
-                                       empty_array,
-                                       empty_array,
-                                       var_array,
+                                       singulars_stored,
+                                       aggregates_stored,
+                                       sequences_stored,
+                                       0, 0, 1,
                                        &num_singulars_stored,
                                        &num_aggregates_stored,
                                        &num_sequences_stored,
                                        &capacity);
+
+  g_assert (num_sequences_stored == 1);
 
   GVariant **singulars_drained, **aggregates_drained, **sequences_drained;
 
@@ -912,10 +1152,12 @@ test_persistent_cache_drain_one_sequence_event_succeeds (gboolean     *unused,
   g_object_unref (cache);
 
   g_assert (success);
-  g_assert (check_all_gvariants_equal (empty_array, singulars_drained));
-  g_assert (check_all_gvariants_equal (empty_array, aggregates_drained));
-  g_assert (check_all_gvariants_equal (var_array, sequences_drained));
-  g_variant_unref (var);
+
+  g_assert (c_array_len (singulars_drained) == 0);
+  g_assert (c_array_len (aggregates_drained) == 0);
+  assert_sequences_equal_variants (sequences_stored, 1, sequences_drained);
+
+  trash_sequence_event (sequences_stored);
 
   free_variant_c_array (singulars_drained);
   free_variant_c_array (aggregates_drained);
@@ -929,19 +1171,33 @@ test_persistent_cache_drain_many_succeeds (gboolean     *unused,
   EmerPersistentCache *cache = make_testing_cache ();
 
   // Fill it up first.
-  GVariant **ind_array;
-  GVariant **agg_array;
-  GVariant **seq_array;
-  make_many_events (&ind_array, &agg_array, &seq_array);
+  SingularEvent *singulars_stored;
+  AggregateEvent *aggregates_stored;
+  SequenceEvent *sequences_stored;
+
+  gint num_singulars_made, num_aggregates_made, num_sequences_made;
+
+  make_many_events (&singulars_stored,
+                    &aggregates_stored,
+                    &sequences_stored,
+                    &num_singulars_made,
+                    &num_aggregates_made,
+                    &num_sequences_made);
+
+  singular_buffer_own (singulars_stored, num_singulars_made);
+  aggregate_buffer_own (aggregates_stored, num_aggregates_made);
+  sequence_buffer_own (sequences_stored, num_sequences_made);
 
   gint num_singulars_stored, num_aggregates_stored, num_sequences_stored;
-
   capacity_t capacity;
 
   emer_persistent_cache_store_metrics (cache,
-                                       ind_array,
-                                       agg_array,
-                                       seq_array,
+                                       singulars_stored,
+                                       aggregates_stored,
+                                       sequences_stored,
+                                       num_singulars_made,
+                                       num_aggregates_made,
+                                       num_sequences_made,
                                        &num_singulars_stored,
                                        &num_aggregates_stored,
                                        &num_sequences_stored,
@@ -957,13 +1213,16 @@ test_persistent_cache_drain_many_succeeds (gboolean     *unused,
   g_object_unref (cache);
 
   g_assert (success);
-  g_assert (check_all_gvariants_equal (ind_array, singulars_drained));
-  g_assert (check_all_gvariants_equal (agg_array, aggregates_drained));
-  g_assert (check_all_gvariants_equal (seq_array, sequences_drained));
+  assert_singulars_equal_variants (singulars_stored, num_singulars_made,
+                                   singulars_drained);
+  assert_aggregates_equal_variants (aggregates_stored, num_aggregates_made,
+                                    aggregates_drained);
+  assert_sequences_equal_variants (sequences_stored, num_sequences_made,
+                                   sequences_drained);
 
-  free_variant_c_array (ind_array);
-  free_variant_c_array (agg_array);
-  free_variant_c_array (seq_array);
+  free_singular_buffer (singulars_stored, num_singulars_made);
+  free_aggregate_buffer (aggregates_stored, num_aggregates_made);
+  free_sequence_buffer (sequences_stored, num_sequences_made);
 
   free_variant_c_array (singulars_drained);
   free_variant_c_array (aggregates_drained);
@@ -986,11 +1245,9 @@ test_persistent_cache_drain_empty_succeeds (gboolean     *unused,
 
   g_assert (success);
 
-  // Should contain logically empty arrays.
-  GVariant *empty_array[] = {NULL};
-  g_assert (check_all_gvariants_equal (singulars_drained, empty_array));
-  g_assert (check_all_gvariants_equal (aggregates_drained, empty_array));
-  g_assert (check_all_gvariants_equal (sequences_drained, empty_array));
+  g_assert (c_array_len (singulars_drained) == 0);
+  g_assert (c_array_len (aggregates_drained) == 0);
+  g_assert (c_array_len (sequences_drained) == 0);
 
   free_variant_c_array (singulars_drained);
   free_variant_c_array (aggregates_drained);
@@ -1025,10 +1282,9 @@ test_persistent_cache_purges_when_out_of_date_succeeds (gboolean     *unused,
                                        MAX_BYTES_TO_READ);
   g_object_unref (cache2);
 
-  GVariant *empty_array[] = {NULL};
-  g_assert (check_all_gvariants_equal (singulars_drained, empty_array));
-  g_assert (check_all_gvariants_equal (aggregates_drained, empty_array));
-  g_assert (check_all_gvariants_equal (sequences_drained, empty_array));
+  g_assert (c_array_len (singulars_drained) == 0);
+  g_assert (c_array_len (aggregates_drained) == 0);
+  g_assert (c_array_len (sequences_drained) == 0);
 
   free_variant_c_array (singulars_drained);
   free_variant_c_array (aggregates_drained);

@@ -74,22 +74,17 @@ void       free_aggregate_buffer (AggregateEvent  *aggregate_buffer,
 void       free_sequence_buffer  (SequenceEvent   *sequence_buffer,
                                   gint             num_sequences_buffered);
 
+GVariant * singular_to_variant   (SingularEvent   *singular);
 
-GVariant * singular_to_variant   (SingularEvent      *singular);
+GVariant * aggregate_to_variant  (AggregateEvent  *aggregate);
 
-GVariant * aggregate_to_variant  (AggregateEvent     *aggregate);
+GVariant * sequence_to_variant   (SequenceEvent   *sequence);
 
-GVariant * sequence_to_variant   (SequenceEvent      *sequence);
+void       get_uuid_builder      (uuid_t           uuid,
+                                  GVariantBuilder *uuid_builder);
 
-void       get_builder_from_iter (GVariantIter       *iter,
-                                  GVariantBuilder    *builder,
-                                  const GVariantType *type);
-
-void       get_uuid_builder      (uuid_t              uuid,
-                                  GVariantBuilder    *uuid_builder);
-
-gboolean   get_current_time      (clockid_t           clock_id,
-                                  gint64             *current_time);
+gboolean   get_current_time      (clockid_t        clock_id,
+                                  gint64          *current_time);
 
 G_END_DECLS
 

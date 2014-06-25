@@ -204,7 +204,7 @@ G_DEFINE_TYPE_WITH_CODE (EmerPersistentCache, emer_persistent_cache, G_TYPE_OBJE
  *
  * Should never be altered in production code!
  */
-static gint MAX_CACHE_SIZE = 102400; // 100 kB
+static gint MAX_CACHE_SIZE = 92160; // 90 kB
 
 /*
  * The path to the file containing the boot-id used to determine if this is the

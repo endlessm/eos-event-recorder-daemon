@@ -34,6 +34,15 @@ prevent testing code from sending metrics to the production server. */
  */
 #define NETWORK_ATTEMPT_LIMIT 8
 
+/*
+ *  Default values for buffers is set to a value with the assumption of a
+ *  metric size averaging 100 bytes each and a maximum capacity of 10 kB on the
+ *  daemon. Thus 10,000 / 100 / 3 ~= 34
+ *
+ *  TODO: Set these limits to use the actual size of the metrics to
+ *  determine the limit, not the estimated size.
+ */
+#define DEFAULT_METRICS_PER_BUFFER_MAX 34
 
 typedef struct _NetworkCallbackData
 {
@@ -972,7 +981,7 @@ emer_daemon_class_init (EmerDaemonClass *klass)
     g_param_spec_int ("singular-buffer-length", "Buffer length singular",
                        "The number of events allowed to be stored in the "
                        "individual metric buffer",
-                       -1, G_MAXINT, 200,
+                       -1, G_MAXINT, DEFAULT_METRICS_PER_BUFFER_MAX,
                        G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                        G_PARAM_STATIC_STRINGS);
 
@@ -981,7 +990,7 @@ emer_daemon_class_init (EmerDaemonClass *klass)
     g_param_spec_int ("aggregate-buffer-length", "Buffer length aggregate",
                       "The number of events allowed to be stored in the "
                       "aggregate metric buffer",
-                      -1, G_MAXINT, 200,
+                      -1, G_MAXINT, DEFAULT_METRICS_PER_BUFFER_MAX,
                       G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                       G_PARAM_STATIC_STRINGS);
 
@@ -990,7 +999,7 @@ emer_daemon_class_init (EmerDaemonClass *klass)
     g_param_spec_int ("sequence-buffer-length", "Buffer length sequence",
                       "The number of events allowed to be stored in the "
                       "sequence metric buffer",
-                      -1, G_MAXINT, 200,
+                      -1, G_MAXINT, DEFAULT_METRICS_PER_BUFFER_MAX,
                       G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                       G_PARAM_STATIC_STRINGS);
 

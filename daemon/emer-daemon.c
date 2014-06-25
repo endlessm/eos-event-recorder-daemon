@@ -410,8 +410,8 @@ get_aggregates_builder (EmerDaemonPrivate *priv,
       g_variant_builder_add (aggregates_builder, "(uayxxmv)",
                              curr_event.user_id,
                              &event_id_builder,
-                             curr_event_value.relative_timestamp,
                              curr_aggregate->num_events,
+                             curr_event_value.relative_timestamp,
                              curr_event_value.auxiliary_payload);
       free_singular_event (&curr_aggregate->event);
     }

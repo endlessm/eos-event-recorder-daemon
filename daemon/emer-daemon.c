@@ -198,8 +198,10 @@ backoff (GRand *rand,
     base_backoff_sec *= 2;
 
   gdouble random_factor = g_rand_double_range (rand, 1, 2);
-  gulong randomized_backoff_sec = random_factor * (gdouble) base_backoff_sec;
-  g_usleep (G_USEC_PER_SEC * randomized_backoff_sec);
+  gdouble randomized_backoff_sec = random_factor * (gdouble) base_backoff_sec;
+  gulong randomized_backoff_usec =
+    (gulong) (G_USEC_PER_SEC * randomized_backoff_sec);
+  g_usleep (randomized_backoff_usec);
 }
 
 /* Returned object is owned by calling code. Free with soup_uri_free() when

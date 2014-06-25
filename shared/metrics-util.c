@@ -129,26 +129,6 @@ get_uuid_builder (uuid_t           uuid,
     g_variant_builder_add (uuid_builder, "y", uuid[i]);
 }
 
-/*
- * Populates builder with the elements from iter. Assumes all elements are of
- * the given type.
- */
-void
-get_builder_from_iter (GVariantIter       *iter,
-                       GVariantBuilder    *builder,
-                       const GVariantType *type)
-{
-  g_variant_builder_init (builder, type);
-  while (TRUE)
-    {
-      GVariant *curr_elem = g_variant_iter_next_value (iter);
-      if (curr_elem == NULL)
-        break;
-      g_variant_builder_add_value (builder, curr_elem);
-      g_variant_unref (curr_elem);
-    }
-}
-
 gboolean
 get_current_time (clockid_t clock_id,
                   gint64   *current_time)

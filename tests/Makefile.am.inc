@@ -86,7 +86,7 @@ tests_daemon_test_persistent_cache_SOURCES = \
 	$(NULL)
 tests_daemon_test_persistent_cache_CPPFLAGS = \
 	$(DAEMON_TEST_FLAGS) \
-	-D_POSIX_C_SOURCE=199309L \
+	-D_POSIX_C_SOURCE=200112L \
 	$(NULL)
 tests_daemon_test_persistent_cache_LDADD = $(DAEMON_TEST_LIBS)
 

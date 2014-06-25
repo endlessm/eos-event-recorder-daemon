@@ -1210,7 +1210,7 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
  * #define'd acceptable variance.
  */
 static void
-test_persistent_cache_computes_reasonable_offset (gboolean *unused,
+test_persistent_cache_computes_reasonable_offset (gboolean     *unused,
                                                   gconstpointer dontuseme)
 {
   EmerPersistentCache *cache = make_testing_cache ();
@@ -1233,7 +1233,7 @@ test_persistent_cache_computes_reasonable_offset (gboolean *unused,
   store_single_aggregate_event (cache2, &capacity);
 
   g_assert (boot_timestamp_is_valid (relative_time, absolute_time));
-  gint64 second_offset = read_offset();
+  gint64 second_offset = read_offset ();
   g_assert (second_offset <= first_offset + ACCEPTABLE_OFFSET_VARIANCE);
   g_assert (second_offset >= first_offset - ACCEPTABLE_OFFSET_VARIANCE);
 

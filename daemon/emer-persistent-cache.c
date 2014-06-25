@@ -208,7 +208,7 @@ static gint MAX_CACHE_SIZE = 102400; // 100 kB
  * it were immutable by production code.  Only testing code should
  * ever alter this variable.
  */
-static gchar* CACHE_DIRECTORY = "/var/cache/metrics/";
+static gchar *CACHE_DIRECTORY = "/var/cache/metrics/";
 
 enum {
   PROP_0,
@@ -365,7 +365,7 @@ emer_persistent_cache_new (GCancellable       *cancellable,
 
 /*
  * Gets the boot time offset and stores it in the out parameter offset.
- * If the always_update_timstamps parameter is FALSE, this will not perform
+ * If the always_update_timestamps parameter is FALSE, this will not perform
  * writes to disk to update the timestamps during this operation unless the boot
  * id is out of date, or some corruption is detected which forces a rewrite of
  * the boot timing metafile.
@@ -1081,6 +1081,7 @@ drain_metrics_file (EmerPersistentCache *self,
         flip_bytes_if_big_endian_machine (current_metric);
 
       g_variant_unref (current_metric);
+
       g_array_append_val (dynamic_array, native_endian_metric);
     }
   g_object_unref (stream);
@@ -1481,10 +1482,10 @@ append_metric (EmerPersistentCache *self,
 }
 
 /*
- * Will return a GVariant* with the bytes set to the opposite byte_order if
- * the machine is a big-endian machine.
+ * Will return a GVariant * with the bytes in the opposite order if this
+ * machine is big-endian.
  *
- * The returned GVariant* should have g_variant_unref() called on it when it is
+ * The returned GVariant * should have g_variant_unref() called on it when it is
  * no longer needed.
  */
 static GVariant *

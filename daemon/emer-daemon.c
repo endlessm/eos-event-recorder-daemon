@@ -433,6 +433,7 @@ get_sequences_builder (EmerDaemonPrivate *priv,
   for (gint i = 0; i < num_sequences; ++i)
     {
       SequenceEvent *curr_sequence = sequence_buffer + i;
+
       GVariantBuilder event_values_builder;
       g_variant_builder_init (&event_values_builder, G_VARIANT_TYPE ("a(xmv)"));
       for (gint j = 0; j < curr_sequence->num_event_values; ++j)
@@ -442,8 +443,10 @@ get_sequences_builder (EmerDaemonPrivate *priv,
                                  curr_event_value->relative_timestamp,
                                  curr_event_value->auxiliary_payload);
         }
+
       GVariantBuilder event_id_builder;
       get_uuid_builder (curr_sequence->event_id, &event_id_builder);
+
       g_variant_builder_add (sequences_builder, "(uaya(xmv))",
                              curr_sequence->user_id, &event_id_builder,
                              &event_values_builder);

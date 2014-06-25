@@ -208,7 +208,7 @@ static gint MAX_CACHE_SIZE = 102400; // 100 kB
  * it were immutable by production code.  Only testing code should
  * ever alter this variable.
  */
-static gchar* CACHE_DIRECTORY = "/var/cache/metrics/";
+static gchar *CACHE_DIRECTORY = "/var/cache/metrics/";
 
 enum {
   PROP_0,
@@ -320,39 +320,27 @@ emer_persistent_cache_initable_init (GInitableIface *iface)
 
 /*
  * Constructor for creating a new Persistent Cache.
- * Returns a singleton instance of a Persistent Cache.
  * Please use this in production instead of the testing constructor!
  */
-EmerPersistentCache*
-emer_persistent_cache_get_default (GCancellable *cancellable,
-                                   GError      **error)
+EmerPersistentCache *
+emer_persistent_cache_new (GCancellable *cancellable,
+                           GError      **error)
 {
-  static EmerPersistentCache *singleton_cache;
-  G_LOCK_DEFINE_STATIC (singleton_cache);
-
-  G_LOCK (singleton_cache);
-  if (singleton_cache == NULL)
-    singleton_cache = g_initable_new (EMER_TYPE_PERSISTENT_CACHE,
-                                      cancellable,
-                                      error,
-                                      NULL);
-  G_UNLOCK (singleton_cache);
-
-  return singleton_cache;
+  return g_initable_new (EMER_TYPE_PERSISTENT_CACHE, cancellable, error, NULL);
 }
 
 /*
- * You should use emer_persistent_cache_get_default() instead of this function.
+ * You should use emer_persistent_cache_new() instead of this function.
  * Function should only be used in testing code, NOT in production code.
  * Should always use a custom directory.  A custom cache size may be specified,
  * but if set to 0, the production value will be used.
  */
-EmerPersistentCache*
-emer_persistent_cache_new (GCancellable       *cancellable,
-                           GError            **error,
-                           gchar              *custom_directory,
-                           gint                custom_cache_size,
-                           EmerBootIdProvider *boot_id_provider)
+EmerPersistentCache *
+emer_persistent_cache_new_full (GCancellable       *cancellable,
+                                GError            **error,
+                                gchar              *custom_directory,
+                                gint                custom_cache_size,
+                                EmerBootIdProvider *boot_id_provider)
 {
   MAX_CACHE_SIZE = custom_cache_size;
   CACHE_DIRECTORY = custom_directory;
@@ -365,7 +353,7 @@ emer_persistent_cache_new (GCancellable       *cancellable,
 
 /*
  * Gets the boot time offset and stores it in the out parameter offset.
- * If the always_update_timstamps parameter is FALSE, this will not perform
+ * If the always_update_timestamps parameter is FALSE, this will not perform
  * writes to disk to update the timestamps during this operation unless the boot
  * id is out of date, or some corruption is detected which forces a rewrite of
  * the boot timing metafile.
@@ -1075,12 +1063,14 @@ drain_metrics_file (EmerPersistentCache *self,
                                  FALSE,
                                  (GDestroyNotify) g_free,
                                  writable.data);
+      g_variant_ref_sink (current_metric);
 
       // Correct byte_ordering if necessary.
       GVariant *native_endian_metric =
         flip_bytes_if_big_endian_machine (current_metric);
 
       g_variant_unref (current_metric);
+
       g_array_append_val (dynamic_array, native_endian_metric);
     }
   g_object_unref (stream);
@@ -1443,6 +1433,7 @@ append_metric (EmerPersistentCache *self,
       return FALSE;
     }
 
+  g_variant_ref_sink (corrected_metric);
   GVariant *native_endian_metric =
     flip_bytes_if_big_endian_machine (corrected_metric);
   g_variant_unref (corrected_metric);
@@ -1481,10 +1472,10 @@ append_metric (EmerPersistentCache *self,
 }
 
 /*
- * Will return a GVariant* with the bytes set to the opposite byte_order if
- * the machine is a big-endian machine.
+ * Will return a GVariant * with the bytes in the opposite order if this
+ * machine is big-endian.
  *
- * The returned GVariant* should have g_variant_unref() called on it when it is
+ * The returned GVariant * should have g_variant_unref() called on it when it is
  * no longer needed.
  */
 static GVariant *
@@ -1492,10 +1483,12 @@ flip_bytes_if_big_endian_machine (GVariant *variant)
 {
   if (G_BYTE_ORDER == G_BIG_ENDIAN)
     return g_variant_byteswap (variant);
-  else if (G_BYTE_ORDER != G_LITTLE_ENDIAN)
+
+  if (G_BYTE_ORDER != G_LITTLE_ENDIAN)
     g_error ("Holy crap! This machine is neither big NOR little-endian, "
              "time to panic. AAHAHAHAHAH!");
-  return g_variant_ref (variant);
+
+  return g_variant_ref_sink (variant);
 }
 
 /*

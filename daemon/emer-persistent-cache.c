@@ -1063,6 +1063,7 @@ drain_metrics_file (EmerPersistentCache *self,
                                  FALSE,
                                  (GDestroyNotify) g_free,
                                  writable.data);
+      g_variant_ref_sink (current_metric);
 
       // Correct byte_ordering if necessary.
       GVariant *native_endian_metric =
@@ -1432,6 +1433,7 @@ append_metric (EmerPersistentCache *self,
       return FALSE;
     }
 
+  g_variant_ref_sink (corrected_metric);
   GVariant *native_endian_metric =
     flip_bytes_if_big_endian_machine (corrected_metric);
   g_variant_unref (corrected_metric);
@@ -1481,10 +1483,12 @@ flip_bytes_if_big_endian_machine (GVariant *variant)
 {
   if (G_BYTE_ORDER == G_BIG_ENDIAN)
     return g_variant_byteswap (variant);
-  else if (G_BYTE_ORDER != G_LITTLE_ENDIAN)
+
+  if (G_BYTE_ORDER != G_LITTLE_ENDIAN)
     g_error ("Holy crap! This machine is neither big NOR little-endian, "
              "time to panic. AAHAHAHAHAH!");
-  return g_variant_ref (variant);
+
+  return g_variant_ref_sink (variant);
 }
 
 /*

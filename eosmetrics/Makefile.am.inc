@@ -3,27 +3,17 @@
 eosmetrics_public_installed_headers = eosmetrics/eosmetrics.h
 
 eosmetrics_private_installed_headers = \
-	eosmetrics/emtr-connection.h \
 	eosmetrics/emtr-enums.h \
 	eosmetrics/emtr-event-recorder.h \
 	eosmetrics/emtr-event-types.h \
 	eosmetrics/emtr-macros.h \
-	eosmetrics/emtr-sender.h \
 	eosmetrics/emtr-types.h \
-	eosmetrics/emtr-util.h \
 	eosmetrics/emtr-version.h \
 	$(NULL)
 
 eosmetrics_library_sources = \
 	emer-event-recorder-server.c emer-event-recorder-server.h \
-	eosmetrics/emtr-connection.c \
 	eosmetrics/emtr-event-recorder.c \
-	eosmetrics/emtr-mac.c eosmetrics/emtr-mac-private.h \
-	eosmetrics/emtr-osversion.c eosmetrics/emtr-osversion-private.h \
-	eosmetrics/emtr-sender.c \
-	eosmetrics/emtr-util.c eosmetrics/emtr-util-private.h \
-	eosmetrics/emtr-uuid.c eosmetrics/emtr-uuid-private.h \
-	eosmetrics/emtr-web.c eosmetrics/emtr-web-private.h \
 	shared/metrics-util.c shared/metrics-util.h \
 	$(NULL)
 

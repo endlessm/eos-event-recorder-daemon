@@ -75,7 +75,6 @@ AC_SUBST(EMTR_LT_VERSION_INFO)
 # Update these whenever you use a function that requires a certain API version
 GOBJECT_REQUIREMENT="gobject-2.0"
 GIO_REQUIREMENT="gio-unix-2.0 >= 2.40"
-JSON_REQUIREMENT="json-glib-1.0 >= 0.16"
 POLKIT_REQUIREMENT="polkit-gobject-1"
 SOUP_REQUIREMENT="libsoup-2.4 >= 2.42"
 UUID_REQUIREMENT="uuid"
@@ -86,7 +85,7 @@ UUID_REQUIREMENT="uuid"
 #
 # Keep the list sorted alphabetically.
 EMTR_REQUIRED_MODULES="$GOBJECT_REQUIREMENT"
-EMTR_REQUIRED_MODULES_PRIVATE="$GIO_REQUIREMENT $JSON_REQUIREMENT $SOUP_REQUIREMENT $UUID_REQUIREMENT"
+EMTR_REQUIRED_MODULES_PRIVATE="$GIO_REQUIREMENT $UUID_REQUIREMENT"
 AC_SUBST(EMTR_REQUIRED_MODULES)
 AC_SUBST(EMTR_REQUIRED_MODULES_PRIVATE)
 # Server requirements
@@ -210,7 +209,6 @@ AC_CONFIG_FILES([
     Makefile
     docs/reference/eosmetrics/Makefile
     docs/reference/eosmetrics/version.xml
-    tools/eos-send-metrics
     $EMTR_API_NAME.pc
 ])
 AC_CONFIG_HEADERS([config.h])  dnl Header with system-dependent #defines

@@ -15,13 +15,8 @@
     </releaseinfo>
   </bookinfo>
 
-  <xi:include href="xml/overview.xml"/>
-
   <chapter>
     <title>EOS Metrics Reference Manual (C API)</title>
-    <xi:include href="xml/emtr-util.xml"/>
-    <xi:include href="xml/emtr-connection.xml"/>
-    <xi:include href="xml/emtr-sender.xml"/>
     <xi:include href="xml/emtr-event-recorder.xml"/>
     <xi:include href="xml/emtr-event-types.xml" />
   </chapter>

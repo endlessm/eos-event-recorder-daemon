@@ -110,7 +110,7 @@ teardown (Fixture      *fixture,
 static void
 test_daemon_new_succeeds (void)
 {
-  EmerDaemon *daemon = emer_daemon_new ();
+  EmerDaemon *daemon = emer_daemon_new ("test");
   g_assert (daemon != NULL);
   g_object_unref (daemon);
 }

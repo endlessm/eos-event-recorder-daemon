@@ -12,6 +12,8 @@
 #include "emer-daemon.h"
 #include "emer-event-recorder-server.h"
 
+#define METRICS_CONFIGURATION_FILE_PATH "/etc/eos-metrics-permissions.conf"
+
 static gboolean
 on_record_singular_event (EmerEventRecorderServer *server,
                           GDBusMethodInvocation   *invocation,
@@ -192,7 +194,31 @@ int
 main (int                argc,
       const char * const argv[])
 {
-  EmerDaemon *daemon = emer_daemon_new ();
+  EmerDaemon *daemon;
+
+  /* Read configuration file to determine metrics environment. */
+  GKeyFile *configuration_file = g_key_file_new ();
+  GError *error = NULL;
+
+  if (!g_key_file_load_from_file (configuration_file, DEFAULT_CONFIG_FILE_PATH,
+                                   G_KEY_FILE_NONE, &error))
+    g_error ("Unable to load configuration file. Error: %s.", error->message);
+
+  gchar *environment = g_key_file_get_value (configuration_file, "global",
+                                             "environment", NULL);
+  g_key_file_free (configuration_file);
+
+  if (environment == NULL)
+    g_error ("Error: Metrics environment is not set.");
+  if (g_strcmp0 (environment, "dev") != 0 &&
+      g_strcmp0 (environment, "test") != 0 &&
+      g_strcmp0 (environment, "production") != 0)
+    g_error ("Error: Metrics environment is set to: %s in %s. "
+             "Valid metrics environments are: dev, test, production.",
+             environment, DEFAULT_CONFIG_FILE_PATH);
+
+  daemon = emer_daemon_new (environment);
+  g_free (environment);
 
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
 

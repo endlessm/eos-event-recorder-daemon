@@ -50,7 +50,7 @@ struct _EmerDaemonClass
 
 GType                    emer_daemon_get_type                 (void) G_GNUC_CONST;
 
-EmerDaemon *             emer_daemon_new                      (void);
+EmerDaemon *             emer_daemon_new                      (const gchar             *environment);
 
 EmerDaemon *             emer_daemon_new_full                 (GRand                   *rand,
                                                                gint                     version_number,

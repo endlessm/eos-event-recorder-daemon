@@ -365,7 +365,7 @@ emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
                                             GError             **error,
                                             gboolean             always_update_timestamps)
 {
-  g_return_val_if_fail (error != NULL || *error != NULL, FALSE);
+  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
   // When always_update_timestamps is FALSE, the timestamps won't be written
   // unless the boot offset in the metadata file is being overwritten.

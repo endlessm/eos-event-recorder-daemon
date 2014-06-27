@@ -22,10 +22,12 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerPermissionsProvider, emer_permissions_provider, 
 
 #define DAEMON_ENABLED_GROUP_NAME "global"
 #define DAEMON_ENABLED_KEY_NAME "enabled"
+#define DAEMON_ENVIRONMENT_KEY_NAME "environment"
 
 #define FALLBACK_CONFIG_FILE_DATA \
   "[" DAEMON_ENABLED_GROUP_NAME "]\n" \
-  DAEMON_ENABLED_KEY_NAME "=false\n"
+  DAEMON_ENABLED_KEY_NAME "=false\n" \
+  DAEMON_ENVIRONMENT_KEY_NAME "=production\n"
 
 enum
 {

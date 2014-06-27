@@ -78,9 +78,8 @@ setup (Fixture      *fixture,
   fixture->mock_persistent_cache = emer_persistent_cache_new (NULL, NULL);
   fixture->test_object =
     emer_daemon_new_full (g_rand_new_with_seed (18),
-                          42, // Version number
                           5,  // Network Send Interval
-                          "https://localhost", // uri,
+                          "http://localhost/", // uri,
                           id_prov, // MachineIdProvider
                           fixture->mock_permissions_prov, // PermissionsProvider
                           fixture->mock_persistent_cache, // PersistentCache

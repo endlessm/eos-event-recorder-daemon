@@ -23,9 +23,16 @@
 #include "emer-persistent-cache.h"
 #include "shared/metrics-util.h"
 
+/*
+ * The version of this client's network protocol.
+ */
+#define CLIENT_VERSION_NUMBER "0"
+
 /* The URI of the metrics production proxy server. Is kept in a #define to
-prevent testing code from sending metrics to the production server. */
-#define PRODUCTION_SERVER_URI "https://metrics.endlessm.com/"
+prevent testing code from sending metrics to the production server. It ends
+with the current client version number of the network protocol. */
+#define PRODUCTION_SERVER_URI \
+ "https://production.metrics.endlessm.com/" CLIENT_VERSION_NUMBER "/"
 
 /*
  * The minimum number of seconds to wait before attempting the first retry of a
@@ -80,8 +87,6 @@ typedef struct _EmerDaemonPrivate {
 
   GRand *rand;
 
-  gint client_version_number;
-
   guint network_send_interval_seconds;
   guint upload_events_timeout_source_id;
 
@@ -122,7 +127,6 @@ enum
 {
   PROP_0,
   PROP_RANDOM_NUMBER_GENERATOR,
-  PROP_CLIENT_VERSION_NUMBER,
   PROP_NETWORK_SEND_INTERVAL,
   PROP_PROXY_SERVER_URI,
   PROP_MACHINE_ID_PROVIDER,
@@ -297,12 +301,11 @@ static GVariant *
 get_updated_request_body (EmerDaemon *self,
                           GVariant   *request_body)
 {
-  gint32 client_version_number;
   GVariantIter *machine_id_iter;
   GVariantIter *singulars_iter, *aggregates_iter, *sequences_iter;
-  g_variant_get (request_body, "(ixxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))",
-                 &client_version_number, NULL, NULL, &machine_id_iter,
-                 &singulars_iter, &aggregates_iter, &sequences_iter);
+  g_variant_get (request_body, "(xxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))",
+                 NULL, NULL, &machine_id_iter, &singulars_iter,
+                 &aggregates_iter, &sequences_iter);
 
   GVariantBuilder machine_id_builder;
   get_builder_from_iter (machine_id_iter, &machine_id_builder,
@@ -339,8 +342,8 @@ get_updated_request_body (EmerDaemon *self,
     swap_bytes_64_if_big_endian (absolute_timestamp);
 
   GVariant *updated_request_body =
-    g_variant_new ("(ixxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))",
-                   client_version_number, little_endian_relative_timestamp,
+    g_variant_new ("(xxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))",
+                   little_endian_relative_timestamp,
                    little_endian_absolute_timestamp, &machine_id_builder,
                    &singulars_builder, &aggregates_builder, &sequences_builder);
 
@@ -609,10 +612,9 @@ create_request_body (EmerDaemon *self)
     }
 
   GVariant *request_body =
-    g_variant_new ("(ixxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))",
-                   priv->client_version_number, relative_timestamp,
-                   absolute_timestamp, &machine_id_builder, &singulars_builder,
-                   &aggregates_builder, &sequences_builder);
+    g_variant_new ("(xxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))",
+                   relative_timestamp, absolute_timestamp, &machine_id_builder,
+                   &singulars_builder, &aggregates_builder, &sequences_builder);
 
   g_variant_ref_sink (request_body);
   GVariant *little_endian_request_body =
@@ -911,21 +913,6 @@ get_random_number_generator (EmerDaemon *self)
 }
 
 static void
-set_client_version_number (EmerDaemon *self,
-                           gint        number)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  priv->client_version_number = number;
-}
-
-static gint
-get_client_version_number (EmerDaemon *self)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  return priv->client_version_number;
-}
-
-static void
 set_network_send_interval (EmerDaemon *self,
                            guint       seconds)
 {
@@ -1105,10 +1092,6 @@ emer_daemon_get_property (GObject    *object,
       g_value_set_pointer (value, get_random_number_generator (self));
       break;
 
-    case PROP_CLIENT_VERSION_NUMBER:
-      g_value_set_int (value, get_client_version_number (self));
-      break;
-
     case PROP_NETWORK_SEND_INTERVAL:
       g_value_set_uint (value, get_network_send_interval (self));
       break;
@@ -1150,10 +1133,6 @@ emer_daemon_set_property (GObject      *object,
     {
     case PROP_RANDOM_NUMBER_GENERATOR:
       set_random_number_generator (self, g_value_get_pointer (value));
-      break;
-
-    case PROP_CLIENT_VERSION_NUMBER:
-      set_client_version_number (self, g_value_get_int (value));
       break;
 
     case PROP_NETWORK_SEND_INTERVAL:
@@ -1250,18 +1229,6 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                           "exponential backoff",
                           G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                           G_PARAM_STATIC_STRINGS);
-
-  /*
-   * EmerDaemon:client-version-number:
-   *
-   * Network protocol version of the metrics client.
-   */
-  emer_daemon_props[PROP_CLIENT_VERSION_NUMBER] =
-    g_param_spec_int ("client-version-number", "Client version number",
-                      "Client network protocol version",
-                      -1, G_MAXINT, 0,
-                      G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
-                      G_PARAM_STATIC_STRINGS);
 
   /* Blurb string is good enough default documentation for this */
   emer_daemon_props[PROP_PROXY_SERVER_URI] =
@@ -1413,7 +1380,9 @@ emer_daemon_init (EmerDaemon *self)
 EmerDaemon *
 emer_daemon_new (const gchar *environment)
 {
-  gchar *proxy_server_uri = g_strconcat ("https://", environment, ".metrics.endlessm.com/", NULL);
+  gchar *proxy_server_uri = g_strconcat ("https://", environment,
+                                         ".metrics.endlessm.com/",
+                                         CLIENT_VERSION_NUMBER, "/", NULL);
 
   guint network_send_interval = DEFAULT_NETWORK_SEND_INTERVAL;
   if (g_strcmp0 (environment, "dev") == 0)
@@ -1429,7 +1398,6 @@ emer_daemon_new (const gchar *environment)
  * emer_daemon_new_full:
  * @rand: (allow-none): random number generator to use for randomized
  *   exponential backoff, or %NULL to use the default
- * @version_number: client version of the network protocol
  * @network_send_interval: frequency with which the client will attempt a
  *   network send request
  * @proxy_server_uri: URI to use
@@ -1452,7 +1420,6 @@ emer_daemon_new (const gchar *environment)
  */
 EmerDaemon *
 emer_daemon_new_full (GRand                   *rand,
-                      gint                     version_number,
                       guint                    network_send_interval,
                       const gchar             *proxy_server_uri,
                       EmerMachineIdProvider   *machine_id_provider,
@@ -1462,7 +1429,6 @@ emer_daemon_new_full (GRand                   *rand,
 {
   return g_object_new (EMER_TYPE_DAEMON,
                        "random-number-generator", rand,
-                       "client-version-number", version_number,
                        "network-send-interval", network_send_interval,
                        "proxy-server-uri", proxy_server_uri,
                        "machine-id-provider", machine_id_provider,

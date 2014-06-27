@@ -34,6 +34,15 @@ prevent testing code from sending metrics to the production server. */
  */
 #define NETWORK_ATTEMPT_LIMIT 8
 
+/*
+ *  Default values for buffers is set to a value with the assumption of a
+ *  metric size averaging 100 bytes each and a maximum capacity of 10 kB on the
+ *  daemon. Thus 10,000 / 100 / 3 ~= 34
+ *
+ *  TODO: Set these limits to use the actual size of the metrics to
+ *  determine the limit, not the estimated size.
+ */
+#define DEFAULT_METRICS_PER_BUFFER_MAX 34
 
 typedef struct _NetworkCallbackData
 {
@@ -59,6 +68,11 @@ typedef struct _EmerDaemonPrivate {
 
   EmerMachineIdProvider *machine_id_provider;
   EmerPermissionsProvider *permissions_provider;
+
+  EmerPersistentCache *persistent_cache;
+
+  GNetworkMonitor *network_monitor;
+  GSocketConnectable *ping_socket;
 
   gboolean recording_enabled;
 
@@ -95,6 +109,7 @@ enum
   PROP_SINGULAR_BUFFER_LENGTH,
   PROP_AGGREGATE_BUFFER_LENGTH,
   PROP_SEQUENCE_BUFFER_LENGTH,
+  PROP_PERSISTENT_CACHE,
   NPROPS
 };
 
@@ -192,8 +207,35 @@ get_https_request_uri (EmerDaemon   *self,
   return https_request_uri;
 }
 
+/*
+ * Sets an absolute timestamp and a boot-offset-corrected relative timestamp in
+ * the out parameters. Returns FALSE on failure and TRUE on success. The values
+ * of the out parameters are undefined on failure.
+ */
+static gboolean
+get_correct_timestamps (EmerDaemon *self,
+                        gint64     *rel_timestamp_ptr,
+                        gint64     *abs_timestamp_ptr)
+{
+
+  if (!get_current_time (CLOCK_BOOTTIME, rel_timestamp_ptr) ||
+      !get_current_time (CLOCK_REALTIME, abs_timestamp_ptr))
+    return FALSE;
+
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  gint64 boot_offset;
+  if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
+                                                   &boot_offset, NULL, FALSE))
+      return FALSE;
+
+  *rel_timestamp_ptr += boot_offset;
+  return TRUE;
+}
+
 static GVariant *
-get_updated_request_body (GVariant *request_body)
+get_updated_request_body (EmerDaemon *self,
+                          GVariant   *request_body)
 {
   gint32 client_version_number;
   GVariantIter *machine_id_iter;
@@ -226,11 +268,12 @@ get_updated_request_body (GVariant *request_body)
 
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.
-  // TODO: True up the relative time across boots.
   gint64 relative_timestamp, absolute_timestamp;
-  if (!get_current_time (CLOCK_BOOTTIME, &relative_timestamp) ||
-      !get_current_time (CLOCK_REALTIME, &absolute_timestamp))
-    return NULL;
+  if (!get_correct_timestamps (self, &relative_timestamp, &absolute_timestamp))
+    {
+      g_warning ("Could not get, or correct, network request timestamps.");
+      return NULL;
+    }
 
   GVariant *updated_request_body =
     g_variant_new ("(ixxaysa(uayxmv)a(uayxxmv)a(uaya(xmv)))",
@@ -261,10 +304,13 @@ handle_https_response (SoupSession         *https_session,
   g_warning ("Attempt to upload metrics failed: %s.", reason_phrase);
   g_free (reason_phrase);
 
+  EmerDaemon *self = callback_data->daemon;
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
   if (++callback_data->attempt_num >= NETWORK_ATTEMPT_LIMIT)
     {
-      g_warning ("Maximum number of network attempts (%d) reached. Dropping "
-                 "metrics.", callback_data->attempt_num);
+      g_debug ("Maximum number of network attempts (%d) reached -- dropping "
+               "metrics.", NETWORK_ATTEMPT_LIMIT);
       free_network_callback_data (callback_data);
       return;
     }
@@ -273,11 +319,9 @@ handle_https_response (SoupSession         *https_session,
       SOUP_STATUS_IS_CLIENT_ERROR (status_code) ||
       SOUP_STATUS_IS_SERVER_ERROR (status_code))
     {
-      EmerDaemon *self = callback_data->daemon;
-      EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
       backoff (priv->rand, callback_data->attempt_num);
       GVariant *updated_request_body =
-        get_updated_request_body (callback_data->request_body);
+        get_updated_request_body (self, callback_data->request_body);
       g_variant_unref (callback_data->request_body);
 
       if (updated_request_body == NULL)
@@ -420,9 +464,56 @@ get_sequences_builder (EmerDaemonPrivate *priv,
   g_mutex_unlock (&priv->sequence_buffer_lock);
 }
 
-static GVariant *
-create_request_body (EmerDaemonPrivate *priv)
+/*
+ * Appends metrics from the Persistent Cache to the ends of given
+ * GVariantBuilders. Will return TRUE if metrics were appended or if no metrics
+ * were found in the Persistent Cache. Will return FALSE if metrics were not
+ * appended because the Persistent Cache had some manner of failure draining
+ * them.
+ */
+static gboolean
+append_cache_metrics_to_builders (EmerDaemonPrivate *priv,
+                                  GVariantBuilder   *singulars_builder,
+                                  GVariantBuilder   *aggregates_builder,
+                                  GVariantBuilder   *sequences_builder)
 {
+  GVariant **list_of_singulars;
+  GVariant **list_of_aggregates;
+  GVariant **list_of_sequences;
+
+  /* This value is currently unused by the Persistent Cache but should be
+     updated when the PC starts using it to a sensible value. */
+  gint maximum_bytes_to_drain = 120000;
+  if (!emer_persistent_cache_drain_metrics (priv->persistent_cache,
+                                            &list_of_singulars,
+                                            &list_of_aggregates,
+                                            &list_of_sequences,
+                                            maximum_bytes_to_drain))
+    {
+      // Do not attempt to use out parameters on failure.
+      return FALSE;
+    }
+  for (gint i = 0; list_of_singulars[i] != NULL; i++)
+    {
+      /* The metrics in "drain metrics" have floating reference which the
+         add value functions will sink, thus there is no memory leak here. */
+      g_variant_builder_add_value (singulars_builder, list_of_singulars[i]);
+    }
+  for (gint i = 0; list_of_aggregates[i] != NULL; i++)
+    {
+      g_variant_builder_add_value (aggregates_builder, list_of_aggregates[i]);
+    }
+  for (gint i = 0; list_of_sequences[i] != NULL; i++)
+    {
+      g_variant_builder_add_value (sequences_builder, list_of_sequences[i]);
+    }
+  return TRUE;
+}
+
+static GVariant *
+create_request_body (EmerDaemon *self)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   uuid_t machine_id;
   gboolean read_id = emer_machine_id_provider_get_id (priv->machine_id_provider,
                                                       machine_id);
@@ -441,13 +532,18 @@ create_request_body (EmerDaemonPrivate *priv)
   GVariantBuilder sequences_builder;
   get_sequences_builder (priv, &sequences_builder);
 
+  // We don't care whether this failed or not and don't check the return value.
+  append_cache_metrics_to_builders (priv, &singulars_builder,
+                                    &aggregates_builder, &sequences_builder);
+
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.
-  // TODO: True up the relative time across boots.
   gint64 relative_timestamp, absolute_timestamp;
-  if (!get_current_time (CLOCK_BOOTTIME, &relative_timestamp) ||
-      !get_current_time (CLOCK_REALTIME, &absolute_timestamp))
-    return NULL;
+  if (!get_correct_timestamps (self, &relative_timestamp, &absolute_timestamp))
+    {
+      g_warning ("Could not get, or correct, network request timestamps.");
+      return NULL;
+    }
 
   GVariant *request_body =
     g_variant_new ("(ixxaysa(uayxmv)a(uayxxmv)a(uaya(xmv)))",
@@ -485,23 +581,83 @@ get_nullable_payload (gboolean  has_payload,
   return payload;
 }
 
-static gboolean
-upload_events (EmerDaemon *self)
+/*
+ * Frees (trashes) all events in the Daemon's buffers and sets the count of each
+ * buffer to 0. Does not free the buffers themselves. The calling code is
+ * expected to be holding all three locks on the buffers before calling this
+ * function.
+ */
+static void
+empty_all_buffers (EmerDaemon *self)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  /* Decrease the chances of a race with emer_daemon_finalize. */
-  g_object_ref (self);
+  SingularEvent *singular_buffer = priv->singular_buffer;
+  for (gint i = 0; i < priv->num_singulars_buffered; ++i)
+    trash_singular_event (singular_buffer + i);
+  priv->num_singulars_buffered = 0;
 
-  GVariant *request_body = create_request_body (priv);
+  AggregateEvent *aggregate_buffer = priv->aggregate_buffer;
+  for (gint i = 0; i < priv->num_aggregates_buffered; ++i)
+    trash_aggregate_event (aggregate_buffer + i);
+  priv->num_aggregates_buffered = 0;
+
+  SequenceEvent *sequence_buffer = priv->sequence_buffer;
+  for (gint i = 0; i < priv->num_sequences_buffered; ++i)
+    trash_sequence_event (sequence_buffer + i);
+  priv->num_sequences_buffered = 0;
+}
+
+static void
+upload_events (EmerDaemon   *self,
+               GAsyncResult *res)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  GError *error = NULL;
+  if (!g_network_monitor_can_reach_finish (priv->network_monitor, res, &error))
+    {
+      g_debug ("Network Monitor says we can't reach the network. Sending "
+               "metrics to Persistent Cache. Error: '%s'", error->message);
+      g_error_free (error);
+      g_mutex_lock (&priv->singular_buffer_lock);
+      g_mutex_lock (&priv->aggregate_buffer_lock);
+      g_mutex_lock (&priv->sequence_buffer_lock);
+      capacity_t capacity;
+      gint num_singulars_stored, num_aggregates_stored, num_sequences_stored;
+      emer_persistent_cache_store_metrics (priv->persistent_cache,
+                                           priv->singular_buffer,
+                                           priv->aggregate_buffer,
+                                           priv->sequence_buffer,
+                                           priv->num_singulars_buffered,
+                                           priv->num_aggregates_buffered,
+                                           priv->num_sequences_buffered,
+                                           &num_singulars_stored,
+                                           &num_aggregates_stored,
+                                           &num_sequences_stored,
+                                           &capacity);
+
+      // Discarding any metrics we fail to store for the time being.
+      empty_all_buffers (self);
+
+      g_mutex_unlock (&priv->singular_buffer_lock);
+      g_mutex_unlock (&priv->aggregate_buffer_lock);
+      g_mutex_unlock (&priv->sequence_buffer_lock);
+    }
+
+  GVariant *request_body = create_request_body (self);
   if (request_body == NULL)
-    return G_SOURCE_CONTINUE;
+  {
+    g_object_unref (self);
+    return;
+  }
 
   gconstpointer serialized_request_body = g_variant_get_data (request_body);
   if (serialized_request_body == NULL)
     {
       g_warning ("Could not serialize network request body.");
-      return G_SOURCE_CONTINUE;
+      g_object_unref (self);
+      return;
     }
 
   gsize request_body_length = g_variant_get_size (request_body);
@@ -525,7 +681,21 @@ upload_events (EmerDaemon *self)
                               callback_data);
 
   g_object_unref (self);
+}
 
+static gboolean
+check_and_upload_events (EmerDaemon *self)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  /* Decrease the chances of a race with emer_daemon_finalize. */
+  g_object_ref (self);
+
+  g_network_monitor_can_reach_async (priv->network_monitor,
+                                     priv->ping_socket,
+                                     NULL,
+                                     (GAsyncReadyCallback) upload_events,
+                                     NULL);
   return G_SOURCE_CONTINUE;
 }
 
@@ -607,7 +777,8 @@ set_network_send_interval (EmerDaemon *self,
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   priv->network_send_interval_seconds = seconds;
   priv->upload_events_timeout_source_id =
-    g_timeout_add_seconds (seconds, (GSourceFunc) upload_events, self);
+    g_timeout_add_seconds (seconds, (GSourceFunc) check_and_upload_events,
+                           self);
 }
 
 static guint
@@ -722,6 +893,18 @@ get_sequence_buffer_length (EmerDaemon *self)
 }
 
 static void
+set_persistent_cache (EmerDaemon          *self,
+                      EmerPersistentCache *cache)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  if (cache == NULL)
+    priv->persistent_cache = emer_persistent_cache_new (NULL, NULL);
+  else
+    priv->persistent_cache = g_object_ref (cache);
+}
+
+static void
 emer_daemon_constructed (GObject *object)
 {
   EmerDaemon *self = EMER_DAEMON (object);
@@ -729,6 +912,9 @@ emer_daemon_constructed (GObject *object)
 
   priv->recording_enabled =
     emer_permissions_provider_get_daemon_enabled (priv->permissions_provider);
+
+  priv->ping_socket = g_network_address_new (priv->proxy_server_uri,
+                                             443); // SSL default port.
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->constructed (object);
 }
@@ -834,6 +1020,10 @@ emer_daemon_set_property (GObject      *object,
       set_sequence_buffer_length (self, g_value_get_int (value));
       break;
 
+    case PROP_PERSISTENT_CACHE:
+      set_persistent_cache (self, g_value_get_object (value));
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
     }
@@ -852,6 +1042,9 @@ emer_daemon_finalize (GObject *object)
   g_free (priv->proxy_server_uri);
   g_clear_object(&priv->machine_id_provider);
   g_clear_object (&priv->permissions_provider);
+  g_clear_object (&priv->persistent_cache);
+  g_clear_object (&priv->ping_socket);
+  // Do not free the GNetworkMonitor.  It is transfer none.
 
   free_singular_buffer (priv->singular_buffer, priv->num_singulars_buffered);
   g_mutex_clear (&priv->singular_buffer_lock);
@@ -972,7 +1165,7 @@ emer_daemon_class_init (EmerDaemonClass *klass)
     g_param_spec_int ("singular-buffer-length", "Buffer length singular",
                        "The number of events allowed to be stored in the "
                        "individual metric buffer",
-                       -1, G_MAXINT, 200,
+                       -1, G_MAXINT, DEFAULT_METRICS_PER_BUFFER_MAX,
                        G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                        G_PARAM_STATIC_STRINGS);
 
@@ -981,7 +1174,7 @@ emer_daemon_class_init (EmerDaemonClass *klass)
     g_param_spec_int ("aggregate-buffer-length", "Buffer length aggregate",
                       "The number of events allowed to be stored in the "
                       "aggregate metric buffer",
-                      -1, G_MAXINT, 200,
+                      -1, G_MAXINT, DEFAULT_METRICS_PER_BUFFER_MAX,
                       G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                       G_PARAM_STATIC_STRINGS);
 
@@ -990,9 +1183,17 @@ emer_daemon_class_init (EmerDaemonClass *klass)
     g_param_spec_int ("sequence-buffer-length", "Buffer length sequence",
                       "The number of events allowed to be stored in the "
                       "sequence metric buffer",
-                      -1, G_MAXINT, 200,
+                      -1, G_MAXINT, DEFAULT_METRICS_PER_BUFFER_MAX,
                       G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                       G_PARAM_STATIC_STRINGS);
+
+  /* Blurb string is good enough default documentation for this. */
+  emer_daemon_props[PROP_PERSISTENT_CACHE] =
+    g_param_spec_object ("persistent-cache", "Persistent cache",
+                         "The persistent local storage for metrics",
+                         EMER_TYPE_PERSISTENT_CACHE,
+                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
+                         G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, NPROPS, emer_daemon_props);
 }
@@ -1011,6 +1212,7 @@ emer_daemon_init (EmerDaemon *self)
                                    SOUP_TYPE_CACHE,
                                    NULL);
   g_free (user_agent);
+  priv->network_monitor = g_network_monitor_get_default ();
 }
 
 /*
@@ -1040,6 +1242,8 @@ emer_daemon_new (void)
  *   machine ID, or %NULL to use the default
  * @permissions_provider: The #EmerPermissionsProvider to supply information
  *   about opting out of metrics collection
+ * @persistent_cache: The #EmerPersistentCache to send metrics to locally when
+ *   network sending of metrics is not an option
  * @buffer_length: The maximum size of the buffers to be used for in-memory
  *   storage of metrics
  *
@@ -1059,6 +1263,7 @@ emer_daemon_new_full (GRand                   *rand,
                       const gchar             *proxy_server_uri,
                       EmerMachineIdProvider   *machine_id_provider,
                       EmerPermissionsProvider *permissions_provider,
+                      EmerPersistentCache     *persistent_cache,
                       gint                     buffer_length)
 {
   return g_object_new (EMER_TYPE_DAEMON,
@@ -1069,6 +1274,7 @@ emer_daemon_new_full (GRand                   *rand,
                        "proxy-server-uri", proxy_server_uri,
                        "machine-id-provider", machine_id_provider,
                        "permissions-provider", permissions_provider,
+                       "persistent-cache", persistent_cache,
                        "singular-buffer-length", buffer_length,
                        "aggregate-buffer-length", buffer_length,
                        "sequence-buffer-length", buffer_length,
@@ -1087,6 +1293,16 @@ emer_daemon_record_singular_event (EmerDaemon *self,
 
   if (!priv->recording_enabled)
     return;
+
+  gint64 boot_offset;
+  if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
+                                                   &boot_offset, NULL, FALSE))
+    {
+      g_warning ("Unable to correct metric's relative timestamp. "
+                 "Dropping metric.");
+      return;
+    }
+  relative_timestamp += boot_offset;
 
   g_mutex_lock (&priv->singular_buffer_lock);
 
@@ -1119,6 +1335,16 @@ emer_daemon_record_aggregate_event (EmerDaemon *self,
   if (!priv->recording_enabled)
     return;
 
+  gint64 boot_offset;
+  if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
+                                                   &boot_offset, NULL, FALSE))
+    {
+      g_warning ("Unable to correct metric's relative timestamp. "
+                 "Dropping metric.");
+      return;
+    }
+  relative_timestamp += boot_offset;
+
   g_mutex_lock (&priv->aggregate_buffer_lock);
 
   if (priv->num_aggregates_buffered < priv->aggregate_buffer_length)
@@ -1150,6 +1376,15 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
   if (!priv->recording_enabled)
     return;
 
+  gint64 boot_offset;
+  if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
+                                                   &boot_offset, NULL, FALSE))
+    {
+      g_warning ("Unable to correct metric's relative timestamp. "
+                 "Dropping metric.");
+      return;
+    }
+
   g_mutex_lock (&priv->sequence_buffer_lock);
 
   if (priv->num_sequences_buffered < priv->sequence_buffer_length)
@@ -1174,6 +1409,7 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
                                &relative_timestamp, &has_payload,
                                &maybe_payload);
 
+          relative_timestamp += boot_offset;
           GVariant *nullable_payload = has_payload ? maybe_payload : NULL;
           EventValue event_value = { relative_timestamp, nullable_payload };
           event_sequence->event_values[index] = event_value;

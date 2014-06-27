@@ -51,18 +51,6 @@ static gboolean   compute_boot_offset                    (EmerPersistentCache *s
                                                           gint64               absolute_time,
                                                           gint64              *boot_offset);
 
-static void       correct_relative_timestamp_aggregate   (AggregateEvent      *aggregate,
-                                                          gint64               boot_offset);
-
-static void       correct_relative_timestamp_event_value (EventValue          *event_value,
-                                                          gint64               boot_offset);
-
-static void       correct_relative_timestamp_singular    (SingularEvent       *singular,
-                                                          gint64               boot_offset);
-
-static void       correct_relative_timestamp_sequence    (SequenceEvent       *sequence,
-                                                          gint64               boot_offset);
-
 static gboolean   drain_metrics_file                     (EmerPersistentCache *self,
                                                           GVariant          ***return_list,
                                                           gchar               *path_ending,
@@ -821,54 +809,6 @@ compute_boot_offset (EmerPersistentCache *self,
 }
 
 /*
- * Adds the boot_offset to the relative timestamp of the given event_value.
- * Modifies event_value in place.
- */
-static void
-correct_relative_timestamp_event_value (EventValue *event_value,
-                                        gint64      boot_offset)
-{
-  event_value->relative_timestamp += boot_offset;
-}
-
-/*
- * Adds the boot_offset to the relative timestamp of the given singular.
- * Modifies singular in place.
- */
-static void
-correct_relative_timestamp_singular (SingularEvent *singular,
-                                     gint64         boot_offset)
-{
-  EventValue *event_value = &singular->event_value;
-  correct_relative_timestamp_event_value (event_value, boot_offset);
-}
-
-/*
- * Adds the boot_offset to the relative timestamp of the given aggregate.
- * Modifies aggregate in place.
- */
-static void
-correct_relative_timestamp_aggregate (AggregateEvent *aggregate,
-                                      gint64          boot_offset)
-{
-  SingularEvent *event = &aggregate->event;
-  correct_relative_timestamp_singular (event, boot_offset);
-}
-
-/*
- * Adds the boot_offset to the relative timestamp of the given sequence.
- * Modifies sequence in place.
- */
-static void
-correct_relative_timestamp_sequence (SequenceEvent *sequence,
-                                     gint64         boot_offset)
-{
-  for (gsize i = 0; i < sequence->num_event_values; i++)
-    correct_relative_timestamp_event_value (sequence->event_values + i,
-                                            boot_offset);
-}
-
-/*
  * Will transfer all metrics in the corresponding file into the out parameter
  * 'return_list'. The list will be NULL-terminated.  Returns TRUE on success,
  * and FALSE if any I/O error occured. Contents of return_list are undefined if
@@ -1096,8 +1036,6 @@ store_singulars (EmerPersistentCache *self,
                  gint                *num_singulars_stored,
                  capacity_t          *capacity)
 {
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
   GFile *singulars_file = get_cache_file (INDIVIDUAL_SUFFIX);
 
   gboolean stored_singulars = TRUE;
@@ -1105,21 +1043,11 @@ store_singulars (EmerPersistentCache *self,
   for (i = 0; i < num_singulars_buffered; i++)
     {
       SingularEvent *curr_singular = singular_buffer + i;
-      correct_relative_timestamp_singular (curr_singular, priv->boot_offset);
       GVariant *curr_singular_variant = singular_to_variant (curr_singular);
       stored_singulars =
         store_event (self, singulars_file, curr_singular_variant, capacity);
       if (!stored_singulars)
-        {
-          /*
-           * If we failed to store the singular, undo the modification to its
-           * relative timestamp for consistency with the rest of the singulars
-           * that haven't been stored.
-           */
-          correct_relative_timestamp_singular (curr_singular,
-                                               -priv->boot_offset);
-          break;
-        }
+        break;
     }
 
   g_object_unref (singulars_file);
@@ -1134,8 +1062,6 @@ store_aggregates (EmerPersistentCache *self,
                   gint                *num_aggregates_stored,
                   capacity_t          *capacity)
 {
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
   GFile *aggregates_file = get_cache_file (AGGREGATE_SUFFIX);
 
   gboolean stored_aggregates = TRUE;
@@ -1143,21 +1069,11 @@ store_aggregates (EmerPersistentCache *self,
   for (i = 0; i < num_aggregates_buffered; i++)
     {
       AggregateEvent *curr_aggregate = aggregate_buffer + i;
-      correct_relative_timestamp_aggregate (curr_aggregate, priv->boot_offset);
       GVariant *curr_aggregate_variant = aggregate_to_variant (curr_aggregate);
       stored_aggregates =
         store_event (self, aggregates_file, curr_aggregate_variant, capacity);
       if (!stored_aggregates)
-        {
-          /*
-           * If we failed to store the aggregate, undo the modification to its
-           * relative timestamp for consistency with the rest of the aggregates
-           * that haven't been stored.
-           */
-          correct_relative_timestamp_aggregate (curr_aggregate,
-                                                -priv->boot_offset);
-          break;
-        }
+        break;
     }
 
   g_object_unref (aggregates_file);
@@ -1172,8 +1088,6 @@ store_sequences (EmerPersistentCache *self,
                  gint                *num_sequences_stored,
                  capacity_t          *capacity)
 {
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
   GFile *sequences_file = get_cache_file (SEQUENCE_SUFFIX);
 
   gboolean stored_sequences = TRUE;
@@ -1181,21 +1095,11 @@ store_sequences (EmerPersistentCache *self,
   for (i = 0; i < num_sequences_buffered; i++)
     {
       SequenceEvent *curr_sequence = sequence_buffer + i;
-      correct_relative_timestamp_sequence (curr_sequence, priv->boot_offset);
       GVariant *curr_sequence_variant = sequence_to_variant (curr_sequence);
       stored_sequences =
         store_event (self, sequences_file, curr_sequence_variant, capacity);
       if (!stored_sequences)
-        {
-          /*
-           * If we failed to store the sequence, undo the modifications to its
-           * relative timestamps for consistency with the rest of the sequences
-           * that haven't been stored.
-           */
-          correct_relative_timestamp_sequence (curr_sequence,
-                                               -priv->boot_offset);
-          break;
-        }
+        break;
     }
 
   g_object_unref (sequences_file);
@@ -1214,13 +1118,8 @@ store_sequences (EmerPersistentCache *self,
  * num_aggregates_stored, num_sequences_stored, and capacity will be correctly
  * set.
  *
- * This function adjusts in place the relative timestamps of the events it
- * successfully stores (and only those events) to ensure they are consistent
- * across boots. The buffers are always processed in order, so, for example,
- * after this function returns, the first *num_singulars_stored elements of
- * singular_buffer will have corrected relative timestamps, and the last
- * num_singulars_buffered - *num_singulars_stored elements will retain their
- * original timestamps.
+ * This function assumes all events given to it have already had their
+ * relative timestamps corrected.
  */
 gboolean
 emer_persistent_cache_store_metrics (EmerPersistentCache  *self,

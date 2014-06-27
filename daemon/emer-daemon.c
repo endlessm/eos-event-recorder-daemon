@@ -204,8 +204,35 @@ get_https_request_uri (EmerDaemon   *self,
   return https_request_uri;
 }
 
+/*
+ * Sets an absolute timestamp and a boot-offset-corrected relative timestamp in
+ * the out parameters. Returns FALSE on failure and TRUE on success. The values
+ * of the out parameters are undefined on failure.
+ */
+static gboolean
+get_correct_timestamps (EmerDaemon *self,
+                        gint64     *rel_timestamp_ptr,
+                        gint64     *abs_timestamp_ptr)
+{
+
+  if (!get_current_time (CLOCK_BOOTTIME, rel_timestamp_ptr) ||
+      !get_current_time (CLOCK_REALTIME, abs_timestamp_ptr))
+    return FALSE;
+
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  gint64 boot_offset;
+  if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
+                                                   &boot_offset, NULL, FALSE))
+      return FALSE;
+
+  *rel_timestamp_ptr += boot_offset;
+  return TRUE;
+}
+
 static GVariant *
-get_updated_request_body (GVariant *request_body)
+get_updated_request_body (EmerDaemon *self,
+                          GVariant   *request_body)
 {
   gint32 client_version_number;
   GVariantIter *machine_id_iter;
@@ -238,11 +265,12 @@ get_updated_request_body (GVariant *request_body)
 
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.
-  // TODO: True up the relative time across boots.
   gint64 relative_timestamp, absolute_timestamp;
-  if (!get_current_time (CLOCK_BOOTTIME, &relative_timestamp) ||
-      !get_current_time (CLOCK_REALTIME, &absolute_timestamp))
-    return NULL;
+  if (!get_correct_timestamps (self, &relative_timestamp, &absolute_timestamp))
+    {
+      g_warning ("Could not get, or correct, network request timestamps.");
+      return NULL;
+    }
 
   GVariant *updated_request_body =
     g_variant_new ("(ixxaysa(uayxmv)a(uayxxmv)a(uaya(xmv)))",
@@ -285,11 +313,9 @@ handle_https_response (SoupSession         *https_session,
       SOUP_STATUS_IS_CLIENT_ERROR (status_code) ||
       SOUP_STATUS_IS_SERVER_ERROR (status_code))
     {
-      EmerDaemon *self = callback_data->daemon;
-      EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
       backoff (priv->rand, callback_data->attempt_num);
       GVariant *updated_request_body =
-        get_updated_request_body (callback_data->request_body);
+        get_updated_request_body (self, callback_data->request_body);
       g_variant_unref (callback_data->request_body);
 
       if (updated_request_body == NULL)
@@ -433,8 +459,9 @@ get_sequences_builder (EmerDaemonPrivate *priv,
 }
 
 static GVariant *
-create_request_body (EmerDaemonPrivate *priv)
+create_request_body (EmerDaemon *self)
 {
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   uuid_t machine_id;
   gboolean read_id = emer_machine_id_provider_get_id (priv->machine_id_provider,
                                                       machine_id);
@@ -455,11 +482,12 @@ create_request_body (EmerDaemonPrivate *priv)
 
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.
-  // TODO: True up the relative time across boots.
   gint64 relative_timestamp, absolute_timestamp;
-  if (!get_current_time (CLOCK_BOOTTIME, &relative_timestamp) ||
-      !get_current_time (CLOCK_REALTIME, &absolute_timestamp))
-    return NULL;
+  if (!get_correct_timestamps (self, &relative_timestamp, &absolute_timestamp))
+    {
+      g_warning ("Could not get, or correct, network request timestamps.");
+      return NULL;
+    }
 
   GVariant *request_body =
     g_variant_new ("(ixxaysa(uayxmv)a(uayxxmv)a(uaya(xmv)))",
@@ -505,7 +533,7 @@ upload_events (EmerDaemon *self)
   /* Decrease the chances of a race with emer_daemon_finalize. */
   g_object_ref (self);
 
-  GVariant *request_body = create_request_body (priv);
+  GVariant *request_body = create_request_body (self);
   if (request_body == NULL)
     return G_SOURCE_CONTINUE;
 
@@ -1129,6 +1157,16 @@ emer_daemon_record_singular_event (EmerDaemon *self,
   if (!priv->recording_enabled)
     return;
 
+  gint64 boot_offset;
+  if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
+                                                   &boot_offset, NULL, FALSE))
+    {
+      g_warning ("Unable to correct metric's relative timestamp. "
+                 "Dropping metric.");
+      return;
+    }
+  relative_timestamp += boot_offset;
+
   g_mutex_lock (&priv->singular_buffer_lock);
 
   if (priv->num_singulars_buffered < priv->singular_buffer_length)
@@ -1159,6 +1197,16 @@ emer_daemon_record_aggregate_event (EmerDaemon *self,
 
   if (!priv->recording_enabled)
     return;
+
+  gint64 boot_offset;
+  if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
+                                                   &boot_offset, NULL, FALSE))
+    {
+      g_warning ("Unable to correct metric's relative timestamp. "
+                 "Dropping metric.");
+      return;
+    }
+  relative_timestamp += boot_offset;
 
   g_mutex_lock (&priv->aggregate_buffer_lock);
 
@@ -1191,6 +1239,15 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
   if (!priv->recording_enabled)
     return;
 
+  gint64 boot_offset;
+  if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
+                                                   &boot_offset, NULL, FALSE))
+    {
+      g_warning ("Unable to correct metric's relative timestamp. "
+                 "Dropping metric.");
+      return;
+    }
+
   g_mutex_lock (&priv->sequence_buffer_lock);
 
   if (priv->num_sequences_buffered < priv->sequence_buffer_length)
@@ -1215,6 +1272,7 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
                                &relative_timestamp, &has_payload,
                                &maybe_payload);
 
+          relative_timestamp += boot_offset;
           GVariant *nullable_payload = has_payload ? maybe_payload : NULL;
           EventValue event_value = { relative_timestamp, nullable_payload };
           event_sequence->event_values[index] = event_value;

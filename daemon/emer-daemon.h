@@ -54,7 +54,6 @@ EmerDaemon *             emer_daemon_new                      (const gchar      
 
 EmerDaemon *             emer_daemon_new_full                 (GRand                   *rand,
                                                                gint                     version_number,
-                                                               const gchar             *environment,
                                                                guint                    network_send_interval,
                                                                const gchar             *proxy_server_uri,
                                                                EmerMachineIdProvider   *machine_id_provider,

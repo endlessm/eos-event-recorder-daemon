@@ -71,6 +71,9 @@ typedef struct _EmerDaemonPrivate {
 
   EmerPersistentCache *persistent_cache;
 
+  GNetworkMonitor *network_monitor;
+  GSocketConnectable *ping_socket;
+
   gboolean recording_enabled;
 
   /* Storage buffers for different event types */
@@ -301,10 +304,13 @@ handle_https_response (SoupSession         *https_session,
   g_warning ("Attempt to upload metrics failed: %s.", reason_phrase);
   g_free (reason_phrase);
 
+  EmerDaemon *self = callback_data->daemon;
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
   if (++callback_data->attempt_num >= NETWORK_ATTEMPT_LIMIT)
     {
-      g_warning ("Maximum number of network attempts (%d) reached. Dropping "
-                 "metrics.", callback_data->attempt_num);
+      g_debug ("Maximum number of network attempts (%d) reached -- dropping "
+               "metrics.", NETWORK_ATTEMPT_LIMIT);
       free_network_callback_data (callback_data);
       return;
     }
@@ -458,6 +464,52 @@ get_sequences_builder (EmerDaemonPrivate *priv,
   g_mutex_unlock (&priv->sequence_buffer_lock);
 }
 
+/*
+ * Appends metrics from the Persistent Cache to the ends of given
+ * GVariantBuilders. Will return TRUE if metrics were appended or if no metrics
+ * were found in the Persistent Cache. Will return FALSE if metrics were not
+ * appended because the Persistent Cache had some manner of failure draining
+ * them.
+ */
+static gboolean
+append_cache_metrics_to_builders (EmerDaemonPrivate *priv,
+                                  GVariantBuilder   *singulars_builder,
+                                  GVariantBuilder   *aggregates_builder,
+                                  GVariantBuilder   *sequences_builder)
+{
+  GVariant **list_of_singulars;
+  GVariant **list_of_aggregates;
+  GVariant **list_of_sequences;
+
+  /* This value is currently unused by the Persistent Cache but should be
+     updated when the PC starts using it to a sensible value. */
+  gint maximum_bytes_to_drain = 120000;
+  if (!emer_persistent_cache_drain_metrics (priv->persistent_cache,
+                                            &list_of_singulars,
+                                            &list_of_aggregates,
+                                            &list_of_sequences,
+                                            maximum_bytes_to_drain))
+    {
+      // Do not attempt to use out parameters on failure.
+      return FALSE;
+    }
+  for (gint i = 0; list_of_singulars[i] != NULL; i++)
+    {
+      /* The metrics in "drain metrics" have floating reference which the
+         add value functions will sink, thus there is no memory leak here. */
+      g_variant_builder_add_value (singulars_builder, list_of_singulars[i]);
+    }
+  for (gint i = 0; list_of_aggregates[i] != NULL; i++)
+    {
+      g_variant_builder_add_value (aggregates_builder, list_of_aggregates[i]);
+    }
+  for (gint i = 0; list_of_sequences[i] != NULL; i++)
+    {
+      g_variant_builder_add_value (sequences_builder, list_of_sequences[i]);
+    }
+  return TRUE;
+}
+
 static GVariant *
 create_request_body (EmerDaemon *self)
 {
@@ -479,6 +531,10 @@ create_request_body (EmerDaemon *self)
 
   GVariantBuilder sequences_builder;
   get_sequences_builder (priv, &sequences_builder);
+
+  // We don't care whether this failed or not and don't check the return value.
+  append_cache_metrics_to_builders (priv, &singulars_builder,
+                                    &aggregates_builder, &sequences_builder);
 
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.
@@ -525,23 +581,83 @@ get_nullable_payload (gboolean  has_payload,
   return payload;
 }
 
-static gboolean
-upload_events (EmerDaemon *self)
+/*
+ * Frees (trashes) all events in the Daemon's buffers and sets the count of each
+ * buffer to 0. Does not free the buffers themselves. The calling code is
+ * expected to be holding all three locks on the buffers before calling this
+ * function.
+ */
+static void
+empty_all_buffers (EmerDaemon *self)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  /* Decrease the chances of a race with emer_daemon_finalize. */
-  g_object_ref (self);
+  SingularEvent *singular_buffer = priv->singular_buffer;
+  for (gint i = 0; i < priv->num_singulars_buffered; ++i)
+    trash_singular_event (singular_buffer + i);
+  priv->num_singulars_buffered = 0;
+
+  AggregateEvent *aggregate_buffer = priv->aggregate_buffer;
+  for (gint i = 0; i < priv->num_aggregates_buffered; ++i)
+    trash_aggregate_event (aggregate_buffer + i);
+  priv->num_aggregates_buffered = 0;
+
+  SequenceEvent *sequence_buffer = priv->sequence_buffer;
+  for (gint i = 0; i < priv->num_sequences_buffered; ++i)
+    trash_sequence_event (sequence_buffer + i);
+  priv->num_sequences_buffered = 0;
+}
+
+static void
+upload_events (EmerDaemon   *self,
+               GAsyncResult *res)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  GError *error = NULL;
+  if (!g_network_monitor_can_reach_finish (priv->network_monitor, res, &error))
+    {
+      g_debug ("Network Monitor says we can't reach the network. Sending "
+               "metrics to Persistent Cache. Error: '%s'", error->message);
+      g_error_free (error);
+      g_mutex_lock (&priv->singular_buffer_lock);
+      g_mutex_lock (&priv->aggregate_buffer_lock);
+      g_mutex_lock (&priv->sequence_buffer_lock);
+      capacity_t capacity;
+      gint num_singulars_stored, num_aggregates_stored, num_sequences_stored;
+      emer_persistent_cache_store_metrics (priv->persistent_cache,
+                                           priv->singular_buffer,
+                                           priv->aggregate_buffer,
+                                           priv->sequence_buffer,
+                                           priv->num_singulars_buffered,
+                                           priv->num_aggregates_buffered,
+                                           priv->num_sequences_buffered,
+                                           &num_singulars_stored,
+                                           &num_aggregates_stored,
+                                           &num_sequences_stored,
+                                           &capacity);
+
+      // Discarding any metrics we fail to store for the time being.
+      empty_all_buffers (self);
+
+      g_mutex_unlock (&priv->singular_buffer_lock);
+      g_mutex_unlock (&priv->aggregate_buffer_lock);
+      g_mutex_unlock (&priv->sequence_buffer_lock);
+    }
 
   GVariant *request_body = create_request_body (self);
   if (request_body == NULL)
-    return G_SOURCE_CONTINUE;
+  {
+    g_object_unref (self);
+    return;
+  }
 
   gconstpointer serialized_request_body = g_variant_get_data (request_body);
   if (serialized_request_body == NULL)
     {
       g_warning ("Could not serialize network request body.");
-      return G_SOURCE_CONTINUE;
+      g_object_unref (self);
+      return;
     }
 
   gsize request_body_length = g_variant_get_size (request_body);
@@ -565,7 +681,21 @@ upload_events (EmerDaemon *self)
                               callback_data);
 
   g_object_unref (self);
+}
 
+static gboolean
+check_and_upload_events (EmerDaemon *self)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  /* Decrease the chances of a race with emer_daemon_finalize. */
+  g_object_ref (self);
+
+  g_network_monitor_can_reach_async (priv->network_monitor,
+                                     priv->ping_socket,
+                                     NULL,
+                                     (GAsyncReadyCallback) upload_events,
+                                     NULL);
   return G_SOURCE_CONTINUE;
 }
 
@@ -647,7 +777,8 @@ set_network_send_interval (EmerDaemon *self,
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   priv->network_send_interval_seconds = seconds;
   priv->upload_events_timeout_source_id =
-    g_timeout_add_seconds (seconds, (GSourceFunc) upload_events, self);
+    g_timeout_add_seconds (seconds, (GSourceFunc) check_and_upload_events,
+                           self);
 }
 
 static guint
@@ -782,6 +913,9 @@ emer_daemon_constructed (GObject *object)
   priv->recording_enabled =
     emer_permissions_provider_get_daemon_enabled (priv->permissions_provider);
 
+  priv->ping_socket = g_network_address_new (priv->proxy_server_uri,
+                                             443); // SSL default port.
+
   G_OBJECT_CLASS (emer_daemon_parent_class)->constructed (object);
 }
 
@@ -909,6 +1043,8 @@ emer_daemon_finalize (GObject *object)
   g_clear_object(&priv->machine_id_provider);
   g_clear_object (&priv->permissions_provider);
   g_clear_object (&priv->persistent_cache);
+  g_clear_object (&priv->ping_socket);
+  // Do not free the GNetworkMonitor.  It is transfer none.
 
   free_singular_buffer (priv->singular_buffer, priv->num_singulars_buffered);
   g_mutex_clear (&priv->singular_buffer_lock);
@@ -1076,6 +1212,7 @@ emer_daemon_init (EmerDaemon *self)
                                    SOUP_TYPE_CACHE,
                                    NULL);
   g_free (user_agent);
+  priv->network_monitor = g_network_monitor_get_default ();
 }
 
 /*

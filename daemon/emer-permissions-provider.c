@@ -7,6 +7,8 @@
 #include <glib.h>
 #include <gio/gio.h>
 
+#include "shared/metrics-util.h"
+
 typedef struct _EmerPermissionsProviderPrivate
 {
   /* Permissions, cached from config file */
@@ -17,8 +19,6 @@ typedef struct _EmerPermissionsProviderPrivate
 } EmerPermissionsProviderPrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerPermissionsProvider, emer_permissions_provider, G_TYPE_OBJECT)
-
-#define DEFAULT_CONFIG_FILE_PATH SYSCONFDIR "/eos-metrics-permissions.conf"
 
 #define DAEMON_ENABLED_GROUP_NAME "global"
 #define DAEMON_ENABLED_KEY_NAME "enabled"

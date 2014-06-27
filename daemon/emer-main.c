@@ -11,8 +11,7 @@
 
 #include "emer-daemon.h"
 #include "emer-event-recorder-server.h"
-
-#define METRICS_CONFIGURATION_FILE_PATH "/etc/eos-metrics-permissions.conf"
+#include "shared/metrics-util.h"
 
 static gboolean
 on_record_singular_event (EmerEventRecorderServer *server,

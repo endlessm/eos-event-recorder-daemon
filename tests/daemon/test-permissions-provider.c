@@ -13,10 +13,12 @@
 
 #define CONFIG_FILE_ENABLED_CONTENTS \
   "[global]\n" \
-  "enabled=true\n"
+  "enabled=true\n" \
+  "environment=test\n"
 #define CONFIG_FILE_DISABLED_CONTENTS \
   "[global]\n" \
-  "enabled=false\n"
+  "enabled=false\n" \
+  "environment=test\n"
 #define CONFIG_FILE_INVALID_CONTENTS "lavubeu;f'w943ty[jdn;fbl\n"
 
 typedef struct {

@@ -69,12 +69,3 @@ Description: EndlessOS Metrics Kit introspection files
  use the GObject introspection bindings for the EndlessOS Metrics Kit from a
  language such as Javascript.
 
-Package: eos-metrics-tools
-Section: non-free/libdevel
-Architecture: all
-Depends: ${misc:Depends},
-         gir1.2-eosmetrics-0,
-         gir1.2-glib-2.0,
-         gjs
-Description: EndlessOS Metrics Kit tools
- Scripts that go along with the EndlessOS Metrics Kit.

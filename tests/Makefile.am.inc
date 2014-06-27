@@ -3,6 +3,7 @@
 noinst_PROGRAMS = \
 	tests/test-library.dbus \
 	tests/daemon/test-boot-id-provider \
+    tests/daemon/test-cache-version-provider \
 	tests/daemon/test-daemon \
 	tests/daemon/test-machine-id-provider \
 	tests/daemon/test-permissions-provider \
@@ -32,6 +33,13 @@ DAEMON_TEST_FLAGS = \
 	-DPERSISTENT_CACHE_DIR="\"$(PERSISTENT_CACHE_DIR)\"" \
 	$(NULL)
 DAEMON_TEST_LIBS = @EOSMETRICS_EVENT_RECORDER_LIBS@
+
+tests_daemon_test_cache_version_provider_SOURCES = \
+	daemon/emer-cache-version-provider.c daemon/emer-cache-version-provider.h \
+	tests/daemon/test-cache-version-provider.c \
+	$(NULL)
+tests_daemon_test_cache_version_provider_CPPFLAGS = $(DAEMON_TEST_FLAGS)
+tests_daemon_test_cache_version_provider_LDADD = $(DAEMON_TEST_LIBS)
 
 tests_daemon_test_boot_id_provider_SOURCES = \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
@@ -96,6 +104,7 @@ TESTS = \
 	tests/test-daemon-integration.py \
 	tests/test-opt-out-integration.py \
 	tests/daemon/test-boot-id-provider \
+	tests/daemon/test-cache-version-provider \
 	tests/daemon/test-daemon \
 	tests/daemon/test-machine-id-provider \
 	tests/daemon/test-persistent-cache \

@@ -7,6 +7,7 @@
 
 #include "emer-machine-id-provider.h"
 #include "emer-permissions-provider.h"
+#include "emer-persistent-cache.h"
 
 #include <glib-object.h>
 
@@ -58,6 +59,7 @@ EmerDaemon *             emer_daemon_new_full                 (GRand            
                                                                const gchar             *proxy_server_uri,
                                                                EmerMachineIdProvider   *machine_id_provider,
                                                                EmerPermissionsProvider *permissions_provider,
+                                                               EmerPersistentCache     *persistent_cache,
                                                                gint                     buffer_length);
 
 void                     emer_daemon_record_singular_event    (EmerDaemon              *self,

@@ -69,6 +69,8 @@ typedef struct _EmerDaemonPrivate {
   EmerMachineIdProvider *machine_id_provider;
   EmerPermissionsProvider *permissions_provider;
 
+  EmerPersistentCache *persistent_cache;
+
   gboolean recording_enabled;
 
   /* Storage buffers for different event types */
@@ -104,6 +106,7 @@ enum
   PROP_SINGULAR_BUFFER_LENGTH,
   PROP_AGGREGATE_BUFFER_LENGTH,
   PROP_SEQUENCE_BUFFER_LENGTH,
+  PROP_PERSISTENT_CACHE,
   NPROPS
 };
 
@@ -731,6 +734,18 @@ get_sequence_buffer_length (EmerDaemon *self)
 }
 
 static void
+set_persistent_cache (EmerDaemon          *self,
+                      EmerPersistentCache *cache)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  if (cache == NULL)
+    priv->persistent_cache = emer_persistent_cache_new (NULL, NULL);
+  else
+    priv->persistent_cache = g_object_ref (cache);
+}
+
+static void
 emer_daemon_constructed (GObject *object)
 {
   EmerDaemon *self = EMER_DAEMON (object);
@@ -843,6 +858,10 @@ emer_daemon_set_property (GObject      *object,
       set_sequence_buffer_length (self, g_value_get_int (value));
       break;
 
+    case PROP_PERSISTENT_CACHE:
+      set_persistent_cache (self, g_value_get_object (value));
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
     }
@@ -861,6 +880,7 @@ emer_daemon_finalize (GObject *object)
   g_free (priv->proxy_server_uri);
   g_clear_object(&priv->machine_id_provider);
   g_clear_object (&priv->permissions_provider);
+  g_clear_object (&priv->persistent_cache);
 
   free_singular_buffer (priv->singular_buffer, priv->num_singulars_buffered);
   g_mutex_clear (&priv->singular_buffer_lock);
@@ -1003,6 +1023,14 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                       G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                       G_PARAM_STATIC_STRINGS);
 
+  /* Blurb string is good enough default documentation for this. */
+  emer_daemon_props[PROP_PERSISTENT_CACHE] =
+    g_param_spec_object ("persistent-cache", "Persistent cache",
+                         "The persistent local storage for metrics",
+                         EMER_TYPE_PERSISTENT_CACHE,
+                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
+                         G_PARAM_STATIC_STRINGS);
+
   g_object_class_install_properties (object_class, NPROPS, emer_daemon_props);
 }
 
@@ -1049,6 +1077,8 @@ emer_daemon_new (void)
  *   machine ID, or %NULL to use the default
  * @permissions_provider: The #EmerPermissionsProvider to supply information
  *   about opting out of metrics collection
+ * @persistent_cache: The #EmerPersistentCache to send metrics to locally when
+ *   network sending of metrics is not an option
  * @buffer_length: The maximum size of the buffers to be used for in-memory
  *   storage of metrics
  *
@@ -1068,6 +1098,7 @@ emer_daemon_new_full (GRand                   *rand,
                       const gchar             *proxy_server_uri,
                       EmerMachineIdProvider   *machine_id_provider,
                       EmerPermissionsProvider *permissions_provider,
+                      EmerPersistentCache     *persistent_cache,
                       gint                     buffer_length)
 {
   return g_object_new (EMER_TYPE_DAEMON,
@@ -1078,6 +1109,7 @@ emer_daemon_new_full (GRand                   *rand,
                        "proxy-server-uri", proxy_server_uri,
                        "machine-id-provider", machine_id_provider,
                        "permissions-provider", permissions_provider,
+                       "persistent-cache", persistent_cache,
                        "singular-buffer-length", buffer_length,
                        "aggregate-buffer-length", buffer_length,
                        "sequence-buffer-length", buffer_length,

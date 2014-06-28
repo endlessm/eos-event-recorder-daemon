@@ -30,8 +30,7 @@ libeosmetrics_@EMTR_API_VERSION@_la_CPPFLAGS = \
 	@EOSMETRICS_CFLAGS@ \
 	-DG_LOG_DOMAIN=\"EosMetrics\" \
 	-DCOMPILING_EOS_METRICS \
-	-DDATADIR=\""$(datadir)"\" \
-	-DSYSCONFDIR=\""$(sysconfdir)"\" \
+	-DPERMISSIONS_FILE="\"$(PERMISSIONS_FILE)\"" \
 	-D_POSIX_C_SOURCE=200112L \
 	$(NULL)
 libeosmetrics_@EMTR_API_VERSION@_la_CFLAGS = $(AM_CFLAGS)

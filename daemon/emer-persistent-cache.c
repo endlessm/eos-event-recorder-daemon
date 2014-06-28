@@ -204,7 +204,7 @@ static gint MAX_CACHE_SIZE = 92160; // 90 kB
  * it were immutable by production code.  Only testing code should
  * ever alter this variable.
  */
-static gchar *CACHE_DIRECTORY = "/var/cache/metrics/";
+static gchar *CACHE_DIRECTORY = PERSISTENT_CACHE_DIR;
 
 enum {
   PROP_0,
@@ -1306,7 +1306,7 @@ append_metric (EmerPersistentCache *self,
 {
   GError *error = NULL;
   GFileOutputStream *stream = g_file_append_to (file,
-                                                G_FILE_CREATE_NONE,
+                                                G_FILE_CREATE_PRIVATE,
                                                 NULL,
                                                 &error);
   if (stream == NULL)
@@ -1411,7 +1411,7 @@ apply_cache_versioning (EmerPersistentCache *self,
                         GCancellable        *cancellable,
                         GError             **error)
 {
-  if (g_mkdir_with_parents (CACHE_DIRECTORY, 0777) != 0)
+  if (g_mkdir_with_parents (CACHE_DIRECTORY, 02770) != 0)
     {
       const gchar *err_str = g_strerror (errno); // Don't free.
       g_critical ("Failed to create directory: %s . Error: %s.",

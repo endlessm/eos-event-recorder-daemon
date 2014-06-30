@@ -199,22 +199,36 @@ main (int                argc,
   GKeyFile *configuration_file = g_key_file_new ();
   GError *error = NULL;
 
-  if (!g_key_file_load_from_file (configuration_file, DEFAULT_CONFIG_FILE_PATH,
-                                   G_KEY_FILE_NONE, &error))
-    g_error ("Unable to load configuration file. Error: %s.", error->message);
-
-  gchar *environment = g_key_file_get_value (configuration_file, "global",
-                                             "environment", NULL);
-  g_key_file_free (configuration_file);
-
-  if (environment == NULL)
-    g_error ("Error: Metrics environment is not set.");
+  gchar *environment = NULL;
+  if (g_key_file_load_from_file (configuration_file, DEFAULT_CONFIG_FILE_PATH,
+                                 G_KEY_FILE_NONE, &error))
+    {
+      environment = g_key_file_get_value (configuration_file, "global",
+                                          "environment", NULL);
+      g_key_file_free (configuration_file);
+    }
+  else
+    {
+      g_warning ("Unable to load configuration file. Error: %s.",
+                 error->message);
+      g_clear_error (&error);
+    }
   if (g_strcmp0 (environment, "dev") != 0 &&
       g_strcmp0 (environment, "test") != 0 &&
       g_strcmp0 (environment, "production") != 0)
-    g_error ("Error: Metrics environment is set to: %s in %s. "
-             "Valid metrics environments are: dev, test, production.",
-             environment, DEFAULT_CONFIG_FILE_PATH);
+    {
+      g_warning ("Error: Metrics environment is set to: %s in %s. "
+                 "Valid metrics environments are: dev, test, production.",
+                 environment, DEFAULT_CONFIG_FILE_PATH);
+      g_clear_pointer (&environment, g_free);
+    }
+
+  if (environment == NULL)
+    {
+      g_warning ("Metrics environment was not present or was invalid. Assuming "
+                 "'test' environment.");
+      environment = g_strdup ("test");
+    }
 
   daemon = emer_daemon_new (environment);
   g_free (environment);

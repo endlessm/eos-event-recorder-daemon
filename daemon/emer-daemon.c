@@ -1217,15 +1217,18 @@ emer_daemon_init (EmerDaemon *self)
 
 /*
  * emer_daemon_new:
- *
+ * @environment: dev/test/production
+ * 
  * Creates a new EOS Metrics Daemon.
  *
  * Returns: (transfer full): a new #EmerDaemon.
  */
 EmerDaemon *
-emer_daemon_new (void)
+emer_daemon_new (const gchar *environment)
 {
+  gchar *proxy_server_uri = g_strconcat ("https://", environment, ".metrics.endlessm.com/", NULL);
   return g_object_new (EMER_TYPE_DAEMON,
+                       "proxy-server-uri", proxy_server_uri,
                        NULL);
 }
 
@@ -1280,6 +1283,8 @@ emer_daemon_new_full (GRand                   *rand,
                        "sequence-buffer-length", buffer_length,
                        NULL);
 }
+
+
 
 void
 emer_daemon_record_singular_event (EmerDaemon *self,

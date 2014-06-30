@@ -52,6 +52,7 @@ tests_daemon_test_daemon_SOURCES = \
 	daemon/emer-daemon.c daemon/emer-daemon.h \
 	tests/daemon/test-daemon.c \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
+	daemon/emer-cache-version-provider.c daemon/emer-cache-version-provider.h \
 	daemon/emer-machine-id-provider.c daemon/emer-machine-id-provider.h \
 	tests/daemon/mock-permissions-provider.c \
 	tests/daemon/mock-permissions-provider.h \
@@ -83,6 +84,7 @@ tests_daemon_test_persistent_cache_SOURCES = \
 	tests/daemon/test-persistent-cache.c \
 	daemon/emer-persistent-cache.c daemon/emer-persistent-cache.h \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
+	daemon/emer-cache-version-provider.c daemon/emer-cache-version-provider.h \
 	shared/metrics-util.c shared/metrics-util.h \
 	$(NULL)
 tests_daemon_test_persistent_cache_CPPFLAGS = \

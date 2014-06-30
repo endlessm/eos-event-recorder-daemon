@@ -16,13 +16,10 @@ typedef struct EmerCacheVersionProviderPrivate
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerCacheVersionProvider, emer_cache_version_provider, G_TYPE_OBJECT)
 
-#define CACHE_VERSION_PROVIDER_PRIVATE(o) \
-  (G_TYPE_INSTANCE_GET_PRIVATE ((o), EMER_TYPE_CACHE_VERSION_PROVIDER, EmerCacheVersionProviderPrivate))
-
 /*
  * The filepath to the meta file containing the local network protocol version.
  */
-#define DEFAULT_CACHE_VERSION_FILE_PATH "/var/cache/metrics/local_version_file"
+#define DEFAULT_CACHE_VERSION_FILE_PATH PERSISTENT_CACHE_DIR "local_version_file"
 
 #define CACHE_VERSION_GROUP "cache_version_info"
 #define CACHE_VERSION_KEY   "version"
@@ -38,25 +35,20 @@ static GParamSpec *emer_cache_version_provider_props[NPROPS] = { NULL, };
 /*
  * SECTION:emer-cache-version-provider
  * @title: Cache Version Provider
- * @short_description: Provides the local cache network protocol version.
+ * @short_description: Provides the local cache format version.
  * @include: eosmetrics/eosmetrics.h
  *
  * The version provider supplies a version number which identifies the current
- * network protocol this system's persistent cache is configured to deliver and
- * metrics via.
+ * format this system's persistent cache is configured to store and
+ * return metrics in. Existing metrics in the persistent cache will be
+ * consistent with this format as all metrics in the cache are purged when the
+ * version changes.
  *
- * This class abstracts away how and where this version number is generated
- * by providing a simple interface via emer_version_provider_get_version() to
- * whatever calling code needs it.
+ * This class abstracts away how and where this version number is generated and
+ * stored by providing a simple interface via
+ * emer_version_provider_get_version() and
+ * emer_version_provider_set_version() to whatever calling code needs it.
  */
-
-static const gchar *
-get_cache_version_path (EmerCacheVersionProvider *self)
-{
-  EmerCacheVersionProviderPrivate *priv =
-    emer_cache_version_provider_get_instance_private (self);
-  return priv->path;
-}
 
 static void
 set_cache_version_path (EmerCacheVersionProvider *self,
@@ -65,25 +57,6 @@ set_cache_version_path (EmerCacheVersionProvider *self,
   EmerCacheVersionProviderPrivate *priv =
     emer_cache_version_provider_get_instance_private (self);
   priv->path = g_strdup (given_path);
-}
-
-static void
-emer_cache_version_provider_get_property (GObject    *object,
-                                          guint       property_id,
-                                          GValue     *value,
-                                          GParamSpec *pspec)
-{
-  EmerCacheVersionProvider *self = EMER_CACHE_VERSION_PROVIDER (object);
-
-  switch (property_id)
-    {
-    case PROP_PATH:
-      g_value_set_string (value, get_cache_version_path (self));
-      break;
-
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
-    }
 }
 
 static void
@@ -114,6 +87,7 @@ emer_cache_version_provider_finalize (GObject *object)
 
   g_free (priv->path);
   g_key_file_unref (priv->key_file);
+
   G_OBJECT_CLASS (emer_cache_version_provider_parent_class)->finalize (object);
 }
 
@@ -129,7 +103,6 @@ emer_cache_version_provider_class_init (EmerCacheVersionProviderClass *klass)
                          DEFAULT_CACHE_VERSION_FILE_PATH,
                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
-  object_class->get_property = emer_cache_version_provider_get_property;
   object_class->set_property = emer_cache_version_provider_set_property;
   object_class->finalize = emer_cache_version_provider_finalize;
 
@@ -137,7 +110,6 @@ emer_cache_version_provider_class_init (EmerCacheVersionProviderClass *klass)
                                      emer_cache_version_provider_props);
 }
 
-// Mandatory empty function.
 static void
 emer_cache_version_provider_init (EmerCacheVersionProvider *self)
 {
@@ -149,7 +121,7 @@ emer_cache_version_provider_init (EmerCacheVersionProvider *self)
 /*
  * emer_cache_version_provider_new:
  *
- * Constructs the ID provider used to obtain a cache network protocol version
+ * Constructs the ID provider used to obtain a cache format version
  * via the default filepath.
  *
  * Returns: (transfer full): A new #EmerCacheVersionProvider.
@@ -158,16 +130,14 @@ emer_cache_version_provider_init (EmerCacheVersionProvider *self)
 EmerCacheVersionProvider *
 emer_cache_version_provider_new (void)
 {
-  return g_object_new (EMER_TYPE_CACHE_VERSION_PROVIDER,
-                       "path", DEFAULT_CACHE_VERSION_FILE_PATH,
-                       NULL);
+  return g_object_new (EMER_TYPE_CACHE_VERSION_PROVIDER, NULL);
 }
 
 /*
  * emer_cache_version_provider_new_full:
  * @cache_version_file_path: path to a file; see #EmerCacheVersionProvider:path
  *
- * Constructs the ID provider used to obtain a cache network protocol version
+ * Constructs the ID provider used to obtain a cache format version
  * via a given filepath.
  *
  * Returns: (transfer full): A new #EmerCacheVersionProvider.
@@ -190,7 +160,7 @@ read_cache_version (EmerCacheVersionProvider *self)
   if (!g_key_file_load_from_file (priv->key_file, priv->path, G_KEY_FILE_NONE,
                                   &error))
     {
-      g_critical ("Failed to read cache version! Error: %s.", error->message);
+      g_warning ("Failed to read cache version. Error: %s.", error->message);
       g_error_free (error);
       return FALSE;
     }
@@ -200,7 +170,7 @@ read_cache_version (EmerCacheVersionProvider *self)
 
   if (error != NULL)
     {
-      g_critical ("Failed to read cache version! Error: %s.", error->message);
+      g_warning ("Failed to read cache version. Error: %s.", error->message);
       g_error_free (error);
       return FALSE;
     }
@@ -212,7 +182,7 @@ read_cache_version (EmerCacheVersionProvider *self)
  * @self: the cache version provider.
  * @version: the address of the gint to store the version in.
  *
- * Retrieves the cache protocol version number.
+ * Retrieves the cache format version number.
  *
  * Returns: a boolean indicating success or failure of retrieval.
  * If this returns %FALSE, version cannot be trusted to be valid.
@@ -228,15 +198,15 @@ emer_cache_version_provider_get_version (EmerCacheVersionProvider *self,
     {
       if (!read_cache_version (self))
         return FALSE;
+      priv->version_cached = TRUE;
     }
 
   *version = priv->version;
-  priv->version_cached = TRUE;
   return TRUE;
 }
 
 /*
- * Updates the cache version file number and creates a new meta_file if
+ * Updates the cache version number and creates a new meta_file if
  * one doesn't exist. Returns %TRUE on success, and %FALSE on failure.
  */
 gboolean
@@ -252,7 +222,7 @@ emer_cache_version_provider_set_version (EmerCacheVersionProvider *self,
 
   if (!g_key_file_save_to_file (priv->key_file, priv->path, error))
     {
-      g_prefix_error (error, "Failed to write to version file: %s .",
+      g_prefix_error (error, "Failed to write to version file: %s. ",
                       priv->path);
       return FALSE;
     }

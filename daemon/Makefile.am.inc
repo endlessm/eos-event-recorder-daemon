@@ -6,6 +6,7 @@ libexec_PROGRAMS = eos-metrics-event-recorder
 eos_metrics_event_recorder_SOURCES = \
 	daemon/emer-main.c \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
+	daemon/emer-cache-version-provider.c daemon/emer-cache-version-provider.h \
 	daemon/emer-daemon.c daemon/emer-daemon.h \
 	daemon/emer-machine-id-provider.c daemon/emer-machine-id-provider.h \
 	daemon/emer-permissions-provider.c daemon/emer-permissions-provider.h \

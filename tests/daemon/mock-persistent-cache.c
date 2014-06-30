@@ -31,11 +31,12 @@ emer_persistent_cache_new (GCancellable *cancellable,
 }
 
 EmerPersistentCache *
-emer_persistent_cache_new_full (GCancellable       *cancellable,
-                                GError            **error,
-                                gchar              *custom_directory,
-                                gint                custom_cache_size,
-                                EmerBootIdProvider *boot_id_provider)
+emer_persistent_cache_new_full (GCancellable             *cancellable,
+                                GError                  **error,
+                                gchar                    *custom_directory,
+                                gint                      custom_cache_size,
+                                EmerBootIdProvider       *boot_id_provider,
+                                EmerCacheVersionProvider *version_provider)
 {
   return g_object_new (EMER_TYPE_PERSISTENT_CACHE, NULL);
 }
@@ -76,11 +77,5 @@ emer_persistent_cache_store_metrics (EmerPersistentCache *self,
   *num_aggregates_stored = num_aggregates_buffered;
   *num_sequences_stored = num_sequences_buffered;
   *capacity = CAPACITY_LOW;
-  return TRUE;
-}
-
-gboolean
-emer_persistent_cache_set_different_version_for_testing (void)
-{
   return TRUE;
 }

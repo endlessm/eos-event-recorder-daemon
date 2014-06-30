@@ -120,6 +120,27 @@ sequence_to_variant (SequenceEvent *sequence)
 
 }
 
+/*
+ * Returns a new reference to a little-endian version of GVariant * regardless
+ * of this machine's endianness. Crashes with a g_error if this machine is
+ * middle-endian (a.k.a., mixed-endian).
+ *
+ * The returned GVariant * should have g_variant_unref() called on it when it is
+ * no longer needed.
+ */
+GVariant *
+swap_bytes_if_big_endian (GVariant *variant)
+{
+  if (G_BYTE_ORDER == G_BIG_ENDIAN)
+    return g_variant_byteswap (variant);
+
+  if (G_BYTE_ORDER != G_LITTLE_ENDIAN)
+    g_error ("Holy crap! This machine is neither big NOR little-endian, time "
+             "to panic. AAHAHAHAHAH!");
+
+  return g_variant_ref_sink (variant);
+}
+
 void
 get_uuid_builder (uuid_t           uuid,
                   GVariantBuilder *uuid_builder)

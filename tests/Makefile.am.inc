@@ -44,10 +44,10 @@ tests_daemon_test_daemon_SOURCES = \
 	tests/daemon/test-daemon.c \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
 	daemon/emer-machine-id-provider.c daemon/emer-machine-id-provider.h \
-	daemon/emer-persistent-cache.c daemon/emer-persistent-cache.h \
 	tests/daemon/mock-permissions-provider.c \
 	tests/daemon/mock-permissions-provider.h \
 	daemon/emer-permissions-provider.h \
+	tests/daemon/mock-persistent-cache.c tests/daemon/mock-persistent-cache.h \
 	shared/metrics-util.c shared/metrics-util.h \
 	$(NULL)
 tests_daemon_test_daemon_CPPFLAGS = \

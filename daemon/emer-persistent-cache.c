@@ -62,8 +62,6 @@ static gboolean   emer_persistent_cache_may_fail_init    (GInitable           *s
                                                           GCancellable        *cancellable,
                                                           GError             **error);
 
-static GVariant * flip_bytes_if_big_endian_machine       (GVariant            *variant);
-
 static void       free_variant_list                      (GVariant           **list);
 
 static GFile *    get_cache_file                         (gchar               *path_ending);
@@ -907,7 +905,7 @@ drain_metrics_file (EmerPersistentCache *self,
 
       // Correct byte_ordering if necessary.
       GVariant *native_endian_metric =
-        flip_bytes_if_big_endian_machine (current_metric);
+        swap_bytes_if_big_endian (current_metric);
 
       g_variant_unref (current_metric);
 
@@ -1322,7 +1320,7 @@ append_metric (EmerPersistentCache *self,
     }
 
   g_variant_ref_sink (metric);
-  GVariant *native_endian_metric = flip_bytes_if_big_endian_machine (metric);
+  GVariant *native_endian_metric = swap_bytes_if_big_endian (metric);
   g_variant_unref (metric);
 
   GVariantWritable writable;
@@ -1356,26 +1354,6 @@ append_metric (EmerPersistentCache *self,
 
   g_object_unref (stream);
   return TRUE;
-}
-
-/*
- * Will return a GVariant * with the bytes in the opposite order if this
- * machine is big-endian.
- *
- * The returned GVariant * should have g_variant_unref() called on it when it is
- * no longer needed.
- */
-static GVariant *
-flip_bytes_if_big_endian_machine (GVariant *variant)
-{
-  if (G_BYTE_ORDER == G_BIG_ENDIAN)
-    return g_variant_byteswap (variant);
-
-  if (G_BYTE_ORDER != G_LITTLE_ENDIAN)
-    g_error ("Holy crap! This machine is neither big NOR little-endian, "
-             "time to panic. AAHAHAHAHAH!");
-
-  return g_variant_ref_sink (variant);
 }
 
 /*

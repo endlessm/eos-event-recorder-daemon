@@ -200,7 +200,7 @@ main (int                argc,
   GError *error = NULL;
 
   gchar *environment = NULL;
-  if (g_key_file_load_from_file (configuration_file, DEFAULT_CONFIG_FILE_PATH,
+  if (g_key_file_load_from_file (configuration_file, PERMISSIONS_FILE,
                                  G_KEY_FILE_NONE, &error))
     {
       environment = g_key_file_get_value (configuration_file, "global",
@@ -219,7 +219,7 @@ main (int                argc,
     {
       g_warning ("Error: Metrics environment is set to: %s in %s. "
                  "Valid metrics environments are: dev, test, production.",
-                 environment, DEFAULT_CONFIG_FILE_PATH);
+                 environment, PERMISSIONS_FILE);
       g_clear_pointer (&environment, g_free);
     }
 

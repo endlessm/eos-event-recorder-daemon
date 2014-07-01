@@ -221,7 +221,7 @@ emer_permissions_provider_class_init (EmerPermissionsProviderClass *klass)
   emer_permissions_provider_props[PROP_CONFIG_FILE_PATH] =
     g_param_spec_string ("config-file-path", "Config file path",
                          "Path to permissions configuration file",
-                         DEFAULT_CONFIG_FILE_PATH,
+                         PERMISSIONS_FILE,
                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
   emer_permissions_provider_props[PROP_DAEMON_ENABLED] =
     g_param_spec_boolean ("daemon-enabled", "Daemon enabled",

@@ -48,6 +48,42 @@ dist-hook:
 	@false
 endif
 
+
+PERSISTENT_CACHE_DIR="$(localstatedir)/cache/metrics/"
+PERMISSIONS_FILE="$(sysconfdir)/eos-metrics-permissions.conf"
+
+# chown and chgrp are not allowed unless you are root or under some specific
+# other conditions that may not be met every time you run 'make'.
+install-data-hook:
+	$(MKDIR_P) --mode=ug+rwX,g+s $(DESTDIR)$(PERSISTENT_CACHE_DIR)
+	@if id -u metrics 2> /dev/null; then \
+		if ! chgrp metrics $(DESTDIR)$(PERMISSIONS_FILE); then \
+			echo "*************************************"; \
+			echo "Make sure to change the group of the"; \
+			echo "$(PERMISSIONS_FILE) file to 'metrics'."; \
+			echo "*************************************"; \
+		fi; \
+		if ! chown --recursive metrics:metrics $(DESTDIR)$(PERSISTENT_CACHE_DIR); then \
+			echo "*************************************"; \
+			echo "Make sure to recursively change the owner and"; \
+			echo "group of the $(PERSISTENT_CACHE_DIR) directory"; \
+			echo "to 'metrics'"; \
+			echo "*************************************"; \
+		fi; \
+	else \
+		echo "*******************************************"; \
+		echo "There is no 'metrics' user on your system."; \
+		echo "If this is an EndlessOS system, upgrade the"; \
+		echo "'base-passwd' package."; \
+		echo "Otherwise, create a 'metrics' user."; \
+		echo "*******************************************"; \
+	fi
+	chmod ug+rw,a+r $(DESTDIR)$(PERMISSIONS_FILE)
+	chmod --recursive ug+rwX,g+s $(DESTDIR)$(PERSISTENT_CACHE_DIR)
+
+uninstall-hook:
+	rm -rf $(DESTDIR)$(PERSISTENT_CACHE_DIR)
+
 # # # DATA # # #
 
 include $(top_srcdir)/data/Makefile.am.inc

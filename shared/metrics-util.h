@@ -21,8 +21,6 @@
 array of guchar. */
 #define UUID_LENGTH (sizeof (uuid_t) / sizeof (guchar))
 
-#define DEFAULT_CONFIG_FILE_PATH SYSCONFDIR "/eos-metrics-permissions.conf"
-
 G_BEGIN_DECLS
 
 typedef struct EventValue

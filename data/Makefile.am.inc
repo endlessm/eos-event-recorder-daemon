@@ -39,27 +39,6 @@ dist_systembussecuritypolicy_DATA = data/com.endlessm.Metrics.conf
 
 dist_sysconf_DATA = data/eos-metrics-permissions.conf
 
-# chown and chgrp are not allowed unless you are root or under some specific
-# other conditions that may not be met every time you run 'make'.
-install-data-hook:
-	@if id -u metrics 2>/dev/null; then \
-		if ! chgrp metrics $(DESTDIR)$(sysconfdir)/eos-metrics-permissions.conf; then \
-			echo "*************************************"; \
-			echo "Make sure to change the group of the"; \
-			echo "$(sysconfdir)/eos-metrics-permissions.conf file"; \
-			echo "to 'metrics'."; \
-			echo "*************************************"; \
-		fi; \
-	else \
-		echo "*******************************************"; \
-		echo "There is no 'metrics' user on your system."; \
-		echo "If this is an EndlessOS system, upgrade the"; \
-		echo "'base-passwd' package."; \
-		echo "Otherwise, create a 'metrics' user."; \
-		echo "*******************************************"; \
-	fi
-	chmod 0664 $(DESTDIR)$(sysconfdir)/eos-metrics-permissions.conf
-
 EXTRA_DIST += \
 	data/com.endlessm.Metrics.xml \
 	data/com.endlessm.Metrics.service.in \

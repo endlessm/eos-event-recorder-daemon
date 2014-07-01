@@ -25,8 +25,8 @@
  * metrics. It will store these metrics until a drain operation is
  * requested or the Persistent Cache is purged due to versioning.
  *
- * Should the cached metrics occupy more than MAX_CACHE_SIZE bytes, the
- * Persistent Cache will begin ignoring new metrics until the old ones have
+ * Should the cached metrics occupy more than the maximum allowed cache size,
+ * the Persistent Cache will begin ignoring new metrics until the old ones have
  * been removed.
  *
  * If the CURRENT_CACHE_VERSION is incremented to indicate
@@ -151,6 +151,7 @@ typedef struct _EmerPersistentCachePrivate
 
   guint boot_offset_update_timeout_source_id;
 
+  guint64 max_cache_size;
   guint64 cache_size;
   capacity_t capacity;
 } EmerPersistentCachePrivate;
@@ -190,10 +191,8 @@ G_LOCK_DEFINE_STATIC (update_boot_offset);
 /*
  * The largest amount of memory (in bytes) that the metrics cache may
  * occupy before incoming metrics are ignored.
- *
- * Should never be altered in production code!
  */
-static gint MAX_CACHE_SIZE = 92160; // 90 kB
+#define DEFAULT_MAX_CACHE_SIZE 92160u // 90 kB
 
 /*
  * The amount of time (in seconds) between every periodic update to the boot
@@ -218,6 +217,7 @@ static gchar *CACHE_DIRECTORY = PERSISTENT_CACHE_DIR;
 
 enum {
   PROP_0,
+  PROP_MAX_CACHE_SIZE,
   PROP_BOOT_ID_PROVIDER,
   PROP_CACHE_VERSION_PROVIDER,
   PROP_BOOT_OFFSET_UPDATE_INTERVAL,
@@ -225,6 +225,15 @@ enum {
 };
 
 static GParamSpec *emer_persistent_cache_props[NPROPS] = { NULL, };
+
+static void
+set_max_cache_size (EmerPersistentCache *self,
+                    guint64              size_in_bytes)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+  priv->max_cache_size = size_in_bytes;
+}
 
 static void
 set_boot_offset_update_interval (EmerPersistentCache *self,
@@ -274,6 +283,10 @@ emer_persistent_cache_set_property (GObject      *object,
 
   switch (property_id)
     {
+    case PROP_MAX_CACHE_SIZE:
+      set_max_cache_size (self, g_value_get_uint64 (value));
+      break;
+
     case PROP_BOOT_ID_PROVIDER:
       set_boot_id_provider (self, g_value_get_object (value));
       break;
@@ -315,6 +328,14 @@ emer_persistent_cache_class_init (EmerPersistentCacheClass *klass)
 
   object_class->set_property = emer_persistent_cache_set_property;
   object_class->finalize = emer_persistent_cache_finalize;
+
+  /* Blurb string is good enough default documentation for this. */
+  emer_persistent_cache_props[PROP_MAX_CACHE_SIZE] =
+    g_param_spec_uint64 ("max-cache-size", "Maximum cache size",
+                         "The maximum number of bytes allowed to be stored in"
+                         " the persistent cache.",
+                         0, G_MAXUINT64, DEFAULT_MAX_CACHE_SIZE,
+                         G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   /* Blurb string is good enough default documentation for this. */
   emer_persistent_cache_props[PROP_BOOT_ID_PROVIDER] =
@@ -398,12 +419,11 @@ EmerPersistentCache *
 emer_persistent_cache_new_full (GCancellable             *cancellable,
                                 GError                  **error,
                                 gchar                    *custom_directory,
-                                gint                      custom_cache_size,
+                                guint64                   custom_cache_size,
                                 EmerBootIdProvider       *boot_id_provider,
                                 EmerCacheVersionProvider *cache_version_provider,
                                 guint                     boot_offset_update_interval)
 {
-  MAX_CACHE_SIZE = custom_cache_size;
   CACHE_DIRECTORY = custom_directory;
   return g_initable_new (EMER_TYPE_PERSISTENT_CACHE,
                          cancellable,
@@ -411,6 +431,7 @@ emer_persistent_cache_new_full (GCancellable             *cancellable,
                          "boot-id-provider", boot_id_provider,
                          "cache-version-provider", cache_version_provider,
                          "boot-offset-update-interval", boot_offset_update_interval,
+                         "max-cache-size", custom_cache_size,
                          NULL);
 }
 
@@ -1523,7 +1544,7 @@ update_capacity (EmerPersistentCache *self)
   if (priv->capacity == CAPACITY_MAX)
     return CAPACITY_MAX;
 
-  if (priv->cache_size >= HIGH_CAPACITY_THRESHOLD * MAX_CACHE_SIZE)
+  if (priv->cache_size >= HIGH_CAPACITY_THRESHOLD * priv->max_cache_size)
     priv->capacity = CAPACITY_HIGH;
   else
     priv->capacity = CAPACITY_LOW;
@@ -1543,5 +1564,5 @@ cache_has_room (EmerPersistentCache *self,
     emer_persistent_cache_get_instance_private (self);
   if (priv->capacity == CAPACITY_MAX)
     return FALSE;
-  return priv->cache_size + size <= MAX_CACHE_SIZE;
+  return priv->cache_size + size <= priv->max_cache_size;
 }

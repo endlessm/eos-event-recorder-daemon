@@ -18,8 +18,8 @@
 #define FAKE_BOOT_ID "baccd4dd-9765-4eb2-a2a0-03c6623471e6\n"
 #define FAKE_BOOT_OFFSET 4000000000 // 4 seconds
 
-#define TEST_SIZE 1024000
 #define TEST_UPDATE_OFFSET_INTERVAL (60u * 60u) // 1 hour
+#define TEST_SIZE 1024000u
 
 /*
  * The expected size in bytes of the boot id file we want to mock, located at
@@ -1031,7 +1031,7 @@ static void
 test_persistent_cache_store_when_full_succeeds (gboolean     *unused,
                                                 gconstpointer dontuseme)
 {
-  gint space_in_bytes = 3000;
+  guint64 space_in_bytes = 3000u;
   EmerBootIdProvider *boot_id_provider =
     emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
   EmerCacheVersionProvider *cache_version_provider =

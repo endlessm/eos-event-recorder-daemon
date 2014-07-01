@@ -73,8 +73,6 @@ typedef struct _EmerDaemonPrivate {
 
   gint client_version_number;
 
-  gchar *environment;
-
   guint network_send_interval_seconds;
   guint upload_events_timeout_source_id;
 
@@ -116,7 +114,6 @@ enum
   PROP_0,
   PROP_RANDOM_NUMBER_GENERATOR,
   PROP_CLIENT_VERSION_NUMBER,
-  PROP_ENVIRONMENT,
   PROP_NETWORK_SEND_INTERVAL,
   PROP_PROXY_SERVER_URI,
   PROP_MACHINE_ID_PROVIDER,
@@ -293,12 +290,10 @@ get_updated_request_body (EmerDaemon *self,
 {
   gint32 client_version_number;
   GVariantIter *machine_id_iter;
-  gchar *environment;
   GVariantIter *singulars_iter, *aggregates_iter, *sequences_iter;
-  g_variant_get (request_body, "(ixxaysa(uayxmv)a(uayxxmv)a(uaya(xmv)))",
+  g_variant_get (request_body, "(ixxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))",
                  &client_version_number, NULL, NULL, &machine_id_iter,
-                 &environment, &singulars_iter, &aggregates_iter,
-                 &sequences_iter);
+                 &singulars_iter, &aggregates_iter, &sequences_iter);
 
   GVariantBuilder machine_id_builder;
   get_builder_from_iter (machine_id_iter, &machine_id_builder,
@@ -326,7 +321,6 @@ get_updated_request_body (EmerDaemon *self,
   if (!get_offset_timestamps (self, &relative_timestamp, &absolute_timestamp))
     {
       g_warning ("Could not get, or correct, network request timestamps.");
-      g_free (environment);
       return NULL;
     }
 
@@ -336,12 +330,10 @@ get_updated_request_body (EmerDaemon *self,
     swap_bytes_64_if_big_endian (absolute_timestamp);
 
   GVariant *updated_request_body =
-    g_variant_new ("(ixxaysa(uayxmv)a(uayxxmv)a(uaya(xmv)))",
+    g_variant_new ("(ixxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))",
                    client_version_number, little_endian_relative_timestamp,
                    little_endian_absolute_timestamp, &machine_id_builder,
-                   environment, &singulars_builder, &aggregates_builder,
-                   &sequences_builder);
-  g_free (environment);
+                   &singulars_builder, &aggregates_builder, &sequences_builder);
 
   return updated_request_body;
 }
@@ -608,10 +600,10 @@ create_request_body (EmerDaemon *self)
     }
 
   GVariant *request_body =
-    g_variant_new ("(ixxaysa(uayxmv)a(uayxxmv)a(uaya(xmv)))",
+    g_variant_new ("(ixxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))",
                    priv->client_version_number, relative_timestamp,
-                   absolute_timestamp, &machine_id_builder, priv->environment,
-                   &singulars_builder, &aggregates_builder, &sequences_builder);
+                   absolute_timestamp, &machine_id_builder, &singulars_builder,
+                   &aggregates_builder, &sequences_builder);
 
   g_variant_ref_sink (request_body);
   GVariant *little_endian_request_body =
@@ -924,21 +916,6 @@ get_client_version_number (EmerDaemon *self)
 }
 
 static void
-set_environment (EmerDaemon  *self,
-                 const gchar *env)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  priv->environment = g_strdup (env);
-}
-
-static gchar *
-get_environment (EmerDaemon *self)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  return priv->environment;
-}
-
-static void
 set_network_send_interval (EmerDaemon *self,
                            guint       seconds)
 {
@@ -1117,10 +1094,6 @@ emer_daemon_get_property (GObject    *object,
       g_value_set_int (value, get_client_version_number (self));
       break;
 
-    case PROP_ENVIRONMENT:
-      g_value_set_string (value, get_environment (self));
-      break;
-
     case PROP_NETWORK_SEND_INTERVAL:
       g_value_set_uint (value, get_network_send_interval (self));
       break;
@@ -1166,10 +1139,6 @@ emer_daemon_set_property (GObject      *object,
 
     case PROP_CLIENT_VERSION_NUMBER:
       set_client_version_number (self, g_value_get_int (value));
-      break;
-
-    case PROP_ENVIRONMENT:
-      set_environment (self, g_value_get_string (value));
       break;
 
     case PROP_NETWORK_SEND_INTERVAL:
@@ -1222,7 +1191,6 @@ emer_daemon_finalize (GObject *object)
   g_clear_object (&priv->login_manager_proxy);
 
   g_rand_free (priv->rand);
-  g_free (priv->environment);
   g_free (priv->proxy_server_uri);
   g_clear_object (&priv->machine_id_provider);
   g_clear_object (&priv->permissions_provider);
@@ -1279,23 +1247,6 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                       -1, G_MAXINT, 0,
                       G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                       G_PARAM_STATIC_STRINGS);
-
-  /*
-   * EmerDaemon:environment:
-   *
-   * Specifies what kind of user or system the metrics come from, so that data
-   * analysis can exclude metrics from tests or developers' systems.
-   *
-   * Valid values are "dev", "test", and "prod".
-   * The "prod" value, indicating production, should not be used outside of
-   * a production system.
-   */
-  emer_daemon_props[PROP_ENVIRONMENT] =
-    g_param_spec_string ("environment", "Environment",
-                         "Specifies what kind of user the metrics come from",
-                         "dev",
-                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
-                         G_PARAM_STATIC_STRINGS);
 
   /* Blurb string is good enough default documentation for this */
   emer_daemon_props[PROP_PROXY_SERVER_URI] =
@@ -1438,7 +1389,7 @@ emer_daemon_init (EmerDaemon *self)
 /*
  * emer_daemon_new:
  * @environment: dev/test/production
- * 
+ *
  * Creates a new EOS Metrics Daemon.
  *
  * Returns: (transfer full): a new #EmerDaemon.
@@ -1457,7 +1408,6 @@ emer_daemon_new (const gchar *environment)
  * @rand: (allow-none): random number generator to use for randomized
  *   exponential backoff, or %NULL to use the default
  * @version_number: client version of the network protocol
- * @environment: environment of the machine
  * @network_send_interval: frequency with which the client will attempt a
  *   network send request
  * @proxy_server_uri: URI to use
@@ -1474,15 +1424,13 @@ emer_daemon_new (const gchar *environment)
  * Testing function for creating a new EOS Metrics daemon.
  * You should only need to use this for unit testing.
  *
- * Make sure to pass "test" for @environment if using in a test, and never pass
- * a live metrics proxy server URI for @proxy_server_uri.
+ * Never pass a production metrics proxy server URI for @proxy_server_uri!
  *
  * Returns: (transfer full): a new #EmerDaemon.
  */
 EmerDaemon *
 emer_daemon_new_full (GRand                   *rand,
                       gint                     version_number,
-                      const gchar             *environment,
                       guint                    network_send_interval,
                       const gchar             *proxy_server_uri,
                       EmerMachineIdProvider   *machine_id_provider,
@@ -1493,7 +1441,6 @@ emer_daemon_new_full (GRand                   *rand,
   return g_object_new (EMER_TYPE_DAEMON,
                        "random-number-generator", rand,
                        "client-version-number", version_number,
-                       "environment", environment,
                        "network-send-interval", network_send_interval,
                        "proxy-server-uri", proxy_server_uri,
                        "machine-id-provider", machine_id_provider,

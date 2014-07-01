@@ -79,7 +79,6 @@ setup (Fixture      *fixture,
   fixture->test_object =
     emer_daemon_new_full (g_rand_new_with_seed (18),
                           42, // Version number
-                          "test", // Environment
                           5,  // Network Send Interval
                           "https://localhost", // uri,
                           id_prov, // MachineIdProvider
@@ -101,8 +100,6 @@ teardown (Fixture      *fixture,
 
 // Unit Tests next:
 
-// Disabled until a mock Persistent Cache is available. TODO
-/*
 static void
 test_daemon_new_succeeds (void)
 {
@@ -110,7 +107,6 @@ test_daemon_new_succeeds (void)
   g_assert (daemon != NULL);
   g_object_unref (daemon);
 }
-*/
 
 static void
 test_daemon_new_full_succeeds (Fixture      *fixture,
@@ -226,10 +222,8 @@ main (int                argc,
 {
   g_test_init (&argc, (char ***) &argv, NULL);
 
-  /*
-  -- Disabled until mock GObject properties are set up. --
   g_test_add_func ("/daemon/new-succeeds", test_daemon_new_succeeds);
-  */
+
 #define ADD_DAEMON_TEST(path, test_func) \
   g_test_add ((path), Fixture, NULL, setup, (test_func), teardown)
 

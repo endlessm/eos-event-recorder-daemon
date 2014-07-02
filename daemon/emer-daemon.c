@@ -40,6 +40,15 @@ prevent testing code from sending metrics to the production server. */
 #define NETWORK_ATTEMPT_LIMIT 8
 
 /*
+ * How many seconds to delay between trying to send metrics to the proxy server
+ * if we are online, or to the persistent cache, if we are offline.
+ *
+ * For QA, the "dev" environment delay is much shorter.
+ */
+#define DEV_NETWORK_SEND_INTERVAL (60u * 10u) // Ten minutes
+#define DEFAULT_NETWORK_SEND_INTERVAL (60u * 60u) // One hour
+
+/*
  * The default maximum length for each event buffer. Set based on the assumption
  * that events average 100 bytes each. The desired maximum capacity of all three
  * event buffers combined is 10 kB. Thus,
@@ -1396,7 +1405,8 @@ emer_daemon_init (EmerDaemon *self)
  * emer_daemon_new:
  * @environment: dev/test/production
  *
- * Creates a new EOS Metrics Daemon.
+ * Creates a new EOS Metrics Daemon. If the environment given is dev, it will
+ * shorten the network send interval to facilitate testing.
  *
  * Returns: (transfer full): a new #EmerDaemon.
  */
@@ -1404,8 +1414,14 @@ EmerDaemon *
 emer_daemon_new (const gchar *environment)
 {
   gchar *proxy_server_uri = g_strconcat ("https://", environment, ".metrics.endlessm.com/", NULL);
+
+  guint network_send_interval = DEFAULT_NETWORK_SEND_INTERVAL;
+  if (g_strcmp0 (environment, "dev") == 0)
+    network_send_interval = DEV_NETWORK_SEND_INTERVAL;
+
   return g_object_new (EMER_TYPE_DAEMON,
                        "proxy-server-uri", proxy_server_uri,
+                       "network-send-interval", network_send_interval,
                        NULL);
 }
 

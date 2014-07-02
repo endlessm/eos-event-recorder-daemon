@@ -10,7 +10,7 @@
 
   <action id="com.endlessm.Metrics.SetEnabled">
     <description>Enable or disable the metrics system</description>
-    <annotate key="org.freedesktop.policykit.owner" value="unix-user:metrics unix-group:metrics">
+    <annotate key="org.freedesktop.policykit.owner">unix-user:metrics unix-group:metrics</annotate>
     <defaults>
       <allow_any>no</allow_any>
       <allow_inactive>no</allow_inactive>

@@ -58,7 +58,7 @@ PERMISSIONS_FILE=$(sysconfdir)/eos-metrics-permissions.conf
 install-data-hook:
 	$(MKDIR_P) --mode=ug+rwX,g+s $(DESTDIR)$(PERSISTENT_CACHE_DIR)
 	@if id -u metrics 2> /dev/null; then \
-		if ! chgrp metrics $(DESTDIR)$(PERMISSIONS_FILE); then \
+		if ! chown metrics:metrics $(DESTDIR)$(PERMISSIONS_FILE); then \
 			echo "*************************************"; \
 			echo "Make sure to change the group of the"; \
 			echo "$(PERMISSIONS_FILE) file to 'metrics'."; \

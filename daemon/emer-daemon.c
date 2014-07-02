@@ -719,6 +719,9 @@ flush_to_persistent_cache (EmerDaemon *self)
   g_mutex_unlock (&priv->sequence_buffer_lock);
 }
 
+// Callbacks don't require the last parameter(s) to be included in the signature
+// if they aren't used. See:
+// http://stackoverflow.com/questions/22402597/
 static void
 upload_events (GNetworkMonitor *source_object,
                GAsyncResult    *res,

@@ -16,6 +16,7 @@ eos-metrics-0.0.0
 /data/com.endlessm.Metrics.service
 /data/eos-metrics-event-recorder.service
 /data/com.endlessm.Metrics.service
+/data/eos-metrics-persistent-cache.conf
 
 # Test products
 *.log

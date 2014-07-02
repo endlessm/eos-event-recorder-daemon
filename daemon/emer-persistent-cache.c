@@ -78,8 +78,6 @@ static gboolean   load_cache_size                        (EmerPersistentCache *s
                                                           GCancellable        *cancellable,
                                                           GError             **error);
 
-static gboolean   load_local_cache_version               (gint64              *version);
-
 static gboolean   purge_cache_files                      (EmerPersistentCache *self,
                                                           GCancellable        *cancellable,
                                                           GError             **error);
@@ -125,9 +123,6 @@ static gboolean   store_sequences                        (EmerPersistentCache *s
 static gboolean   update_boot_offset                     (EmerPersistentCache *self,
                                                           gboolean             always_update_timestamps);
 
-static gboolean   update_cache_version_number            (GCancellable        *cancellable,
-                                                          GError             **error);
-
 static capacity_t update_capacity                        (EmerPersistentCache *self);
 
 typedef struct GVariantWritable
@@ -139,6 +134,8 @@ typedef struct GVariantWritable
 typedef struct _EmerPersistentCachePrivate
 {
   EmerBootIdProvider *boot_id_provider;
+
+  EmerCacheVersionProvider *cache_version_provider;
 
   gchar *boot_metafile_path;
 
@@ -209,6 +206,7 @@ static gchar *CACHE_DIRECTORY = PERSISTENT_CACHE_DIR;
 enum {
   PROP_0,
   PROP_BOOT_ID_PROVIDER,
+  PROP_CACHE_VERSION_PROVIDER,
   NPROPS
 };
 
@@ -228,6 +226,19 @@ set_boot_id_provider (EmerPersistentCache *self,
 }
 
 static void
+set_cache_version_provider (EmerPersistentCache      *self,
+                            EmerCacheVersionProvider *cache_version_provider)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  if (cache_version_provider == NULL)
+    priv->cache_version_provider = emer_cache_version_provider_new ();
+  else
+    priv->cache_version_provider = g_object_ref (cache_version_provider);
+}
+
+static void
 emer_persistent_cache_set_property (GObject      *object,
                                     guint         property_id,
                                     const GValue *value,
@@ -239,6 +250,10 @@ emer_persistent_cache_set_property (GObject      *object,
     {
     case PROP_BOOT_ID_PROVIDER:
       set_boot_id_provider (self, g_value_get_object (value));
+      break;
+
+    case PROP_CACHE_VERSION_PROVIDER:
+      set_cache_version_provider (self, g_value_get_object (value));
       break;
 
     default:
@@ -254,6 +269,7 @@ emer_persistent_cache_finalize (GObject *object)
     emer_persistent_cache_get_instance_private (self);
 
   g_object_unref (priv->boot_id_provider);
+  g_object_unref (priv->cache_version_provider);
   g_free (priv->boot_metafile_path);
   g_key_file_unref (priv->boot_offset_key_file);
 
@@ -276,6 +292,14 @@ emer_persistent_cache_class_init (EmerPersistentCacheClass *klass)
                          " boot encountered when last writing to the Persistent"
                          " Cache.",
                          EMER_TYPE_BOOT_ID_PROVIDER,
+                         G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
+
+  /* Blurb string is good enough default documentation for this. */
+  emer_persistent_cache_props[PROP_CACHE_VERSION_PROVIDER] =
+    g_param_spec_object ("cache-version-provider", "Cache version provider",
+                         "The provider for the version of the local cache's"
+                         " format.",
+                         EMER_TYPE_CACHE_VERSION_PROVIDER,
                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, NPROPS,
@@ -328,15 +352,15 @@ emer_persistent_cache_new (GCancellable *cancellable,
 /*
  * You should use emer_persistent_cache_new() instead of this function.
  * Function should only be used in testing code, NOT in production code.
- * Should always use a custom directory.  A custom cache size may be specified,
- * but if set to 0, the production value will be used.
+ * Should always use a custom directory.
  */
 EmerPersistentCache *
-emer_persistent_cache_new_full (GCancellable       *cancellable,
-                                GError            **error,
-                                gchar              *custom_directory,
-                                gint                custom_cache_size,
-                                EmerBootIdProvider *boot_id_provider)
+emer_persistent_cache_new_full (GCancellable             *cancellable,
+                                GError                  **error,
+                                gchar                    *custom_directory,
+                                gint                      custom_cache_size,
+                                EmerBootIdProvider       *boot_id_provider,
+                                EmerCacheVersionProvider *cache_version_provider)
 {
   MAX_CACHE_SIZE = custom_cache_size;
   CACHE_DIRECTORY = custom_directory;
@@ -344,6 +368,7 @@ emer_persistent_cache_new_full (GCancellable       *cancellable,
                          cancellable,
                          error,
                          "boot-id-provider", boot_id_provider,
+                         "cache-version-provider", cache_version_provider,
                          NULL);
 }
 
@@ -1260,42 +1285,6 @@ purge_cache_files (EmerPersistentCache *self,
 }
 
 /*
- * Loads the local cache version into memory from disk.
- * Returns %TRUE on success and %FALSE on I/O error including
- * if the file doesn't exist.
- */
-static gboolean
-load_local_cache_version (gint64 *version)
-{
-  gchar *filepath = g_strconcat (CACHE_DIRECTORY,
-                                 LOCAL_CACHE_VERSION_METAFILE,
-                                 NULL);
-  gchar *version_string = NULL;
-
-  if (g_file_get_contents (filepath, &version_string, NULL, NULL))
-    {
-      gint64 version_int = g_ascii_strtoll (version_string, NULL, 10);
-      if (version_int == 0) // Error code for failure.
-        {
-          gint e = errno;
-          const gchar *err_str = g_strerror (e);
-          g_critical ("Version file seems to be corrupted. Error: %s.", err_str);
-          return FALSE;
-        }
-      *version = version_int;
-
-      g_free (version_string);
-      g_free (filepath);
-      return TRUE;
-    }
-  else
-    {
-      g_free (filepath);
-      return FALSE;
-    }
-}
-
-/*
  * Attempts to append (cache) a metric at the end of a file.
  * Returns TRUE on success and FALSE on failure.
  */
@@ -1357,50 +1346,6 @@ append_metric (EmerPersistentCache *self,
 }
 
 /*
- * Updates the metafile cache version number and creates a new meta_file if
- * one doesn't exist. Returns %TRUE on success, and %FALSE on failure.
- */
-static gboolean
-update_cache_version_number (GCancellable *cancellable,
-                             GError       **error)
-{
-  GFile *meta_file = get_cache_file (LOCAL_CACHE_VERSION_METAFILE);
-  gchar *version_string = g_strdup_printf ("%i", CURRENT_CACHE_VERSION);
-  gsize version_size = strlen (version_string);
-  gboolean success = g_file_replace_contents (meta_file,
-                                              version_string,
-                                              version_size,
-                                              NULL,
-                                              FALSE,
-                                              G_FILE_CREATE_PRIVATE | G_FILE_CREATE_REPLACE_DESTINATION,
-                                              NULL,
-                                              cancellable,
-                                              error);
-  g_object_unref (meta_file);
-  g_free (version_string);
-  return success;
-}
-
-/*
- * Testing function that overwrites the metafile with an "older" version number.
- * Returns TRUE on success, FALSE on failure.
- */
-gboolean
-emer_persistent_cache_set_different_version_for_testing (void)
-{
-  gint diff_version = CURRENT_CACHE_VERSION - 1;
-  gchar *ver_string = g_strdup_printf ("%i", diff_version);
-  gsize ver_size = strlen (ver_string);
-  GFile *meta_file = get_cache_file (LOCAL_CACHE_VERSION_METAFILE);
-  gboolean success = g_file_replace_contents (meta_file, ver_string, ver_size,
-                                              NULL, FALSE, G_FILE_CREATE_NONE,
-                                              NULL, NULL, NULL);
-  g_object_unref (meta_file);
-  g_free (ver_string);
-  return success;
-}
-
-/*
  * If the cache version file is out of date or not found, it wil attempt to
  * remove all cached metrics. If it succeeds, it will update the cache version
  * file to the new_version provided. Will create the cache directory if it
@@ -1422,11 +1367,15 @@ apply_cache_versioning (EmerPersistentCache *self,
       return FALSE;
     }
 
-  gint64 old_version;
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
 
-  // We don't care about the error here.
-  gboolean could_find = load_local_cache_version (&old_version);
-  if (!could_find || CURRENT_CACHE_VERSION != old_version)
+  gint old_version;
+  gboolean read_success =
+    emer_cache_version_provider_get_version (priv->cache_version_provider,
+                                             &old_version);
+
+  if (!read_success || CURRENT_CACHE_VERSION != old_version)
     {
       gboolean success = purge_cache_files (self, cancellable, error);
       if (!success)
@@ -1440,7 +1389,9 @@ apply_cache_versioning (EmerPersistentCache *self,
           return FALSE;
         }
 
-      success = update_cache_version_number (cancellable, error);
+      success =
+        emer_cache_version_provider_set_version (priv->cache_version_provider,
+                                                 CURRENT_CACHE_VERSION, error);
       if (!success)
         {
           if (error != NULL)

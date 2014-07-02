@@ -11,6 +11,7 @@
 #define TEST_DIRECTORY "/tmp/metrics_testing/"
 
 #define TEST_SYSTEM_BOOT_ID_FILE "system_boot_id_file"
+#define TEST_CACHE_VERSION_FILE "local_version_file"
 
 // Generated via uuidgen.
 #define FAKE_SYSTEM_BOOT_ID "1ca14ab8-bed6-4bc0-8369-484518d22a31\n"
@@ -36,13 +37,17 @@
 
 #define ACCEPTABLE_OFFSET_VARIANCE (500 /* Milliseconds */ * NANOSECONDS_PER_MILLISECOND)
 
-#define DEFAULT_KEY_FILE_DATA \
+#define DEFAULT_BOOT_OFFSET_KEY_FILE_DATA \
   "[time]\n" \
   "boot_offset=0\n" \
   "was_reset=true\n" \
   "absolute_time=1403195800943262692\n" \
   "relative_time=2516952859775\n" \
   "boot_id=299a89b4-72c2-455a-b2d3-13c1a7c8c11f\n"
+
+#define DEFAULT_CACHE_VERSION_KEY_FILE_DATA \
+  "[cache_version_info]\n" \
+  "version=2\n"
 
 // ---- Helper functions come first ----
 
@@ -59,14 +64,51 @@ write_mock_system_boot_id_file (void)
 }
 
 static void
+write_default_cache_version_key_file_to_disk (void)
+{
+  GKeyFile *key_file = g_key_file_new ();
+  g_assert (g_key_file_load_from_data (key_file,
+                                       DEFAULT_CACHE_VERSION_KEY_FILE_DATA,
+                                       -1, G_KEY_FILE_NONE, NULL));
+
+  g_assert (g_key_file_save_to_file (key_file,
+                                     TEST_DIRECTORY TEST_CACHE_VERSION_FILE,
+                                     NULL));
+}
+
+static void
+write_empty_metrics_file (gchar *suffix)
+{
+  gchar *path = g_strconcat (TEST_DIRECTORY, CACHE_PREFIX, suffix, NULL);
+  GFile *file = g_file_new_for_path (path);
+  g_free (path);
+
+  GError *error = NULL;
+  g_file_replace_contents (file, "", 0, NULL, FALSE,
+  	                       G_FILE_CREATE_REPLACE_DESTINATION, NULL, NULL,
+  	                       &error);
+  g_assert_no_error (error);
+  g_object_unref (file);
+}
+
+static void
+write_empty_metrics_files (void)
+{
+  write_empty_metrics_file (INDIVIDUAL_SUFFIX);
+  write_empty_metrics_file (AGGREGATE_SUFFIX);
+  write_empty_metrics_file (SEQUENCE_SUFFIX);
+}
+
+static void
 teardown (gboolean     *unused,
           gconstpointer dontuseme)
 {
   g_unlink (TEST_DIRECTORY CACHE_PREFIX INDIVIDUAL_SUFFIX);
   g_unlink (TEST_DIRECTORY CACHE_PREFIX AGGREGATE_SUFFIX);
   g_unlink (TEST_DIRECTORY CACHE_PREFIX SEQUENCE_SUFFIX);
-  g_unlink (TEST_DIRECTORY CACHE_PREFIX LOCAL_CACHE_VERSION_METAFILE);
   g_unlink (TEST_DIRECTORY BOOT_OFFSET_METAFILE);
+  g_unlink (TEST_DIRECTORY TEST_CACHE_VERSION_FILE);
+  g_unlink (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
   g_rmdir (TEST_DIRECTORY);
 }
 
@@ -77,6 +119,8 @@ setup (gboolean     *unused,
   teardown (unused, dontuseme);
   g_mkdir (TEST_DIRECTORY, 0777); // All permissions are granted by 0777.
   write_mock_system_boot_id_file ();
+  write_default_cache_version_key_file_to_disk ();
+  write_empty_metrics_files ();
 }
 
 static EmerPersistentCache *
@@ -85,9 +129,13 @@ make_testing_cache (void)
   GError *error = NULL;
   EmerBootIdProvider *boot_id_provider =
     emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
+  EmerCacheVersionProvider *cache_version_provider =
+    emer_cache_version_provider_new_full (TEST_DIRECTORY TEST_CACHE_VERSION_FILE);
   EmerPersistentCache *cache =
     emer_persistent_cache_new_full (NULL, &error, TEST_DIRECTORY, TEST_SIZE,
-                                    boot_id_provider);
+                                    boot_id_provider, cache_version_provider);
+  g_object_unref (boot_id_provider);
+  g_object_unref (cache_version_provider);
   g_assert_no_error (error);
   return cache;
 }
@@ -133,11 +181,12 @@ set_boot_offset_in_metafile (gint64 new_offset)
  * has been new'd constructed.)
  */
 static void
-write_default_key_file_to_disk (void)
+write_default_boot_offset_key_file_to_disk (void)
 {
   GKeyFile *key_file = g_key_file_new ();
-  g_assert (g_key_file_load_from_data (key_file, DEFAULT_KEY_FILE_DATA, -1,
-                                       G_KEY_FILE_NONE, NULL));
+  g_assert (g_key_file_load_from_data (key_file,
+                                       DEFAULT_BOOT_OFFSET_KEY_FILE_DATA,
+                                       -1, G_KEY_FILE_NONE, NULL));
 
   g_assert (g_key_file_save_to_file (key_file,
                                      TEST_DIRECTORY BOOT_OFFSET_METAFILE,
@@ -983,9 +1032,15 @@ test_persistent_cache_store_when_full_succeeds (gboolean     *unused,
   gint space_in_bytes = 3000;
   EmerBootIdProvider *boot_id_provider =
     emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
+  EmerCacheVersionProvider *cache_version_provider =
+    emer_cache_version_provider_new_full (TEST_DIRECTORY TEST_CACHE_VERSION_FILE);
   EmerPersistentCache *cache =
     emer_persistent_cache_new_full (NULL, NULL, TEST_DIRECTORY, space_in_bytes,
-                                    boot_id_provider);
+                                    boot_id_provider, cache_version_provider);
+
+  g_object_unref (cache_version_provider);
+  g_object_unref (boot_id_provider);
+
   capacity_t capacity = CAPACITY_LOW;
 
   // Store a ton, until it is full.
@@ -1015,7 +1070,6 @@ test_persistent_cache_store_when_full_succeeds (gboolean     *unused,
     }
 
   g_object_unref (cache);
-  g_object_unref (boot_id_provider);
   g_assert (capacity == CAPACITY_MAX);
 }
 
@@ -1258,7 +1312,16 @@ static void
 test_persistent_cache_purges_when_out_of_date_succeeds (gboolean     *unused,
                                                         gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerBootIdProvider *boot_id_provider =
+    emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
+  EmerCacheVersionProvider *cache_version_provider =
+    emer_cache_version_provider_new_full (TEST_DIRECTORY TEST_CACHE_VERSION_FILE);
+  EmerPersistentCache *cache =
+    emer_persistent_cache_new_full (NULL, NULL, TEST_DIRECTORY, TEST_SIZE,
+                                    boot_id_provider, cache_version_provider);
+
+  g_object_unref (boot_id_provider);
+
   gint num_singulars_made, num_aggregates_made, num_sequences_made;
   gint num_singulars_stored, num_aggregates_stored, num_sequences_stored;
   capacity_t capacity;
@@ -1266,10 +1329,17 @@ test_persistent_cache_purges_when_out_of_date_succeeds (gboolean     *unused,
   store_many (cache, &num_singulars_made, &num_aggregates_made,
               &num_sequences_made, &num_singulars_stored,
               &num_aggregates_stored, &num_sequences_stored, &capacity);
-  gboolean success =
-    emer_persistent_cache_set_different_version_for_testing ();
+
+  gint current_version;
+  g_assert (emer_cache_version_provider_get_version (cache_version_provider,
+                                                     &current_version));
+  GError *error = NULL;
+  g_assert (emer_cache_version_provider_set_version (cache_version_provider,
+                                                     current_version - 1,
+                                                     &error));
+  g_assert_no_error (error);
+  g_object_unref (cache_version_provider);
   g_object_unref (cache);
-  g_assert (success);
 
   EmerPersistentCache *cache2 = make_testing_cache ();
 
@@ -1303,7 +1373,7 @@ test_persistent_cache_wipes_metrics_when_boot_offset_corrupted (gboolean     *un
 {
   EmerPersistentCache *cache = make_testing_cache ();
 
-  write_default_key_file_to_disk ();
+  write_default_boot_offset_key_file_to_disk ();
 
   capacity_t capacity;
 
@@ -1349,7 +1419,7 @@ test_persistent_cache_resets_boot_metafile_when_boot_offset_corrupted (gboolean 
 {
   EmerPersistentCache *cache = make_testing_cache ();
 
-  write_default_key_file_to_disk ();
+  write_default_boot_offset_key_file_to_disk ();
 
   // Corrupt metafile.
   remove_offset ();
@@ -1504,7 +1574,7 @@ test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
                                                 gconstpointer dontuseme)
 {
   EmerPersistentCache *cache = make_testing_cache ();
-  write_default_key_file_to_disk ();
+  write_default_boot_offset_key_file_to_disk ();
 
   capacity_t capacity;
   store_single_singular_event (cache, &capacity);

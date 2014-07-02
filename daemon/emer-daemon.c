@@ -1070,8 +1070,13 @@ emer_daemon_constructed (GObject *object)
   priv->recording_enabled =
     emer_permissions_provider_get_daemon_enabled (priv->permissions_provider);
 
-  priv->ping_socket = g_network_address_new (priv->proxy_server_uri,
-                                             443); // SSL default port.
+  GError *error = NULL;
+  priv->ping_socket = g_network_address_parse_uri (priv->proxy_server_uri,
+                                                   443, // SSL default port
+                                                   &error);
+  if (priv->ping_socket == NULL)
+    g_error ("Invalid proxy server URI '%s' could not be parsed because: %s.",
+             priv->proxy_server_uri, error->message);
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->constructed (object);
 }

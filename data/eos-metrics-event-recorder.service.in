@@ -5,6 +5,7 @@ Wants=systemd-logind.service
 After=dbus.service systemd-logind.service
 
 [Service]
+Environment=DCONF_PROFILE=/dev/null
 User=metrics
 Type=dbus
 BusName=com.endlessm.Metrics

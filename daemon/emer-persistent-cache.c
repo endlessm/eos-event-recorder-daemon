@@ -1416,6 +1416,9 @@ apply_cache_versioning (EmerPersistentCache *self,
       const gchar *err_str = g_strerror (errno); // Don't free.
       g_critical ("Failed to create directory: %s . Error: %s.",
                   CACHE_DIRECTORY, err_str);
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                   "Failed to create directory: %s . Error: %s.",
+                   CACHE_DIRECTORY, err_str);
       return FALSE;
     }
 
@@ -1488,7 +1491,7 @@ load_cache_size (EmerPersistentCache *self,
     emer_persistent_cache_get_instance_private (self);
   priv->cache_size = disk_used;
   update_capacity (self);
-  return success;
+  return TRUE;
 }
 
 /*

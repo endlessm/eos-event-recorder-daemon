@@ -50,8 +50,8 @@ dist-hook:
 endif
 
 
-PERSISTENT_CACHE_DIR="$(localstatedir)/cache/metrics/"
-PERMISSIONS_FILE="$(sysconfdir)/eos-metrics-permissions.conf"
+PERSISTENT_CACHE_DIR=$(localstatedir)/cache/metrics/
+PERMISSIONS_FILE=$(sysconfdir)/eos-metrics-permissions.conf
 
 # chown and chgrp are not allowed unless you are root or under some specific
 # other conditions that may not be met every time you run 'make'.

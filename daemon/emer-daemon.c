@@ -720,8 +720,9 @@ flush_to_persistent_cache (EmerDaemon *self)
 }
 
 static void
-upload_events (EmerDaemon   *self,
-               GAsyncResult *res)
+upload_events (GNetworkMonitor *source_object,
+               GAsyncResult    *res,
+               EmerDaemon      *self)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
@@ -785,7 +786,7 @@ check_and_upload_events (EmerDaemon *self)
                                      priv->ping_socket,
                                      NULL,
                                      (GAsyncReadyCallback) upload_events,
-                                     NULL);
+                                     self);
   return G_SOURCE_CONTINUE;
 }
 

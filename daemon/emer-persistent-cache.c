@@ -123,6 +123,8 @@ static gboolean   store_sequences                        (EmerPersistentCache *s
 static gboolean   update_boot_offset                     (EmerPersistentCache *self,
                                                           gboolean             always_update_timestamps);
 
+static gboolean   update_boot_offset_source_func         (EmerPersistentCache *self);
+
 static capacity_t update_capacity                        (EmerPersistentCache *self);
 
 typedef struct GVariantWritable
@@ -146,6 +148,8 @@ typedef struct _EmerPersistentCachePrivate
   gboolean boot_id_initialized;
 
   GKeyFile *boot_offset_key_file;
+
+  guint boot_offset_update_timeout_source_id;
 
   guint64 cache_size;
   capacity_t capacity;
@@ -181,6 +185,8 @@ G_DEFINE_TYPE_WITH_CODE (EmerPersistentCache, emer_persistent_cache, G_TYPE_OBJE
 #define PERSISTENT_CACHE_PRIVATE(o) \
   (G_TYPE_INSTANCE_GET_PRIVATE ((o), EMER_TYPE_PERSISTENT_CACHE, EmerPersistentCachePrivate))
 
+G_LOCK_DEFINE_STATIC (update_boot_offset);
+
 /*
  * The largest amount of memory (in bytes) that the metrics cache may
  * occupy before incoming metrics are ignored.
@@ -188,6 +194,13 @@ G_DEFINE_TYPE_WITH_CODE (EmerPersistentCache, emer_persistent_cache, G_TYPE_OBJE
  * Should never be altered in production code!
  */
 static gint MAX_CACHE_SIZE = 92160; // 90 kB
+
+/*
+ * The amount of time (in seconds) between every periodic update to the boot
+ * offset file is made. This will primarily keep our relative timestamps more
+ * accurate.
+ */
+#define DEFAULT_BOOT_TIMESTAMPS_UPDATE (60u * 60u)
 
 /*
  * The path to the file containing the boot-id used to determine if this is the
@@ -207,10 +220,23 @@ enum {
   PROP_0,
   PROP_BOOT_ID_PROVIDER,
   PROP_CACHE_VERSION_PROVIDER,
+  PROP_BOOT_OFFSET_UPDATE_INTERVAL,
   NPROPS
 };
 
 static GParamSpec *emer_persistent_cache_props[NPROPS] = { NULL, };
+
+static void
+set_boot_offset_update_interval (EmerPersistentCache *self,
+                                 guint                seconds)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  priv->boot_offset_update_timeout_source_id =
+    g_timeout_add_seconds (seconds,
+                           (GSourceFunc) update_boot_offset_source_func, self);
+}
 
 static void
 set_boot_id_provider (EmerPersistentCache *self,
@@ -256,6 +282,10 @@ emer_persistent_cache_set_property (GObject      *object,
       set_cache_version_provider (self, g_value_get_object (value));
       break;
 
+    case PROP_BOOT_OFFSET_UPDATE_INTERVAL:
+      set_boot_offset_update_interval (self, g_value_get_uint (value));
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
     }
@@ -267,6 +297,8 @@ emer_persistent_cache_finalize (GObject *object)
   EmerPersistentCache *self = EMER_PERSISTENT_CACHE (object);
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
+
+  g_source_remove (priv->boot_offset_update_timeout_source_id);
 
   g_object_unref (priv->boot_id_provider);
   g_object_unref (priv->cache_version_provider);
@@ -301,6 +333,14 @@ emer_persistent_cache_class_init (EmerPersistentCacheClass *klass)
                          " format.",
                          EMER_TYPE_CACHE_VERSION_PROVIDER,
                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
+
+  /* Blurb string is good enough default documentation for this. */
+  emer_persistent_cache_props[PROP_BOOT_OFFSET_UPDATE_INTERVAL] =
+    g_param_spec_uint ("boot-offset-update-interval", "Boot offset update interval",
+                       "The number of seconds between each automatic update"
+                       " of the boot offset metafile.",
+                       0, G_MAXUINT, DEFAULT_BOOT_TIMESTAMPS_UPDATE,
+                       G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, NPROPS,
                                      emer_persistent_cache_props);
@@ -360,7 +400,8 @@ emer_persistent_cache_new_full (GCancellable             *cancellable,
                                 gchar                    *custom_directory,
                                 gint                      custom_cache_size,
                                 EmerBootIdProvider       *boot_id_provider,
-                                EmerCacheVersionProvider *cache_version_provider)
+                                EmerCacheVersionProvider *cache_version_provider,
+                                guint                     boot_offset_update_interval)
 {
   MAX_CACHE_SIZE = custom_cache_size;
   CACHE_DIRECTORY = custom_directory;
@@ -369,6 +410,7 @@ emer_persistent_cache_new_full (GCancellable             *cancellable,
                          error,
                          "boot-id-provider", boot_id_provider,
                          "cache-version-provider", cache_version_provider,
+                         "boot-offset-update-interval", boot_offset_update_interval,
                          NULL);
 }
 
@@ -390,14 +432,19 @@ emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
 {
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
+  G_LOCK (update_boot_offset);
+
   // When always_update_timestamps is FALSE, the timestamps won't be written
   // unless the boot offset in the metadata file is being overwritten.
   if (!update_boot_offset (self, always_update_timestamps))
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
                    "Couldn't read boot offset.");
+      G_UNLOCK (update_boot_offset);
       return FALSE;
     }
+
+  G_UNLOCK (update_boot_offset);
 
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
@@ -626,6 +673,19 @@ reset_boot_offset_metafile (EmerPersistentCache *self,
 }
 
 /*
+ * Callback for updating the boot offset file.
+ */
+static gboolean
+update_boot_offset_source_func (EmerPersistentCache *self)
+{
+  G_LOCK (update_boot_offset);
+  update_boot_offset (self, TRUE);
+  G_UNLOCK (update_boot_offset);
+
+  return G_SOURCE_CONTINUE;
+}
+
+/*
  * Will read and compute the boot offset from a boot offset file or will use a
  * cached value, if one is available. If the meta-data file doesn't exist, it
  * will reset the cache metadata and purge the system. If an error occurs while
@@ -639,6 +699,9 @@ reset_boot_offset_metafile (EmerPersistentCache *self,
  * The net effect of the entire system is that pretty much the only way to trick
  * it is to adjust the system clock and yank the power cord before the next
  * network send occurs (an hourly event).
+ *
+ * Callers of this function need to acquire a lock on update_boot_offset before
+ * calling this function and should free that lock immediately after it returns.
  */
 static gboolean
 update_boot_offset (EmerPersistentCache *self,
@@ -1169,11 +1232,14 @@ emer_persistent_cache_store_metrics (EmerPersistentCache  *self,
   *num_aggregates_stored = 0;
   *num_sequences_stored = 0;
 
+  G_LOCK (update_boot_offset);
   if (!update_boot_offset (self, TRUE)) // Always update timestamps.
     {
       g_critical ("Couldn't update the boot offset, dropping metrics.");
+      G_UNLOCK (update_boot_offset);
       return FALSE;
     }
+  G_UNLOCK (update_boot_offset);
 
   gboolean singulars_stored = store_singulars (self,
                                                singular_buffer,

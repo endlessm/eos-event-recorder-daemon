@@ -19,6 +19,7 @@
 #define FAKE_BOOT_OFFSET 4000000000 // 4 seconds
 
 #define TEST_SIZE 1024000
+#define TEST_UPDATE_OFFSET_INTERVAL (60u * 60u) // 1 hour
 
 /*
  * The expected size in bytes of the boot id file we want to mock, located at
@@ -133,7 +134,8 @@ make_testing_cache (void)
     emer_cache_version_provider_new_full (TEST_DIRECTORY TEST_CACHE_VERSION_FILE);
   EmerPersistentCache *cache =
     emer_persistent_cache_new_full (NULL, &error, TEST_DIRECTORY, TEST_SIZE,
-                                    boot_id_provider, cache_version_provider);
+                                    boot_id_provider, cache_version_provider,
+                                    TEST_UPDATE_OFFSET_INTERVAL);
   g_object_unref (boot_id_provider);
   g_object_unref (cache_version_provider);
   g_assert_no_error (error);
@@ -1036,7 +1038,8 @@ test_persistent_cache_store_when_full_succeeds (gboolean     *unused,
     emer_cache_version_provider_new_full (TEST_DIRECTORY TEST_CACHE_VERSION_FILE);
   EmerPersistentCache *cache =
     emer_persistent_cache_new_full (NULL, NULL, TEST_DIRECTORY, space_in_bytes,
-                                    boot_id_provider, cache_version_provider);
+                                    boot_id_provider, cache_version_provider,
+                                    TEST_UPDATE_OFFSET_INTERVAL);
 
   g_object_unref (cache_version_provider);
   g_object_unref (boot_id_provider);
@@ -1318,7 +1321,8 @@ test_persistent_cache_purges_when_out_of_date_succeeds (gboolean     *unused,
     emer_cache_version_provider_new_full (TEST_DIRECTORY TEST_CACHE_VERSION_FILE);
   EmerPersistentCache *cache =
     emer_persistent_cache_new_full (NULL, NULL, TEST_DIRECTORY, TEST_SIZE,
-                                    boot_id_provider, cache_version_provider);
+                                    boot_id_provider, cache_version_provider,
+                                    TEST_UPDATE_OFFSET_INTERVAL);
 
   g_object_unref (boot_id_provider);
 

@@ -1254,7 +1254,7 @@ emer_persistent_cache_store_metrics (EmerPersistentCache  *self,
   *num_sequences_stored = 0;
 
   G_LOCK (update_boot_offset);
-  if (!update_boot_offset (self, TRUE)) // Always update timestamps.
+  if (!update_boot_offset (self, FALSE)) // Typically don't update timestamps.
     {
       g_critical ("Couldn't update the boot offset, dropping metrics.");
       G_UNLOCK (update_boot_offset);

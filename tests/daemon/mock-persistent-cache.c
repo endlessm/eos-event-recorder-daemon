@@ -34,7 +34,7 @@ EmerPersistentCache *
 emer_persistent_cache_new_full (GCancellable             *cancellable,
                                 GError                  **error,
                                 gchar                    *custom_directory,
-                                gint                      custom_cache_size,
+                                guint64                   custom_cache_size,
                                 EmerBootIdProvider       *boot_id_provider,
                                 EmerCacheVersionProvider *version_provider,
                                 guint                     boot_offset_update_interval)

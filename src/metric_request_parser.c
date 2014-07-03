@@ -152,7 +152,7 @@ deserialize_metrics (gconstpointer serialized_metrics,
                      gsize         length)
 {
   GVariant *metrics_variant = g_variant_new_from_data (
-                              G_VARIANT_TYPE ("(ixxaysa(uayxmv)a(uayxxmv)a(uaya(xmv)))"),
+                              G_VARIANT_TYPE ("(xxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))"),
                              serialized_metrics, length, FALSE, NULL, NULL);
 
   GVariant *native_endian_metrics_variant = metrics_variant;
@@ -175,33 +175,23 @@ fprintf_serialized_metrics (FILE *output_stream,
 {
   GVariant *metrics_variant = deserialize_metrics (serialized_metrics,
                                                    length);
-
-  gint32 client_version;
-  g_variant_get_child (metrics_variant, 0, "i", &client_version);
-  fprintf (output_stream, "Client version: %d\n", client_version);
-
   gint64 relative_time;
-  g_variant_get_child (metrics_variant, 1, "x", &relative_time);
+  g_variant_get_child (metrics_variant, 0, "x", &relative_time);
   fprintf (output_stream, "Relative time: %"G_GINT64_FORMAT"\n", relative_time);
 
   gint64 absolute_time;
-  g_variant_get_child (metrics_variant, 2, "x", &absolute_time);
+  g_variant_get_child (metrics_variant, 1, "x", &absolute_time);
   fprintf (output_stream, "Absolute time: %"G_GINT64_FORMAT"\n", absolute_time);
 
-  char *client_id = get_uuid_from_tuple (metrics_variant, 3);
+  char *client_id = get_uuid_from_tuple (metrics_variant, 2);
   fprintf (output_stream, "Client ID: %s\n", client_id);
   g_free (client_id);
 
-  gchar *environment;
-  g_variant_get_child (metrics_variant, 4, "s", &environment);
-  fprintf (output_stream, "Environment: %s\n", environment);
-  g_free (environment);
+  fprintf_events_from_tuple (output_stream, metrics_variant, 3);
 
-  fprintf_events_from_tuple (output_stream, metrics_variant, 5);
+  fprintf_aggregates_from_tuple (output_stream, metrics_variant, 4);
 
-  fprintf_aggregates_from_tuple (output_stream, metrics_variant, 6);
-
-  fprintf_event_sequences_from_tuple (output_stream, metrics_variant, 7);
+  fprintf_event_sequences_from_tuple (output_stream, metrics_variant, 5);
 
   g_variant_unref (metrics_variant);
 }

@@ -45,7 +45,7 @@ prevent testing code from sending metrics to the production server. */
  *
  * For QA, the "dev" environment delay is much shorter.
  */
-#define DEV_NETWORK_SEND_INTERVAL (60u * 10u) // Ten minutes
+#define DEV_NETWORK_SEND_INTERVAL (60u * 15u) // Fifteen minutes
 #define DEFAULT_NETWORK_SEND_INTERVAL (60u * 60u) // One hour
 
 /*

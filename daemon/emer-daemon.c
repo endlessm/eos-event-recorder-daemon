@@ -952,7 +952,7 @@ set_machine_id_provider (EmerDaemon            *self,
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   if (machine_id_prov == NULL)
-    machine_id_prov = emer_machine_id_provider_get_default ();
+    machine_id_prov = emer_machine_id_provider_new ();
 
   priv->machine_id_provider = g_object_ref (machine_id_prov);
 }
@@ -1243,7 +1243,7 @@ emer_daemon_class_init (EmerDaemonClass *klass)
    *
    * An #EmerMachineIdProvider for retrieving the UUID of this machine.
    * If this property is not specified, the default machine ID provider (from
-   * emer_machine_id_provider_get_default()) will be used.
+   * emer_machine_id_provider_new()) will be used.
    * You should only set this property to something else for testing purposes.
    */
   emer_daemon_props[PROP_MACHINE_ID_PROVIDER] =

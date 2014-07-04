@@ -152,46 +152,39 @@ emer_machine_id_provider_init (EmerMachineIdProvider *self)
 }
 
 /*
- * emer_machine_id_provider_new:
+ * emer_machine_id_provider_new_full:
  * @machine_id_file_path: path to a file; see #EmerMachineIdProvider:path
  *
  * Testing function for creating a new #EmerMachineIdProvider in the C API.
  * You only need to use this if you are creating a mock ID provider for unit
  * testing.
  *
- * For all normal uses, you should use emer_machine_id_provider_get_default()
+ * For all normal uses, you should use emer_machine_id_provider_new()
  * instead.
  *
  * Returns: (transfer full): A new #EmerMachineIdProvider.
  * Free with g_object_unref() when done if using C.
  */
 EmerMachineIdProvider *
-emer_machine_id_provider_new (const gchar *machine_id_file_path)
-{ 
-  return g_object_new (EMER_TYPE_MACHINE_ID_PROVIDER, 
+emer_machine_id_provider_new_full (const gchar *machine_id_file_path)
+{
+  return g_object_new (EMER_TYPE_MACHINE_ID_PROVIDER,
                        "path", machine_id_file_path,
                        NULL);
 }
 
 /*
- * emer_machine_id_provider_get_default:
+ * emer_machine_id_provider_new:
  *
- * Gets the ID provider that you should use for obtaining a unique machine ID.
+ * Gets the ID provider that you should use for obtaining a unique machine ID in
+ * production code. Uses a default filepath.
  *
- * Returns: (transfer none): the default #EmerMachineIdProvider.
- * This object is owned by the metrics library; do not free it.
+ * Returns: (transfer full): a production #EmerMachineIdProvider.
  */
 EmerMachineIdProvider *
-emer_machine_id_provider_get_default (void)
+emer_machine_id_provider_new (void)
 {
-  static EmerMachineIdProvider *singleton;
-  G_LOCK_DEFINE_STATIC (singleton);
-
-  G_LOCK (singleton);
-  if (singleton == NULL)
-    singleton = g_object_new (EMER_TYPE_MACHINE_ID_PROVIDER, NULL);
-  G_UNLOCK (singleton);
-  return singleton;
+  return g_object_new (EMER_TYPE_MACHINE_ID_PROVIDER, NULL);
 }
 
 /*

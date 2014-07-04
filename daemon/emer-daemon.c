@@ -1290,7 +1290,7 @@ emer_daemon_class_init (EmerDaemonClass *klass)
     g_param_spec_uint ("network-send-interval", "Network send interval",
                        "Number of seconds between attempts to flush metrics to "
                        "proxy server",
-                       0, G_MAXUINT, (60 * 60),
+                       0, G_MAXUINT, DEFAULT_NETWORK_SEND_INTERVAL,
                        G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                        G_PARAM_STATIC_STRINGS);
 
@@ -1384,13 +1384,15 @@ emer_daemon_new (const gchar *environment)
                                          ".metrics.endlessm.com/",
                                          CLIENT_VERSION_NUMBER, "/", NULL);
 
-  guint network_send_interval = DEFAULT_NETWORK_SEND_INTERVAL;
   if (g_strcmp0 (environment, "dev") == 0)
-    network_send_interval = DEV_NETWORK_SEND_INTERVAL;
+    return g_object_new (EMER_TYPE_DAEMON,
+                         "proxy-server-uri", proxy_server_uri,
+                         "network-send-interval", DEV_NETWORK_SEND_INTERVAL,
+                         NULL);
 
+  // This is a production or test environment. Use the default interval.
   return g_object_new (EMER_TYPE_DAEMON,
                        "proxy-server-uri", proxy_server_uri,
-                       "network-send-interval", network_send_interval,
                        NULL);
 }
 

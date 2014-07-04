@@ -73,7 +73,7 @@ setup (Fixture      *fixture,
        gconstpointer unused)
 {
   EmerMachineIdProvider *id_prov =
-    emer_machine_id_provider_new (MACHINE_ID_PATH);
+    emer_machine_id_provider_new_full (MACHINE_ID_PATH);
   fixture->mock_permissions_prov = emer_permissions_provider_new ();
   fixture->mock_persistent_cache = emer_persistent_cache_new (NULL, NULL);
   fixture->test_object =

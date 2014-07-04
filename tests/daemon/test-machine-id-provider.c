@@ -34,8 +34,8 @@ write_testing_machine_id ()
                                               NULL,
                                               FALSE,
                                               G_FILE_CREATE_REPLACE_DESTINATION | G_FILE_CREATE_PRIVATE,
-                                              NULL, 
-                                              NULL, 
+                                              NULL,
+                                              NULL,
                                               NULL);
   if (!success)
     g_critical ("Testing code failed to write testing machine id.");
@@ -58,19 +58,9 @@ test_machine_id_provider_new_succeeds (void)
 {
   write_testing_machine_id ();
   EmerMachineIdProvider *id_provider =
-    emer_machine_id_provider_new (TESTING_FILE_PATH);
+    emer_machine_id_provider_new ();
   g_assert (id_provider != NULL);
   g_object_unref (id_provider);
-}
-
-static void
-test_machine_id_provider_get_default_is_singleton (void)
-{
-  write_testing_machine_id ();
-  EmerMachineIdProvider *m1 = emer_machine_id_provider_get_default ();
-  EmerMachineIdProvider *m2 = emer_machine_id_provider_get_default ();
-  g_assert (m1 == m2);
-  // A singleton shouldn't be unref'd.
 }
 
 static void
@@ -78,7 +68,7 @@ test_machine_id_provider_can_get_id (void)
 {
   write_testing_machine_id ();
   EmerMachineIdProvider *id_provider =
-    emer_machine_id_provider_new (TESTING_FILE_PATH);
+    emer_machine_id_provider_new_full (TESTING_FILE_PATH);
   uuid_t id;
   g_assert (emer_machine_id_provider_get_id (id_provider, id));
   gchar unparsed_id[HYPHENS_IN_ID + FILE_LENGTH];
@@ -97,8 +87,6 @@ main (int                argc,
 
   g_test_add_func ("/machine-id-provider/new-succeeds",
                    test_machine_id_provider_new_succeeds);
-  g_test_add_func ("/machine-id-provider/get-default-is-singleton",
-                   test_machine_id_provider_get_default_is_singleton);
   g_test_add_func ("/machine-id-provider/can-get-id",
                    test_machine_id_provider_can_get_id);
 

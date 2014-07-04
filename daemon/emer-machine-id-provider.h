@@ -58,14 +58,14 @@ struct _EmerMachineIdProviderClass
   GObjectClass parent_class;
 };
 
-GType                  emer_machine_id_provider_get_type    (void) G_GNUC_CONST;
+GType                  emer_machine_id_provider_get_type (void) G_GNUC_CONST;
 
-EmerMachineIdProvider *emer_machine_id_provider_new         (const gchar           *machine_id_file_path);
+EmerMachineIdProvider *emer_machine_id_provider_new      (void);
 
-EmerMachineIdProvider *emer_machine_id_provider_get_default (void);
+EmerMachineIdProvider *emer_machine_id_provider_new_full (const gchar           *machine_id_file_path);
 
-gboolean               emer_machine_id_provider_get_id      (EmerMachineIdProvider *self,
-                                                             guchar                 uuid[16]);
+gboolean               emer_machine_id_provider_get_id   (EmerMachineIdProvider *self,
+                                                          guchar                 uuid[16]);
 
 G_END_DECLS
 

@@ -97,7 +97,7 @@ javascript_tests = \
 	$(NULL)
 EXTRA_DIST += $(javascript_tests)
 
-dist_bin_SCRIPTS = tests/launch-mock-dbus-tests.sh
+dist_noinst_SCRIPTS = tests/launch-mock-dbus-tests.sh
 
 # Run tests when running 'make check'
 if ENABLE_LOGIN_TESTS

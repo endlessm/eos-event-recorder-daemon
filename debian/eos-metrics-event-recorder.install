@@ -5,4 +5,4 @@ usr/lib/eos-metrics/eos-metrics-event-recorder
 usr/lib/tmpfiles.d/eos-metrics.conf
 usr/share/dbus-1/system-services/com.endlessm.Metrics.service
 usr/share/polkit-1/actions/com.endlessm.Metrics.policy
-usr/bin/eos-set-metrics-env
+usr/bin/eos-select-metrics-env

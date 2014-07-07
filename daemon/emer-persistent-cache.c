@@ -188,6 +188,7 @@ get_saved_boot_id (EmerPersistentCache *self,
       return FALSE;
     }
 
+  g_free (id_as_string);
   uuid_copy (boot_id, priv->saved_boot_id);
   priv->boot_id_initialized = TRUE;
   return TRUE;

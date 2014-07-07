@@ -892,7 +892,7 @@ on_permissions_changed (EmerPermissionsProvider *permissions_provider,
 }
 
 /*
- * The following functions are private setters and getters for the properties of
+ * The following functions are private setters for the properties of
  * EmerDaemon. These properties are write-only, construct-only, so these only
  * need to be internal.
  */
@@ -903,13 +903,6 @@ set_random_number_generator (EmerDaemon *self,
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   priv->rand = rand == NULL ? g_rand_new () : rand;
-}
-
-static GRand *
-get_random_number_generator (EmerDaemon *self)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  return priv->rand;
 }
 
 static void
@@ -923,26 +916,12 @@ set_network_send_interval (EmerDaemon *self,
                            self);
 }
 
-static guint
-get_network_send_interval (EmerDaemon *self)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  return priv->network_send_interval_seconds;
-}
-
 static void
 set_proxy_server_uri (EmerDaemon  *self,
                       const gchar *uri)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   priv->proxy_server_uri = g_strdup (uri);
-}
-
-static gchar *
-get_proxy_server_uri (EmerDaemon *self)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  return priv->proxy_server_uri;
 }
 
 static void
@@ -955,13 +934,6 @@ set_machine_id_provider (EmerDaemon            *self,
     machine_id_prov = emer_machine_id_provider_new ();
 
   priv->machine_id_provider = g_object_ref (machine_id_prov);
-}
-
-static EmerMachineIdProvider *
-get_machine_id_provider (EmerDaemon *self)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  return priv->machine_id_provider;
 }
 
 static void
@@ -1014,13 +986,6 @@ set_singular_buffer_length (EmerDaemon *self,
   g_mutex_init (&priv->singular_buffer_lock);
 }
 
-static gint
-get_singular_buffer_length (EmerDaemon *self)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  return priv->singular_buffer_length;
-}
-
 static void
 set_aggregate_buffer_length (EmerDaemon *self,
                              gint        length)
@@ -1030,13 +995,6 @@ set_aggregate_buffer_length (EmerDaemon *self,
   priv->aggregate_buffer = g_new (AggregateEvent, length);
   priv->num_aggregates_buffered = 0;
   g_mutex_init (&priv->aggregate_buffer_lock);
-}
-
-static gint
-get_aggregate_buffer_length (EmerDaemon *self)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  return priv->aggregate_buffer_length;
 }
 
 static void
@@ -1049,13 +1007,6 @@ set_sequence_buffer_length (EmerDaemon *self,
   priv->num_sequences_buffered = 0;
   g_mutex_init (&priv->sequence_buffer_lock);
 
-}
-
-static gint
-get_sequence_buffer_length (EmerDaemon *self)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  return priv->sequence_buffer_length;
 }
 
 static void
@@ -1076,49 +1027,6 @@ emer_daemon_constructed (GObject *object)
              priv->proxy_server_uri, error->message);
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->constructed (object);
-}
-
-static void
-emer_daemon_get_property (GObject    *object,
-                          guint       property_id,
-                          GValue     *value,
-                          GParamSpec *pspec)
-{
-  EmerDaemon *self = EMER_DAEMON (object);
-
-  switch (property_id)
-    {
-    case PROP_RANDOM_NUMBER_GENERATOR:
-      g_value_set_pointer (value, get_random_number_generator (self));
-      break;
-
-    case PROP_NETWORK_SEND_INTERVAL:
-      g_value_set_uint (value, get_network_send_interval (self));
-      break;
-
-    case PROP_PROXY_SERVER_URI:
-      g_value_set_string (value, get_proxy_server_uri (self));
-      break;
-
-    case PROP_MACHINE_ID_PROVIDER:
-      g_value_set_object (value, get_machine_id_provider (self));
-      break;
-
-    case PROP_SINGULAR_BUFFER_LENGTH:
-      g_value_set_int (value, get_singular_buffer_length (self));
-      break;
-
-    case PROP_AGGREGATE_BUFFER_LENGTH:
-      g_value_set_int (value, get_aggregate_buffer_length (self));
-      break;
-
-    case PROP_SEQUENCE_BUFFER_LENGTH:
-      g_value_set_int (value, get_sequence_buffer_length (self));
-      break;
-
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
-    }
 }
 
 static void
@@ -1210,7 +1118,6 @@ emer_daemon_class_init (EmerDaemonClass *klass)
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
   object_class->constructed = emer_daemon_constructed;
-  object_class->get_property = emer_daemon_get_property;
   object_class->set_property = emer_daemon_set_property;
   object_class->finalize = emer_daemon_finalize;
 
@@ -1261,7 +1168,8 @@ emer_daemon_class_init (EmerDaemonClass *klass)
     g_param_spec_object ("permissions-provider", "Permissions provider",
                          "Object providing user's permission to record metrics",
                          EMER_TYPE_PERMISSIONS_PROVIDER,
-                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
+                         G_PARAM_STATIC_STRINGS);
 
   /*
    * EmerDaemon:persistent-cache:

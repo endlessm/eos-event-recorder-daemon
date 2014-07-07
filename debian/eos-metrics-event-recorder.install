@@ -1,5 +1,5 @@
 etc/dbus-1/system.d/com.endlessm.Metrics.conf
-etc/eos-metrics-permissions.conf
+etc/metrics/eos-metrics-permissions.conf
 lib/systemd/system/eos-metrics-event-recorder.service
 usr/lib/eos-metrics/eos-metrics-event-recorder
 usr/lib/tmpfiles.d/eos-metrics.conf

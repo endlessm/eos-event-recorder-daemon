@@ -93,11 +93,6 @@ G_DEFINE_TYPE_WITH_CODE (EmerPersistentCache, emer_persistent_cache, G_TYPE_OBJE
  */
 #define BOOT_ID_FILE_LENGTH 37
 
-#define PERSISTENT_CACHE_PRIVATE(o) \
-  (G_TYPE_INSTANCE_GET_PRIVATE ((o), EMER_TYPE_PERSISTENT_CACHE, EmerPersistentCachePrivate))
-
-G_LOCK_DEFINE_STATIC (update_boot_offset);
-
 /*
  * The largest amount of memory (in bytes) that the metrics cache may
  * occupy before incoming metrics are ignored.
@@ -124,6 +119,8 @@ G_LOCK_DEFINE_STATIC (update_boot_offset);
  * ever alter this variable.
  */
 static gchar *CACHE_DIRECTORY = PERSISTENT_CACHE_DIR;
+
+G_LOCK_DEFINE_STATIC (update_boot_offset);
 
 enum {
   PROP_0,

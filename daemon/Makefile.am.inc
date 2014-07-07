@@ -17,7 +17,7 @@ eos_metrics_event_recorder_SOURCES = \
 eos_metrics_event_recorder_CPPFLAGS = \
     $(EOSMETRICS_EVENT_RECORDER_CFLAGS) \
     -D_POSIX_C_SOURCE=200112L \
-    -DPERMISSIONS_FILE="\"$(PERMISSIONS_FILE)\"" \
-    -DPERSISTENT_CACHE_DIR="\"$(PERSISTENT_CACHE_DIR)\"" \
+    -DPERSISTENT_CACHE_DIR="\"$(persistentcachedir)\"" \
+    -DPERMISSIONS_FILE="\"$(permissions_file)\"" \
     $(NULL)
 eos_metrics_event_recorder_LDADD = $(EOSMETRICS_EVENT_RECORDER_LIBS)

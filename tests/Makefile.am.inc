@@ -29,8 +29,8 @@ DAEMON_TEST_FLAGS = \
 	@EOSMETRICS_EVENT_RECORDER_CFLAGS@ \
 	-I$(top_srcdir) \
 	-I$(top_srcdir)/daemon \
-	-DPERMISSIONS_FILE="\"$(PERMISSIONS_FILE)\"" \
-	-DPERSISTENT_CACHE_DIR="\"$(PERSISTENT_CACHE_DIR)\"" \
+	-DPERSISTENT_CACHE_DIR="\"$(persistentcachedir)\"" \
+	-DPERMISSIONS_FILE="\"$(permissions_file)\"" \
 	$(NULL)
 DAEMON_TEST_LIBS = @EOSMETRICS_EVENT_RECORDER_LIBS@
 

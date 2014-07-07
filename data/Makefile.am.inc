@@ -32,8 +32,8 @@ data/com.endlessm.Metrics.service: data/com.endlessm.Metrics.service.in
 	mv $@.tmp $@
 
 substitute_metrics_files = sed \
-	-e 's|@PERSISTENT_CACHE_DIR[@]|$(PERSISTENT_CACHE_DIR)|g' \
-	-e 's|@PERMISSIONS_FILE[@]|$(PERMISSIONS_FILE)|g' \
+	-e 's|@persistentcachedir[@]|$(persistentcachedir)|g' \
+	-e 's|@permissionsdir[@]|$(permissionsdir)|g' \
 	$(NULL)
 
 data/eos-metrics.conf: data/eos-metrics.conf.in
@@ -48,7 +48,7 @@ dist_policy_DATA = data/com.endlessm.Metrics.policy
 systembussecuritypolicydir = ${sysconfdir}/dbus-1/system.d
 dist_systembussecuritypolicy_DATA = data/com.endlessm.Metrics.conf
 
-dist_sysconf_DATA = data/eos-metrics-permissions.conf
+dist_permissions_DATA = data/eos-metrics-permissions.conf
 
 tmpfilesddir = $(libdir)/tmpfiles.d/
 tmpfilesd_DATA = data/eos-metrics.conf

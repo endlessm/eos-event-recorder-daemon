@@ -156,14 +156,14 @@ deserialize_metrics (gconstpointer serialized_metrics,
                              serialized_metrics, length, FALSE, NULL, NULL);
 
   GVariant *native_endian_metrics_variant = metrics_variant;
-  if (G_BYTE_ORDER == G_LITTLE_ENDIAN)
+  if (G_BYTE_ORDER == G_BIG_ENDIAN)
     {
       native_endian_metrics_variant = g_variant_byteswap (metrics_variant);
       g_variant_unref (metrics_variant);
     }
   else
     {
-      g_assert (G_BYTE_ORDER == G_BIG_ENDIAN);
+      g_assert (G_BYTE_ORDER == G_LITTLE_ENDIAN);
     }
   return native_endian_metrics_variant;
 }

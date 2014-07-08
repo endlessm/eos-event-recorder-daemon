@@ -1,7 +1,7 @@
 #!/bin/bash -e
 
 if [ ! -f @permissions_file@ ]; then
-    echo "Configuration file at @permissions_file@ not found." >&2
+    echo "Configuration file at @permissions_file@ not found or permission denied." >&2
     exit 1
 fi
 
@@ -9,6 +9,6 @@ ENVIRONMENT=$1
 if [ "$ENVIRONMENT" == "dev" ] || [ "$ENVIRONMENT" == "test" ] || [ "$ENVIRONMENT" == "production" ]; then
     sed -i "s/\(environment *= *\).*/\1$ENVIRONMENT/" @permissions_file@
 else
-    echo "Invalid enviroment $ENVIRONMENT passed in as parameter." >$2
+    echo "Invalid environment $ENVIRONMENT passed in as parameter." >&2
     exit 2
 fi

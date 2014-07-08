@@ -930,6 +930,45 @@ test_persistent_cache_new_succeeds (gboolean     *unused,
   g_assert (error == NULL);
 }
 
+/*
+ * Test ensures the store function properly sets its out parameters, even if
+ * no metrics are being stored via the call.
+ */
+static void
+test_persistent_cache_store_sets_out_parameters (gboolean     *unused,
+                                                 gconstpointer dontuseme)
+{
+  EmerPersistentCache *cache = make_testing_cache ();
+
+  capacity_t capacity = 700; // Totally invalid value!
+  SingularEvent singular_array[] = {};
+  AggregateEvent aggregate_array[] = {};
+  SequenceEvent sequence_array [] = {};
+
+  // Arbitrary values that should be overwritten:
+  gint num_singulars_stored = -1;
+  gint num_aggregates_stored = -50;
+  gint num_sequences_stored = 555;
+
+  g_assert (emer_persistent_cache_store_metrics (cache,
+                                                 singular_array,
+                                                 aggregate_array,
+                                                 sequence_array,
+                                                 0, 0, 0,
+                                                 &num_singulars_stored,
+                                                 &num_aggregates_stored,
+                                                 &num_sequences_stored,
+                                                 &capacity));
+
+  // An empty cache should be in the LOW capacity state.
+  g_assert (capacity == CAPACITY_LOW);
+  g_assert (num_singulars_stored == 0);
+  g_assert (num_aggregates_stored == 0);
+  g_assert (num_sequences_stored == 0);
+
+  g_object_unref (cache);
+}
+
 static void
 test_persistent_cache_store_one_singular_event_succeeds (gboolean     *unused,
                                                          gconstpointer dontuseme)
@@ -1710,6 +1749,8 @@ main (int                argc,
 
   ADD_CACHE_TEST_FUNC ("/persistent-cache/new-succeeds",
                        test_persistent_cache_new_succeeds);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/store-sets-out-parameters",
+                       test_persistent_cache_store_sets_out_parameters);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/store-one-singular-event-succeeds",
                        test_persistent_cache_store_one_singular_event_succeeds);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/store-one-aggregate-event-succeeds",

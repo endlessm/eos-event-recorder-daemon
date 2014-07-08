@@ -35,9 +35,9 @@
  * the new version number.
  */
 
-static gboolean   append_metric                          (EmerPersistentCache *self,
-                                                          GFile               *file,
-                                                          GVariant            *metric);
+static gboolean   append_variant_to_string               (EmerPersistentCache *self,
+                                                          GString             *variant_string,
+                                                          GVariant            *variant);
 
 static gboolean   apply_cache_versioning                 (EmerPersistentCache *self,
                                                           GCancellable        *cancellable,
@@ -103,11 +103,6 @@ static gboolean   store_aggregates                       (EmerPersistentCache *s
                                                           gint                *num_aggregates_stored,
                                                           capacity_t          *capacity);
 
-static gboolean   store_event                            (EmerPersistentCache *self,
-                                                          GFile               *file,
-                                                          GVariant            *event,
-                                                          capacity_t          *capacity);
-
 static gboolean   store_singulars                        (EmerPersistentCache *self,
                                                           SingularEvent       *singular_buffer,
                                                           gint                 num_singulars_buffered,
@@ -125,7 +120,12 @@ static gboolean   update_boot_offset                     (EmerPersistentCache *s
 
 static gboolean   update_boot_offset_source_func         (EmerPersistentCache *self);
 
-static capacity_t update_capacity                        (EmerPersistentCache *self);
+static capacity_t update_capacity                        (EmerPersistentCache *self,
+                                                          gboolean             set_to_max);
+
+static gboolean   write_variant_string_to_file           (EmerPersistentCache *self,
+                                                          GFile               *file,
+                                                          GString             *variant_string);
 
 typedef struct GVariantWritable
 {
@@ -1101,39 +1101,39 @@ free_variant_list (GVariant **list)
 }
 
 /*
- * Attempts to write an event to a given file.
- * Will update capacity given to it. Automatically increments priv->cache_size.
- * Returns %FALSE if the write fails on account of I/O error. Returns %TRUE
- * otherwise. Regardless of success or failure, capacity will be correctly set.
+ * Converts the given GVariant to a string via serialization and byte swapping
+ * (if necessary), prepends its length to the front of it, and appends the
+ * the entire string to the end of the given GString.
+ *
+ * If there is not enough room in the cache to store the string that would
+ * normally be the result of this function, the given GString is not mutated,
+ * and the function returns FALSE. Otherwise, it will mutate it as described and
+ * return TRUE.
  */
 static gboolean
-store_event (EmerPersistentCache *self,
-             GFile               *file,
-             GVariant            *event,
-             capacity_t          *capacity)
+append_variant_to_string (EmerPersistentCache *self,
+                          GString             *variant_string,
+                          GVariant            *variant)
 {
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
-
-  gboolean success;
-
-  gsize event_size_on_disk = sizeof (gsize) + g_variant_get_size (event);
+  gsize event_size_on_disk = sizeof (gsize) + g_variant_get_size (variant);
   if (cache_has_room (self, event_size_on_disk))
     {
-      success = append_metric (self, file, event);
-      if (!success)
-        g_critical ("Failed to write event.");
-      else
-        priv->cache_size += event_size_on_disk;
-    }
-  else
-    {
-      priv->capacity = CAPACITY_MAX;
-      success = TRUE;
+      GVariant *native_endian_variant = swap_bytes_if_big_endian (variant);
+
+      GVariantWritable writable;
+      writable.length = g_variant_get_size (native_endian_variant);
+      writable.data = (gpointer) g_variant_get_data (native_endian_variant);
+
+      g_string_append_len (variant_string,
+                           (const gchar *) &writable.length,
+                           sizeof (writable.length));
+      g_string_append_len (variant_string, writable.data, writable.length);
+
+      g_variant_unref (native_endian_variant);
+      return TRUE;
     }
 
-  *capacity = update_capacity (self);
-  return success;
+  return FALSE;
 }
 
 static gboolean
@@ -1143,23 +1143,39 @@ store_singulars (EmerPersistentCache *self,
                  gint                *num_singulars_stored,
                  capacity_t          *capacity)
 {
-  GFile *singulars_file = get_cache_file (INDIVIDUAL_SUFFIX);
-
-  gboolean stored_singulars = TRUE;
+  GString *variant_string = g_string_new ("");
+  gboolean string_fit = TRUE;
   gint i;
   for (i = 0; i < num_singulars_buffered; i++)
     {
       SingularEvent *curr_singular = singular_buffer + i;
       GVariant *curr_singular_variant = singular_to_variant (curr_singular);
-      stored_singulars =
-        store_event (self, singulars_file, curr_singular_variant, capacity);
-      if (!stored_singulars)
+
+      g_variant_ref_sink (curr_singular_variant);
+      string_fit =
+        append_variant_to_string (self, variant_string, curr_singular_variant);
+      g_variant_unref (curr_singular_variant);
+
+      if (!string_fit)
         break;
     }
 
-  g_object_unref (singulars_file);
+  gboolean write_successful = TRUE;
+  if (i > 0)
+    {
+      GFile *singulars_file = get_cache_file (INDIVIDUAL_SUFFIX);
+      write_successful =
+        write_variant_string_to_file (self, singulars_file, variant_string);
+      g_object_unref (singulars_file);
+    }
+
+  g_string_free (variant_string, TRUE);
+
+  gboolean set_to_max = !string_fit && write_successful;
+  *capacity = update_capacity (self, set_to_max);
+
   *num_singulars_stored = i;
-  return stored_singulars;
+  return write_successful;
 }
 
 static gboolean
@@ -1169,23 +1185,39 @@ store_aggregates (EmerPersistentCache *self,
                   gint                *num_aggregates_stored,
                   capacity_t          *capacity)
 {
-  GFile *aggregates_file = get_cache_file (AGGREGATE_SUFFIX);
-
-  gboolean stored_aggregates = TRUE;
+  GString *variant_string = g_string_new ("");
+  gboolean string_fit = TRUE;
   gint i;
   for (i = 0; i < num_aggregates_buffered; i++)
     {
       AggregateEvent *curr_aggregate = aggregate_buffer + i;
       GVariant *curr_aggregate_variant = aggregate_to_variant (curr_aggregate);
-      stored_aggregates =
-        store_event (self, aggregates_file, curr_aggregate_variant, capacity);
-      if (!stored_aggregates)
+
+      g_variant_ref_sink (curr_aggregate_variant);
+      string_fit =
+        append_variant_to_string (self, variant_string, curr_aggregate_variant);
+      g_variant_unref (curr_aggregate_variant);
+
+      if (!string_fit)
         break;
     }
 
-  g_object_unref (aggregates_file);
+  gboolean write_successful = TRUE;
+  if (i > 0)
+    {
+      GFile *aggregate_file = get_cache_file (AGGREGATE_SUFFIX);
+      write_successful =
+        write_variant_string_to_file (self, aggregate_file, variant_string);
+      g_object_unref (aggregate_file);
+    }
+
+  g_string_free (variant_string, TRUE);
+
+  gboolean set_to_max = !string_fit && write_successful;
+  *capacity = update_capacity (self, set_to_max);
+
   *num_aggregates_stored = i;
-  return stored_aggregates;
+  return write_successful;
 }
 
 static gboolean
@@ -1195,23 +1227,39 @@ store_sequences (EmerPersistentCache *self,
                  gint                *num_sequences_stored,
                  capacity_t          *capacity)
 {
-  GFile *sequences_file = get_cache_file (SEQUENCE_SUFFIX);
-
-  gboolean stored_sequences = TRUE;
+  GString *variant_string = g_string_new ("");
+  gboolean string_fit = TRUE;
   gint i;
   for (i = 0; i < num_sequences_buffered; i++)
     {
       SequenceEvent *curr_sequence = sequence_buffer + i;
       GVariant *curr_sequence_variant = sequence_to_variant (curr_sequence);
-      stored_sequences =
-        store_event (self, sequences_file, curr_sequence_variant, capacity);
-      if (!stored_sequences)
+
+      g_variant_ref_sink (curr_sequence_variant);
+      string_fit =
+        append_variant_to_string (self, variant_string, curr_sequence_variant);
+      g_variant_unref (curr_sequence_variant);
+
+      if (!string_fit)
         break;
     }
 
-  g_object_unref (sequences_file);
+  gboolean write_successful = TRUE;
+  if (i > 0)
+    {
+      GFile *sequences_file = get_cache_file (SEQUENCE_SUFFIX);
+      write_successful =
+        write_variant_string_to_file (self, sequences_file, variant_string);
+      g_object_unref (sequences_file);
+    }
+
+  g_string_free (variant_string, TRUE);
+
+  gboolean set_to_max = !string_fit && write_successful;
+  *capacity = update_capacity (self, set_to_max);
+
   *num_sequences_stored = i;
-  return stored_sequences;
+  return write_successful;
 }
 
 /*
@@ -1372,13 +1420,16 @@ purge_cache_files (EmerPersistentCache *self,
 }
 
 /*
- * Attempts to append (cache) a metric at the end of a file.
+ * Attempts to append (cache) one or more metrics in the form of a single
+ * GString to the end of a file. Updates the size of the cache if the store
+ * was successful.
+ *
  * Returns TRUE on success and FALSE on failure.
  */
 static gboolean
-append_metric (EmerPersistentCache *self,
-               GFile               *file,
-               GVariant            *metric)
+write_variant_string_to_file (EmerPersistentCache *self,
+                              GFile               *file,
+                              GString             *variant_string)
 {
   GError *error = NULL;
   GFileOutputStream *stream = g_file_append_to (file,
@@ -1395,28 +1446,12 @@ append_metric (EmerPersistentCache *self,
       return FALSE;
     }
 
-  g_variant_ref_sink (metric);
-  GVariant *native_endian_metric = swap_bytes_if_big_endian (metric);
-  g_variant_unref (metric);
-
-  GVariantWritable writable;
-  writable.length = g_variant_get_size (native_endian_metric);
-  writable.data = (gpointer) g_variant_get_data (native_endian_metric);
-
-  GString *writable_string = g_string_new ("");
-  g_string_append_len (writable_string,
-                       (const gchar *) &writable.length,
-                       sizeof (writable.length));
-  g_string_append_len (writable_string, writable.data, writable.length);
   gboolean success = g_output_stream_write_all (G_OUTPUT_STREAM (stream),
-                                                writable_string->str,
-                                                writable_string->len,
+                                                variant_string->str,
+                                                variant_string->len,
                                                 NULL,
                                                 NULL,
                                                 &error);
-  g_string_free (writable_string, TRUE);
-  g_variant_unref (native_endian_metric);
-
   if (!success)
     {
       gchar *path = g_file_get_path (file);
@@ -1427,6 +1462,10 @@ append_metric (EmerPersistentCache *self,
       g_error_free (error);
       return FALSE;
     }
+
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+  priv->cache_size += variant_string->len;
 
   g_object_unref (stream);
   return TRUE;
@@ -1528,23 +1567,24 @@ load_cache_size (EmerPersistentCache *self,
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
   priv->cache_size = disk_used;
-  update_capacity (self);
+  update_capacity (self, FALSE);
   return TRUE;
 }
 
 /*
  * Returns a hint (capacity_t) as to how filled up the cache is and
- * updates the internal value of capacity.
+ * updates the internal value of capacity. If 'set_to_max' is TRUE, will update
+ * to (and return) CAPACITY_MAX.
  */
 static capacity_t
-update_capacity (EmerPersistentCache *self)
+update_capacity (EmerPersistentCache *self,
+                 gboolean             set_to_max)
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
-  if (priv->capacity == CAPACITY_MAX)
-    return CAPACITY_MAX;
-
-  if (priv->cache_size >= HIGH_CAPACITY_THRESHOLD * priv->max_cache_size)
+  if (set_to_max)
+    priv->capacity = CAPACITY_MAX;
+  else if (priv->cache_size >= HIGH_CAPACITY_THRESHOLD * priv->max_cache_size)
     priv->capacity = CAPACITY_HIGH;
   else
     priv->capacity = CAPACITY_LOW;

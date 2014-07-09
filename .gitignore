@@ -2,6 +2,7 @@
 eos-metrics-0.0.0
 /eosmetrics-0.pc
 /tests/test-library.dbus
+/tests/test-event-types
 /tests/daemon/test-boot-id-provider
 /tests/daemon/test-cache-version-provider
 /tests/daemon/test-daemon

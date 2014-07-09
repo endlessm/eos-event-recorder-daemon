@@ -97,6 +97,8 @@ static gboolean   save_timing_metadata                   (EmerPersistentCache *s
 static void       set_boot_id_provider                   (EmerPersistentCache *self,
                                                           EmerBootIdProvider  *boot_id_provider);
 
+static void       set_to_empty_list                      (GVariant          ***list);
+
 static gboolean   store_aggregates                       (EmerPersistentCache *self,
                                                           AggregateEvent      *aggregate_buffer,
                                                           gint                 num_aggregates_buffered,
@@ -1033,6 +1035,18 @@ drain_metrics_file (EmerPersistentCache *self,
 }
 
 /*
+ * Mutates the given out parameter GVariant pointer list to become a list of
+ * GVariant pointers with the only element set to NULL. This is an empty,
+ * NULL-terminated list.
+ */
+static void
+set_to_empty_list (GVariant ***list)
+{
+  *list = g_new (GVariant *, 1);
+  (*list)[0] = NULL;
+}
+
+/*
  * Will transfer all metrics on disk into the three out parameters.
  * Each list is NULL-terminated. Will delete all metrics from disk immediately
  * afterward. Returns %TRUE on success. If any I/O operation fails, will return
@@ -1047,6 +1061,16 @@ emer_persistent_cache_drain_metrics (EmerPersistentCache  *self,
                                      GVariant           ***list_of_sequence_metrics,
                                      gint                  max_num_bytes)
 {
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+  if (priv->cache_size == 0)
+    {
+      set_to_empty_list (list_of_individual_metrics);
+      set_to_empty_list (list_of_aggregate_metrics);
+      set_to_empty_list (list_of_sequence_metrics);
+      return TRUE;
+    }
+
   gboolean ind_success = drain_metrics_file (self,
                                              list_of_individual_metrics,
                                              INDIVIDUAL_SUFFIX,
@@ -1542,18 +1566,51 @@ load_cache_size (EmerPersistentCache *self,
                  GCancellable        *cancellable,
                  GError             **error)
 {
-  GFile *dir = g_file_new_for_path (CACHE_DIRECTORY);
-  guint64 disk_used;
-  gboolean success = g_file_measure_disk_usage (dir,
+  GFile *singular_file = get_cache_file (INDIVIDUAL_SUFFIX);
+  guint64 singular_disk_used;
+  gboolean success = g_file_measure_disk_usage (singular_file,
                                                 G_FILE_MEASURE_REPORT_ANY_ERROR,
                                                 NULL,
                                                 NULL,
                                                 NULL,
-                                                &disk_used,
+                                                &singular_disk_used,
                                                 NULL,
                                                 NULL,
                                                 error);
-  g_object_unref (dir);
+  g_object_unref (singular_file);
+
+  guint64 aggregate_disk_used;
+  if (success)
+    {
+      GFile *aggregate_file = get_cache_file (AGGREGATE_SUFFIX);
+      success = g_file_measure_disk_usage (aggregate_file,
+                                           G_FILE_MEASURE_REPORT_ANY_ERROR,
+                                           NULL,
+                                           NULL,
+                                           NULL,
+                                           &aggregate_disk_used,
+                                           NULL,
+                                           NULL,
+                                           error);
+      g_object_unref (aggregate_file);
+    }
+
+  guint64 sequence_disk_used;
+  if (success)
+    {
+      GFile *sequence_file = get_cache_file (SEQUENCE_SUFFIX);
+      success = g_file_measure_disk_usage (sequence_file,
+                                           G_FILE_MEASURE_REPORT_ANY_ERROR,
+                                           NULL,
+                                           NULL,
+                                           NULL,
+                                           &sequence_disk_used,
+                                           NULL,
+                                           NULL,
+                                           error);
+      g_object_unref (sequence_file);
+    }
+
   if (!success)
     {
       if (error != NULL)
@@ -1566,7 +1623,8 @@ load_cache_size (EmerPersistentCache *self,
 
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
-  priv->cache_size = disk_used;
+  priv->cache_size = singular_disk_used + aggregate_disk_used +
+                     sequence_disk_used;
   update_capacity (self, FALSE);
   return TRUE;
 }

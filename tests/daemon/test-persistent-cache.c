@@ -1737,6 +1737,38 @@ test_persistent_cache_get_offset_can_build_boot_metafile (gboolean     *unused,
   g_object_unref (cache);
 }
 
+// Tests for required libraries:
+
+/*
+ * We include this test because we are relying on this function returning zero
+ * when an empty metrics file is read to indicate we don't need to overwrite an
+ * empty file. This will preserve some lifetime on our users' storage.
+ */
+static void
+test_g_file_measure_disk_usage_returns_zero_on_empty_file (gboolean     *unused,
+                                                           gconstpointer dontuseme)
+{
+  gchar *path = g_strconcat (TEST_DIRECTORY, "empty_file", NULL);
+  GFile *file = g_file_new_for_path (path);
+
+  GError *error = NULL;
+  g_file_replace_contents (file, "", 0, NULL, FALSE,
+                           G_FILE_CREATE_REPLACE_DESTINATION, NULL, NULL,
+                           &error);
+  g_assert_no_error (error);
+
+  guint64 disk_usage = 555; // Arbitrary non-zero value
+  g_assert (g_file_measure_disk_usage (file, G_FILE_MEASURE_REPORT_ANY_ERROR,
+                                       NULL, NULL, NULL, &disk_usage, NULL,
+                                       NULL, &error));
+  g_assert_no_error (error);
+  g_assert (disk_usage == 0);
+
+  g_object_unref (file);
+  g_unlink (path);
+  g_free (path);
+}
+
 int
 main (int                argc,
       const char * const argv[])
@@ -1791,6 +1823,8 @@ main (int                argc,
                        test_persistent_cache_get_offset_wont_update_timestamps_if_it_isnt_supposed_to);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/get-offset-can-build-boot-metafile",
                        test_persistent_cache_get_offset_can_build_boot_metafile);
+  ADD_CACHE_TEST_FUNC ("/g-file/measure-disk-usage-returns-zero-on-empty-file",
+                       test_g_file_measure_disk_usage_returns_zero_on_empty_file);
 #undef ADD_CACHE_TEST_FUNC
 
   return g_test_run ();

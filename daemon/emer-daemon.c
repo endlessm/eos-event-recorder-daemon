@@ -737,6 +737,12 @@ upload_events (GNetworkMonitor *source_object,
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
+  if (!priv->recording_enabled)
+    {
+      g_object_unref (self);
+      return;
+    }
+
   GError *error = NULL;
   if (!g_network_monitor_can_reach_finish (priv->network_monitor, res, &error))
     {

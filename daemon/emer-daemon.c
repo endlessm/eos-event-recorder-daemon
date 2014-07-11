@@ -738,10 +738,7 @@ upload_events (GNetworkMonitor *source_object,
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   if (!priv->recording_enabled)
-    {
-      g_object_unref (self);
-      return;
-    }
+    goto finally;
 
   GError *error = NULL;
   if (!g_network_monitor_can_reach_finish (priv->network_monitor, res, &error))
@@ -750,22 +747,18 @@ upload_events (GNetworkMonitor *source_object,
                "metrics to persistent cache. Error: %s.", error->message);
       g_error_free (error);
       flush_to_persistent_cache (self);
-      return;
+      goto finally;
     }
 
   GVariant *request_body = create_request_body (self);
   if (request_body == NULL)
-  {
-    g_object_unref (self);
-    return;
-  }
+    goto finally;
 
   gconstpointer serialized_request_body = g_variant_get_data (request_body);
   if (serialized_request_body == NULL)
     {
       g_warning ("Could not serialize network request body.");
-      g_object_unref (self);
-      return;
+      goto finally;
     }
 
   gsize request_body_length = g_variant_get_size (request_body);
@@ -788,6 +781,7 @@ upload_events (GNetworkMonitor *source_object,
                               (SoupSessionCallback) handle_https_response,
                               callback_data);
 
+finally:
   g_object_unref (self);
 }
 

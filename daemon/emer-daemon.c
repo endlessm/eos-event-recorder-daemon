@@ -738,7 +738,7 @@ upload_events (GNetworkMonitor *source_object,
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   if (!priv->recording_enabled)
-    goto finally;
+    return;
 
   GError *error = NULL;
   if (!g_network_monitor_can_reach_finish (priv->network_monitor, res, &error))
@@ -747,18 +747,18 @@ upload_events (GNetworkMonitor *source_object,
                "metrics to persistent cache. Error: %s.", error->message);
       g_error_free (error);
       flush_to_persistent_cache (self);
-      goto finally;
+      return;
     }
 
   GVariant *request_body = create_request_body (self);
   if (request_body == NULL)
-    goto finally;
+    return;
 
   gconstpointer serialized_request_body = g_variant_get_data (request_body);
   if (serialized_request_body == NULL)
     {
       g_warning ("Could not serialize network request body.");
-      goto finally;
+      return;
     }
 
   gsize request_body_length = g_variant_get_size (request_body);
@@ -780,18 +780,12 @@ upload_events (GNetworkMonitor *source_object,
   soup_session_queue_message (priv->http_session, https_message,
                               (SoupSessionCallback) handle_https_response,
                               callback_data);
-
-finally:
-  g_object_unref (self);
 }
 
 static gboolean
 check_and_upload_events (EmerDaemon *self)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  /* Decrease the chances of a race with emer_daemon_finalize. */
-  g_object_ref (self);
 
   g_network_monitor_can_reach_async (priv->network_monitor,
                                      priv->ping_socket,

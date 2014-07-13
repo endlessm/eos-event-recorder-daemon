@@ -851,9 +851,9 @@ handle_login_manager_signal (GDBusProxy *dbus_proxy,
 {
   if (strcmp ("PrepareForShutdown", signal_name) == 0)
     {
-      gboolean before_shutdown;
-      g_variant_get_child (parameters, 0, "b", &before_shutdown);
-      if (before_shutdown)
+      gboolean shutting_down;
+      g_variant_get_child (parameters, 0, "b", &shutting_down);
+      if (shutting_down)
         {
           flush_to_persistent_cache (self);
           release_shutdown_inhibitor (self);

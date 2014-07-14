@@ -241,7 +241,7 @@ purge_cache_files (EmerPersistentCache *self,
   GFile *ind_file = get_cache_file (self, INDIVIDUAL_SUFFIX);
   gboolean success =
     g_file_replace_contents (ind_file, "", 0, NULL, FALSE,
-                             G_FILE_CREATE_PRIVATE | G_FILE_CREATE_REPLACE_DESTINATION,
+                             G_FILE_CREATE_REPLACE_DESTINATION,
                              NULL, cancellable, error);
   if (!success)
     {
@@ -258,7 +258,7 @@ purge_cache_files (EmerPersistentCache *self,
   GFile *agg_file = get_cache_file (self, AGGREGATE_SUFFIX);
   success =
     g_file_replace_contents (agg_file, "", 0, NULL, FALSE,
-                             G_FILE_CREATE_PRIVATE | G_FILE_CREATE_REPLACE_DESTINATION,
+                             G_FILE_CREATE_REPLACE_DESTINATION,
                              NULL, cancellable, error);
   if (!success)
     {
@@ -275,7 +275,7 @@ purge_cache_files (EmerPersistentCache *self,
   GFile *seq_file = get_cache_file (self, SEQUENCE_SUFFIX);
   success =
     g_file_replace_contents (seq_file, "", 0, NULL, FALSE,
-                             G_FILE_CREATE_PRIVATE | G_FILE_CREATE_REPLACE_DESTINATION,
+                             G_FILE_CREATE_REPLACE_DESTINATION,
                              NULL, cancellable, error);
   if (!success)
     {
@@ -385,7 +385,7 @@ reset_boot_offset_metafile (EmerPersistentCache *self,
   GError *error = NULL;
   GFileOutputStream *unused_stream =
     g_file_replace (meta_file, NULL, FALSE,
-                    G_FILE_CREATE_PRIVATE | G_FILE_CREATE_REPLACE_DESTINATION,
+                    G_FILE_CREATE_REPLACE_DESTINATION,
                     NULL, &error);
   g_object_unref (meta_file);
   if (unused_stream == NULL)
@@ -988,7 +988,7 @@ write_variant_string_to_file (EmerPersistentCache *self,
 {
   GError *error = NULL;
   GFileOutputStream *stream = g_file_append_to (file,
-                                                G_FILE_CREATE_PRIVATE,
+                                                G_FILE_CREATE_NONE,
                                                 NULL,
                                                 &error);
   if (stream == NULL)
@@ -1311,7 +1311,7 @@ apply_cache_versioning (EmerPersistentCache *self,
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  if (g_mkdir_with_parents (priv->cache_directory, 02770) != 0)
+  if (g_mkdir_with_parents (priv->cache_directory, 02774) != 0)
     {
       const gchar *err_str = g_strerror (errno); // Don't free.
       g_critical ("Failed to create directory: %s . Error: %s.",

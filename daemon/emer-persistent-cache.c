@@ -53,6 +53,7 @@ typedef struct _EmerPersistentCachePrivate
 
   guint boot_offset_update_timeout_source_id;
 
+  gchar *cache_directory;
   gchar *boot_metafile_path;
 
   gint64 boot_offset;
@@ -112,18 +113,11 @@ G_DEFINE_TYPE_WITH_CODE (EmerPersistentCache, emer_persistent_cache, G_TYPE_OBJE
  */
 #define SYSTEM_BOOT_ID_FILE "/proc/sys/kernel/random/boot_id"
 
-/*
- * The directory metrics and their meta-file are saved to.
- * Is listed in all caps because it should be treated as though
- * it were immutable by production code.  Only testing code should
- * ever alter this variable.
- */
-static gchar *CACHE_DIRECTORY = PERSISTENT_CACHE_DIR;
-
 G_LOCK_DEFINE_STATIC (update_boot_offset);
 
 enum {
   PROP_0,
+  PROP_CACHE_DIRECTORY,
   PROP_MAX_CACHE_SIZE,
   PROP_BOOT_ID_PROVIDER,
   PROP_CACHE_VERSION_PROVIDER,
@@ -221,10 +215,13 @@ get_system_boot_id (EmerPersistentCache *self,
  * file ending or metafile ending given to it as path_ending.
  */
 static GFile *
-get_cache_file (gchar *path_ending)
+get_cache_file (EmerPersistentCache *self,
+                gchar               *path_ending)
 {
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
   gchar *path;
-  path = g_strconcat (CACHE_DIRECTORY, CACHE_PREFIX, path_ending, NULL);
+  path = g_strconcat (priv->cache_directory, CACHE_PREFIX, path_ending, NULL);
   GFile *file = g_file_new_for_path (path);
   g_free (path);
   return file;
@@ -241,7 +238,7 @@ purge_cache_files (EmerPersistentCache *self,
                    GCancellable        *cancellable,
                    GError             **error)
 {
-  GFile *ind_file = get_cache_file (INDIVIDUAL_SUFFIX);
+  GFile *ind_file = get_cache_file (self, INDIVIDUAL_SUFFIX);
   gboolean success =
     g_file_replace_contents (ind_file, "", 0, NULL, FALSE,
                              G_FILE_CREATE_PRIVATE | G_FILE_CREATE_REPLACE_DESTINATION,
@@ -258,7 +255,7 @@ purge_cache_files (EmerPersistentCache *self,
     }
   g_object_unref (ind_file);
 
-  GFile *agg_file = get_cache_file (AGGREGATE_SUFFIX);
+  GFile *agg_file = get_cache_file (self, AGGREGATE_SUFFIX);
   success =
     g_file_replace_contents (agg_file, "", 0, NULL, FALSE,
                              G_FILE_CREATE_PRIVATE | G_FILE_CREATE_REPLACE_DESTINATION,
@@ -275,7 +272,7 @@ purge_cache_files (EmerPersistentCache *self,
     }
   g_object_unref (agg_file);
 
-  GFile *seq_file = get_cache_file (SEQUENCE_SUFFIX);
+  GFile *seq_file = get_cache_file (self, SEQUENCE_SUFFIX);
   success =
     g_file_replace_contents (seq_file, "", 0, NULL, FALSE,
                              G_FILE_CREATE_PRIVATE | G_FILE_CREATE_REPLACE_DESTINATION,
@@ -725,7 +722,7 @@ drain_metrics_file (EmerPersistentCache *self,
                     gchar               *variant_type)
 {
   GError *error = NULL;
-  GFile *file = get_cache_file (path_ending);
+  GFile *file = get_cache_file (self, path_ending);
   GFileInputStream *file_stream = g_file_read (file, NULL, &error);
 
   if (file_stream == NULL)
@@ -1056,7 +1053,7 @@ store_singulars (EmerPersistentCache *self,
   gboolean write_successful = TRUE;
   if (i > 0)
     {
-      GFile *singulars_file = get_cache_file (INDIVIDUAL_SUFFIX);
+      GFile *singulars_file = get_cache_file (self, INDIVIDUAL_SUFFIX);
       write_successful =
         write_variant_string_to_file (self, singulars_file, variant_string);
       g_object_unref (singulars_file);
@@ -1098,7 +1095,7 @@ store_aggregates (EmerPersistentCache *self,
   gboolean write_successful = TRUE;
   if (i > 0)
     {
-      GFile *aggregate_file = get_cache_file (AGGREGATE_SUFFIX);
+      GFile *aggregate_file = get_cache_file (self, AGGREGATE_SUFFIX);
       write_successful =
         write_variant_string_to_file (self, aggregate_file, variant_string);
       g_object_unref (aggregate_file);
@@ -1140,7 +1137,7 @@ store_sequences (EmerPersistentCache *self,
   gboolean write_successful = TRUE;
   if (i > 0)
     {
-      GFile *sequences_file = get_cache_file (SEQUENCE_SUFFIX);
+      GFile *sequences_file = get_cache_file (self, SEQUENCE_SUFFIX);
       write_successful =
         write_variant_string_to_file (self, sequences_file, variant_string);
       g_object_unref (sequences_file);
@@ -1237,7 +1234,7 @@ load_cache_size (EmerPersistentCache *self,
                  GCancellable        *cancellable,
                  GError             **error)
 {
-  GFile *singular_file = get_cache_file (INDIVIDUAL_SUFFIX);
+  GFile *singular_file = get_cache_file (self, INDIVIDUAL_SUFFIX);
   guint64 singular_disk_used;
   gboolean success = g_file_measure_disk_usage (singular_file,
                                                 G_FILE_MEASURE_REPORT_ANY_ERROR,
@@ -1253,7 +1250,7 @@ load_cache_size (EmerPersistentCache *self,
   guint64 aggregate_disk_used;
   if (success)
     {
-      GFile *aggregate_file = get_cache_file (AGGREGATE_SUFFIX);
+      GFile *aggregate_file = get_cache_file (self, AGGREGATE_SUFFIX);
       success = g_file_measure_disk_usage (aggregate_file,
                                            G_FILE_MEASURE_REPORT_ANY_ERROR,
                                            NULL,
@@ -1269,7 +1266,7 @@ load_cache_size (EmerPersistentCache *self,
   guint64 sequence_disk_used;
   if (success)
     {
-      GFile *sequence_file = get_cache_file (SEQUENCE_SUFFIX);
+      GFile *sequence_file = get_cache_file (self, SEQUENCE_SUFFIX);
       success = g_file_measure_disk_usage (sequence_file,
                                            G_FILE_MEASURE_REPORT_ANY_ERROR,
                                            NULL,
@@ -1311,19 +1308,19 @@ apply_cache_versioning (EmerPersistentCache *self,
                         GCancellable        *cancellable,
                         GError             **error)
 {
-  if (g_mkdir_with_parents (CACHE_DIRECTORY, 02770) != 0)
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  if (g_mkdir_with_parents (priv->cache_directory, 02770) != 0)
     {
       const gchar *err_str = g_strerror (errno); // Don't free.
       g_critical ("Failed to create directory: %s . Error: %s.",
-                  CACHE_DIRECTORY, err_str);
+                  priv->cache_directory, err_str);
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
                    "Failed to create directory: %s . Error: %s.",
-                   CACHE_DIRECTORY, err_str);
+                   priv->cache_directory, err_str);
       return FALSE;
     }
-
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
 
   gint old_version;
   gboolean read_success =
@@ -1360,6 +1357,15 @@ apply_cache_versioning (EmerPersistentCache *self,
     }
 
   return TRUE;
+}
+
+static void
+set_cache_directory (EmerPersistentCache *self,
+                     const gchar         *directory)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+  priv->cache_directory = g_strdup (directory);
 }
 
 static void
@@ -1419,6 +1425,10 @@ emer_persistent_cache_set_property (GObject      *object,
 
   switch (property_id)
     {
+    case PROP_CACHE_DIRECTORY:
+      set_cache_directory (self, g_value_get_string (value));
+      break;
+
     case PROP_MAX_CACHE_SIZE:
       set_max_cache_size (self, g_value_get_uint64 (value));
       break;
@@ -1453,8 +1463,19 @@ emer_persistent_cache_finalize (GObject *object)
   g_object_unref (priv->cache_version_provider);
   g_free (priv->boot_metafile_path);
   g_key_file_unref (priv->boot_offset_key_file);
+  g_free (priv->cache_directory);
 
   G_OBJECT_CLASS (emer_persistent_cache_parent_class)->finalize (object);
+}
+
+static void
+emer_persistent_cache_constructed (GObject *self)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (EMER_PERSISTENT_CACHE (self));
+  priv->boot_metafile_path = g_strconcat (priv->cache_directory,
+                                          BOOT_OFFSET_METAFILE,
+                                          NULL);
 }
 
 static void
@@ -1464,6 +1485,14 @@ emer_persistent_cache_class_init (EmerPersistentCacheClass *klass)
 
   object_class->set_property = emer_persistent_cache_set_property;
   object_class->finalize = emer_persistent_cache_finalize;
+  object_class->constructed = emer_persistent_cache_constructed;
+
+  /* Blurb string is good enough default documentation for this. */
+  emer_persistent_cache_props[PROP_CACHE_DIRECTORY] =
+    g_param_spec_string ("cache-directory", "Cache directory",
+                         "The directory to save metrics and metadata in.",
+                         PERSISTENT_CACHE_DIR,
+                         G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   /* Blurb string is good enough default documentation for this. */
   emer_persistent_cache_props[PROP_MAX_CACHE_SIZE] =
@@ -1510,8 +1539,6 @@ emer_persistent_cache_init (EmerPersistentCache *self)
     emer_persistent_cache_get_instance_private (self);
   priv->cache_size = 0L;
   priv->capacity = CAPACITY_LOW;
-  priv->boot_metafile_path = g_strconcat (CACHE_DIRECTORY, BOOT_OFFSET_METAFILE,
-                                          NULL);
   priv->boot_offset_key_file = g_key_file_new ();
 }
 
@@ -1554,16 +1581,16 @@ emer_persistent_cache_new (GCancellable *cancellable,
 EmerPersistentCache *
 emer_persistent_cache_new_full (GCancellable             *cancellable,
                                 GError                  **error,
-                                gchar                    *custom_directory,
+                                const gchar              *custom_directory,
                                 guint64                   custom_cache_size,
                                 EmerBootIdProvider       *boot_id_provider,
                                 EmerCacheVersionProvider *cache_version_provider,
                                 guint                     boot_offset_update_interval)
 {
-  CACHE_DIRECTORY = custom_directory;
   return g_initable_new (EMER_TYPE_PERSISTENT_CACHE,
                          cancellable,
                          error,
+                         "cache-directory", custom_directory,
                          "max-cache-size", custom_cache_size,
                          "boot-id-provider", boot_id_provider,
                          "cache-version-provider", cache_version_provider,

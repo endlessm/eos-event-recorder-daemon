@@ -5,6 +5,7 @@
 #include "emer-machine-id-provider.h"
 
 #include <glib.h>
+#include <glib/gstdio.h>
 #include <gio/gio.h>
 #include <uuid/uuid.h>
 
@@ -51,12 +52,27 @@ unhyphenate_uuid (gchar *uuid_with_hyphens)
                           uuid_with_hyphens + 19, uuid_with_hyphens + 24);
 }
 
+static void
+setup (gboolean     *unused,
+       gconstpointer dontuseme)
+{
+  g_unlink (TESTING_FILE_PATH);
+  write_testing_machine_id ();
+}
+
+static void
+teardown (gboolean     *unused,
+          gconstpointer dontuseme)
+{
+  g_unlink (TESTING_FILE_PATH);
+}
+
 // Testing Cases
 
 static void
-test_machine_id_provider_new_succeeds (void)
+test_machine_id_provider_new_succeeds (gboolean     *unused,
+                                       gconstpointer dontuseme)
 {
-  write_testing_machine_id ();
   EmerMachineIdProvider *id_provider =
     emer_machine_id_provider_new ();
   g_assert (id_provider != NULL);
@@ -64,9 +80,9 @@ test_machine_id_provider_new_succeeds (void)
 }
 
 static void
-test_machine_id_provider_can_get_id (void)
+test_machine_id_provider_can_get_id (gboolean     *unused,
+                                     gconstpointer dontuseme)
 {
-  write_testing_machine_id ();
   EmerMachineIdProvider *id_provider =
     emer_machine_id_provider_new_full (TESTING_FILE_PATH);
   uuid_t id;
@@ -83,12 +99,17 @@ int
 main (int                argc,
       const char * const argv[])
 {
+// We are using a gboolean as a fixture type, but it will go unused.
+#define ADD_CACHE_TEST_FUNC(path, func) \
+  g_test_add((path), gboolean, NULL, setup, (func), teardown)
+
   g_test_init (&argc, (char ***) &argv, NULL);
 
-  g_test_add_func ("/machine-id-provider/new-succeeds",
-                   test_machine_id_provider_new_succeeds);
-  g_test_add_func ("/machine-id-provider/can-get-id",
-                   test_machine_id_provider_can_get_id);
+  ADD_CACHE_TEST_FUNC ("/machine-id-provider/new-succeeds",
+                       test_machine_id_provider_new_succeeds);
+  ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-get-id",
+                       test_machine_id_provider_can_get_id);
 
+#undef ADD_CACHE_TEST_FUNC
   return g_test_run ();
 }

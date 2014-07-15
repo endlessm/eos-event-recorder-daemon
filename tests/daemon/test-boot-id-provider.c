@@ -59,6 +59,10 @@ static void
 teardown (struct Fixture *fixture,
           gconstpointer   unused)
 {
+  gchar *path = g_file_get_path (fixture->tmp_file);
+  g_unlink (path);
+  g_free (path);
+
   g_object_unref (fixture->tmp_file);
   g_object_unref (fixture->id_provider);
 }

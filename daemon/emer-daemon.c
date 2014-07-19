@@ -702,6 +702,9 @@ flush_to_persistent_cache (EmerDaemon *self)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
+  if (!priv->recording_enabled)
+    return;
+
   g_mutex_lock (&priv->singular_buffer_lock);
   g_mutex_lock (&priv->aggregate_buffer_lock);
   g_mutex_lock (&priv->sequence_buffer_lock);

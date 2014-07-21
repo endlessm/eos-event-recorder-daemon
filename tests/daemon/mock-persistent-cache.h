@@ -20,7 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MOCK_PESISTENT_CACHE_H
+#ifndef MOCK_PERSISTENT_CACHE_H
 #define MOCK_PERSISTENT_CACHE_H
 
 #include <glib-object.h>

@@ -111,7 +111,8 @@ tests_daemon_test_persistent_cache_SOURCES = \
 	daemon/emer-persistent-cache.c daemon/emer-persistent-cache.h \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
 	daemon/emer-cache-size-provider.c daemon/emer-cache-size-provider.h \
-	daemon/emer-cache-version-provider.c daemon/emer-cache-version-provider.h \
+	tests/daemon/mock-cache-version-provider.c \
+	daemon/emer-cache-version-provider.h \
 	tests/daemon/mock-circular-file.c daemon/emer-circular-file.h \
 	shared/metrics-util.c shared/metrics-util.h \
 	$(NULL)

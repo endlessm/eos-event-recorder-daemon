@@ -302,6 +302,7 @@ emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self)
                   "Returning default value. Message: %s.",
                   DAEMON_ENABLED_GROUP_NAME, DAEMON_ENABLED_KEY_NAME,
                   error->message);
+      g_error_free (error);
       /* retval is FALSE in case of error */
     }
 

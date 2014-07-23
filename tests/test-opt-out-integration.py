@@ -1,6 +1,5 @@
 import dbus
 import subprocess
-import time
 import unittest
 
 import dbusmock
@@ -26,8 +25,9 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         """Start the event recorder on the mock system bus."""
         self.daemon = subprocess.Popen('./eos-metrics-event-recorder')
 
-        # FIXME find a better way to wait for the service to come up
-        time.sleep(1)
+        # Wait for the service to come up
+        self.wait_for_bus_object('com.endlessm.Metrics',
+            '/com/endlessm/Metrics', system_bus=True)
 
         # Spawn an external process for polkit authorization
         (self.polkit_popen, self.polkit_obj) = self.spawn_server_template('polkitd',

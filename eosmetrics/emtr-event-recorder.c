@@ -278,6 +278,7 @@ send_event_to_dbus (EmtrEventRecorderPrivate *priv,
   gboolean has_payload = auxiliary_payload != NULL;
   GVariant *maybe_auxiliary_payload = has_payload ?
     g_variant_new_variant (auxiliary_payload) : priv->empty_auxiliary_payload;
+
   if (is_aggregate)
     {
       emer_event_recorder_server_call_record_aggregate_event (priv->dbus_proxy,
@@ -315,7 +316,7 @@ send_event_sequence_to_dbus (EmtrEventRecorderPrivate *priv,
 {
   GVariantBuilder event_sequence_builder;
   g_variant_builder_init (&event_sequence_builder, G_VARIANT_TYPE ("a(xbv)"));
-  for (int i = 0; i < event_sequence->len; i++)
+  for (gint i = 0; i < event_sequence->len; i++)
     {
       GVariant *current = g_array_index (event_sequence, GVariant *, i);
       g_variant_builder_add_value (&event_sequence_builder, current);
@@ -595,10 +596,10 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
   append_event_to_sequence (priv, event_sequence, relative_time,
                             auxiliary_payload);
 
-  if (G_UNLIKELY (!g_hash_table_insert (priv->events_by_id_with_key,
-                                        event_id_with_key, event_sequence)))
+  if (!g_hash_table_insert (priv->events_by_id_with_key, event_id_with_key,
+                            event_sequence))
     {
-      if (G_LIKELY (key != NULL))
+      if (key != NULL)
         {
           gchar *key_as_string = g_variant_print (key, TRUE);
           g_variant_unref (key);
@@ -622,7 +623,7 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
       goto finally;
     }
 
-  if (G_LIKELY (key != NULL))
+  if (key != NULL)
     g_variant_unref (key);
 
 finally:
@@ -690,7 +691,7 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
 
   if (event_sequence == NULL)
     {
-      if (G_LIKELY (key != NULL))
+      if (key != NULL)
         {
           gchar *key_as_string = g_variant_print (key, TRUE);
           g_variant_unref (key);
@@ -714,7 +715,7 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
       goto finally;
     }
 
-  if (G_LIKELY (key != NULL))
+  if (key != NULL)
     g_variant_unref (key);
 
   auxiliary_payload = get_normalized_form_of_variant (auxiliary_payload);
@@ -785,7 +786,7 @@ emtr_event_recorder_record_stop (EmtrEventRecorder *self,
   if (event_sequence == NULL)
     {
       g_variant_unref (event_id_with_key);
-      if (G_LIKELY (key != NULL))
+      if (key != NULL)
         {
           gchar *key_as_string = g_variant_print (key, TRUE);
           g_variant_unref (key);
@@ -809,7 +810,7 @@ emtr_event_recorder_record_stop (EmtrEventRecorder *self,
       goto finally;
     }
 
-  if (G_LIKELY (key != NULL))
+  if (key != NULL)
     g_variant_unref (key);
 
   auxiliary_payload = get_normalized_form_of_variant (auxiliary_payload);

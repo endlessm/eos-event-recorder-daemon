@@ -439,6 +439,9 @@ emtr_event_recorder_record_event (EmtrEventRecorder *self,
                       relative_time,
                       FALSE, // Is not aggregate.
                       0); // Ignored: num_events
+
+  if (auxiliary_payload != NULL)
+    g_variant_unref (auxiliary_payload);
 }
 
 /**
@@ -507,6 +510,9 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
                       relative_time,
                       TRUE, // Is aggregate.
                       num_events);
+
+  if (auxiliary_payload != NULL)
+    g_variant_unref (auxiliary_payload);
 }
 
 /**
@@ -595,6 +601,8 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
                                               sizeof (GVariant *), 2);
   append_event_to_sequence (priv, event_sequence, relative_time,
                             auxiliary_payload);
+  if (auxiliary_payload != NULL)
+    g_variant_unref (auxiliary_payload);
 
   if (!g_hash_table_insert (priv->events_by_id_with_key, event_id_with_key,
                             event_sequence))
@@ -723,6 +731,9 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
   append_event_to_sequence (priv, event_sequence, relative_time,
                             auxiliary_payload);
 
+  if (auxiliary_payload != NULL)
+    g_variant_unref (auxiliary_payload);
+
 finally:
   g_mutex_unlock (&(priv->events_by_id_with_key_lock));
 }
@@ -817,6 +828,9 @@ emtr_event_recorder_record_stop (EmtrEventRecorder *self,
 
   append_event_to_sequence (priv, event_sequence, relative_time,
                             auxiliary_payload);
+
+  if (auxiliary_payload != NULL)
+    g_variant_unref (auxiliary_payload);
 
   GVariant *event_id_variant = g_variant_get_child_value (event_id_with_key, 0);
   send_event_sequence_to_dbus (priv, event_id_variant, event_sequence);

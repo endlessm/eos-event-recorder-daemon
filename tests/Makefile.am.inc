@@ -7,6 +7,7 @@ noinst_PROGRAMS = \
     tests/daemon/test-cache-version-provider \
 	tests/daemon/test-daemon \
 	tests/daemon/test-machine-id-provider \
+	tests/daemon/test-network-send-provider \
 	tests/daemon/test-permissions-provider \
 	tests/daemon/test-persistent-cache \
 	$(NULL)
@@ -88,6 +89,13 @@ tests_daemon_test_machine_id_provider_SOURCES = \
 tests_daemon_test_machine_id_provider_CPPFLAGS = $(DAEMON_TEST_FLAGS)
 tests_daemon_test_machine_id_provider_LDADD = $(DAEMON_TEST_LIBS)
 
+tests_daemon_test_network_send_provider_SOURCES = \
+	daemon/emer-network-send-provider.c daemon/emer-network-send-provider.h \
+	tests/daemon/test-network-send-provider.c \
+	$(NULL)
+tests_daemon_test_network_send_provider_CPPFLAGS = $(DAEMON_TEST_FLAGS)
+tests_daemon_test_network_send_provider_LDADD = $(DAEMON_TEST_LIBS)
+
 tests_daemon_test_permissions_provider_SOURCES = \
 	tests/daemon/test-permissions-provider.c \
 	daemon/emer-permissions-provider.c daemon/emer-permissions-provider.h \
@@ -125,6 +133,7 @@ TESTS = \
 	tests/daemon/test-cache-version-provider \
 	tests/daemon/test-daemon \
 	tests/daemon/test-machine-id-provider \
+	tests/daemon/test-network-send-provider \
 	tests/daemon/test-persistent-cache \
 	tests/daemon/test-permissions-provider \
 	$(javascript_tests) \
@@ -136,6 +145,7 @@ TESTS = \
 	tests/test-event-types \
 	tests/daemon/test-boot-id-provider \
 	tests/daemon/test-machine-id-provider \
+	tests/daemon/test-network-send-provider \
 	tests/daemon/test-persistent-cache \
 	tests/daemon/test-permissions-provider \
 	$(javascript_tests) \

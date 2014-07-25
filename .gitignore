@@ -1,11 +1,11 @@
 # Build products
 eos-metrics-0.0.0
 /eosmetrics-0.pc
-/tests/test-library.dbus
+/tests/test-library.dbuseventrecorder
 /tests/test-event-types
 /tests/daemon/test-boot-id-provider
 /tests/daemon/test-cache-version-provider
-/tests/daemon/test-daemon
+/tests/daemon/test-daemon.dbusdaemon
 /tests/daemon/test-machine-id-provider
 /tests/daemon/test-network-send-provider
 /tests/daemon/test-permissions-provider

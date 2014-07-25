@@ -23,15 +23,20 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
 
     def setUp(self):
         """Start the event recorder on the mock system bus."""
+
+        # Put polkitd and logind mocks onto the mock system bus
+        (self.login_popen, self.login_obj) = self.spawn_server_template('logind',
+            parameters={'IdleSinceHint': 0})
+        # FIXME: Specifying IdleSinceHint is a workaround for a bug in
+        # python-dbusmock:
+        # https://bugs.launchpad.net/python-dbusmock/+bug/1348437
+        (self.polkit_popen, self.polkit_obj) = self.spawn_server_template('polkitd')
+
         self.daemon = subprocess.Popen('./eos-metrics-event-recorder')
 
         # Wait for the service to come up
         self.wait_for_bus_object('com.endlessm.Metrics',
             '/com/endlessm/Metrics', system_bus=True)
-
-        # Spawn an external process for polkit authorization
-        (self.polkit_popen, self.polkit_obj) = self.spawn_server_template('polkitd',
-            stdout=subprocess.PIPE)
 
         metrics_object = self.dbus_con.get_object('com.endlessm.Metrics',
             '/com/endlessm/Metrics')
@@ -39,8 +44,11 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
 
     def tearDown(self):
         self.polkit_popen.terminate()
+        self.login_popen.terminate()
         self.daemon.terminate()
+
         self.polkit_popen.wait()
+        self.login_popen.wait()
         self.assertEquals(self.daemon.wait(), 0)
 
     def test_opt_out_readable(self):

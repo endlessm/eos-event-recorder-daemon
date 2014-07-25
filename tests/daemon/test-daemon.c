@@ -12,6 +12,7 @@
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <uuid/uuid.h>
+#include <signal.h>
 #include "shared/metrics-util.h"
 
 #define MEANINGLESS_EVENT "350ac4ff-3026-4c25-9e7e-e8103b4fd5d8"
@@ -26,6 +27,14 @@ typedef struct
   EmerDaemon *test_object;
   EmerPermissionsProvider *mock_permissions_prov;
   EmerPersistentCache *mock_persistent_cache;
+
+  /* Mock logind service */
+  GSubprocess *logind_mock;
+
+  /* Only used during setup() */
+  guint watcher_id;
+  guint watcher_timeout_id;
+  GMainLoop *watcher_loop;
 } Fixture;
 
 // Helper methods first:
@@ -66,12 +75,68 @@ make_event_values_gvariant (void)
   return g_variant_new ("a(xbv)", &builder);
 }
 
+static void
+on_logind_name_appeared (GDBusConnection *connection,
+                         const gchar     *name,
+                         const gchar     *owner,
+                         Fixture         *fixture)
+{
+  g_source_remove (fixture->watcher_timeout_id);
+  g_bus_unwatch_name (fixture->watcher_id);
+  g_main_loop_quit (fixture->watcher_loop);
+}
+
+static gboolean
+on_logind_name_timeout (Fixture *fixture)
+{
+  g_assert_not_reached ();
+}
+
+static void
+start_mock_logind_service_and_wait (Fixture *fixture)
+{
+  fixture->logind_mock = g_subprocess_new (G_SUBPROCESS_FLAGS_NONE, NULL,
+                                           "python", "-m", "dbusmock",
+                                           "--system", "--template", "logind",
+                                           NULL);
+  g_assert_nonnull (fixture->logind_mock);
+
+  fixture->watcher_id = g_bus_watch_name (G_BUS_TYPE_SYSTEM,
+                                          "org.freedesktop.login1",
+                                          G_BUS_NAME_WATCHER_FLAGS_NONE,
+                                          (GBusNameAppearedCallback) on_logind_name_appeared,
+                                          NULL,
+                                          fixture, NULL);
+  fixture->watcher_timeout_id =
+    g_timeout_add_seconds (5, (GSourceFunc) on_logind_name_timeout, NULL);
+  fixture->watcher_loop = g_main_loop_new (NULL, FALSE);
+  g_main_loop_run (fixture->watcher_loop);
+
+  g_main_loop_unref (fixture->watcher_loop);
+}
+
+static void
+terminate_mock_logind_service_and_wait (Fixture *fixture)
+{
+  GError *error = NULL;
+
+  g_subprocess_send_signal (fixture->logind_mock, SIGTERM);
+
+  /* Make sure it was the SIGTERM that finished the process, and not something
+  else. */
+  g_assert_false (g_subprocess_wait_check (fixture->logind_mock, NULL, &error));
+  g_assert_error (error, G_SPAWN_ERROR, G_SPAWN_ERROR_FAILED);
+  g_assert_cmpstr (error->message, ==, "Child process killed by signal 15");
+}
+
 // Setup/Teardown functions next:
 
 static void
 setup (Fixture      *fixture,
        gconstpointer unused)
 {
+  start_mock_logind_service_and_wait (fixture);
+
   EmerMachineIdProvider *id_prov =
     emer_machine_id_provider_new_full (MACHINE_ID_PATH);
   fixture->mock_permissions_prov = emer_permissions_provider_new ();
@@ -95,12 +160,16 @@ teardown (Fixture      *fixture,
   g_object_unref (fixture->mock_permissions_prov);
   g_object_unref (fixture->mock_persistent_cache);
   g_unlink (MACHINE_ID_PATH);
+
+  terminate_mock_logind_service_and_wait (fixture);
+  g_object_unref (fixture->logind_mock);
 }
 
 // Unit Tests next:
 
 static void
-test_daemon_new_succeeds (void)
+test_daemon_new_succeeds (Fixture      *fixture,
+                          gconstpointer unused)
 {
   EmerDaemon *daemon = emer_daemon_new ("test");
   g_assert (daemon != NULL);
@@ -221,11 +290,10 @@ main (int                argc,
 {
   g_test_init (&argc, (char ***) &argv, NULL);
 
-  g_test_add_func ("/daemon/new-succeeds", test_daemon_new_succeeds);
-
 #define ADD_DAEMON_TEST(path, test_func) \
   g_test_add ((path), Fixture, NULL, setup, (test_func), teardown)
 
+  ADD_DAEMON_TEST ("/daemon/new-succeeds", test_daemon_new_succeeds);
   ADD_DAEMON_TEST ("/daemon/new-full-succeeds",
                    test_daemon_new_full_succeeds);
   ADD_DAEMON_TEST ("/daemon/can-record-singular-event",

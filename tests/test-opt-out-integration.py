@@ -41,6 +41,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         self.polkit_popen.terminate()
         self.daemon.terminate()
         self.polkit_popen.wait()
+        self.assertEquals(self.daemon.wait(), 0)
 
     def test_opt_out_readable(self):
         """Make sure the Enabled property exists."""

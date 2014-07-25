@@ -123,7 +123,6 @@ EXTRA_DIST += $(javascript_tests)
 dist_noinst_SCRIPTS = tests/launch-mock-dbus-tests.sh
 
 # Run tests when running 'make check'
-if ENABLE_LOGIN_TESTS
 TESTS = \
 	tests/test-library.dbus \
 	tests/test-daemon-integration.py \
@@ -138,19 +137,6 @@ TESTS = \
 	tests/daemon/test-permissions-provider \
 	$(javascript_tests) \
 	$(NULL)
-else
-TESTS = \
-	tests/test-library.dbus \
-	tests/test-daemon-integration.py \
-	tests/test-event-types \
-	tests/daemon/test-boot-id-provider \
-	tests/daemon/test-machine-id-provider \
-	tests/daemon/test-network-send-provider \
-	tests/daemon/test-persistent-cache \
-	tests/daemon/test-permissions-provider \
-	$(javascript_tests) \
-	$(NULL)
-endif
 
 TEST_EXTENSIONS = .dbus .js .py
 JS_LOG_COMPILER = eos-run-test

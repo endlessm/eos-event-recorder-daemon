@@ -27,7 +27,6 @@ AM_DISTCHECK_CONFIGURE_FLAGS = \
 	--enable-gir-doc \
 	--enable-strict-flags \
 	--with-systemdsystemunitdir=$(libdir)/systemd \
-	--disable-login-tests \
 	$(NULL)
 
 # Generated files that 'make clean' should erase

@@ -1,6 +1,7 @@
 # Copyright 2013 Endless Mobile, Inc.
 
 noinst_PROGRAMS = \
+	tests/test-event-types \
 	tests/test-library.dbus \
 	tests/daemon/test-boot-id-provider \
     tests/daemon/test-cache-version-provider \
@@ -24,6 +25,20 @@ LIBRARY_TEST_LIBS = \
 tests_test_library_dbus_SOURCES = tests/test-event-recorder.c
 tests_test_library_dbus_CPPFLAGS = $(LIBRARY_TEST_FLAGS)
 tests_test_library_dbus_LDADD = $(LIBRARY_TEST_LIBS)
+
+EOSMETRICS_TEST_FLAGS = \
+	@EOSMETRICS_EVENT_RECORDER_CFLAGS@ \
+	-I$(top_srcdir) \
+	$(NULL)
+EOSMETRICS_TEST_LIBS = @EOSMETRICS_EVENT_RECORDER_LIBS@
+
+tests_test_event_types_SOURCES = \
+	eosmetrics/emtr-event-types.c eosmetrics/emtr-event-types.h \
+	eosmetrics/eosmetrics.h \
+	tests/test-event-types.c \
+	$(NULL)
+tests_test_event_types_CPPFLAGS = $(EOSMETRICS_TEST_FLAGS)
+tests_test_event_types_LDADD = $(EOSMETRICS_TEST_LIBS)
 
 DAEMON_TEST_FLAGS = \
 	@EOSMETRICS_EVENT_RECORDER_CFLAGS@ \
@@ -105,6 +120,7 @@ TESTS = \
 	tests/test-library.dbus \
 	tests/test-daemon-integration.py \
 	tests/test-opt-out-integration.py \
+	tests/test-event-types \
 	tests/daemon/test-boot-id-provider \
 	tests/daemon/test-cache-version-provider \
 	tests/daemon/test-daemon \
@@ -117,6 +133,7 @@ else
 TESTS = \
 	tests/test-library.dbus \
 	tests/test-daemon-integration.py \
+	tests/test-event-types \
 	tests/daemon/test-boot-id-provider \
 	tests/daemon/test-machine-id-provider \
 	tests/daemon/test-persistent-cache \

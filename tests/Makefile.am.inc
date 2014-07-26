@@ -70,6 +70,8 @@ tests_daemon_test_daemon_SOURCES = \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
 	daemon/emer-cache-version-provider.c daemon/emer-cache-version-provider.h \
 	daemon/emer-machine-id-provider.c daemon/emer-machine-id-provider.h \
+	tests/daemon/mock-network-send-provider.c \
+	daemon/emer-network-send-provider.h \
 	tests/daemon/mock-permissions-provider.c \
 	tests/daemon/mock-permissions-provider.h \
 	daemon/emer-permissions-provider.h \

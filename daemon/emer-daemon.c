@@ -19,6 +19,7 @@
 
 #include "emer-daemon.h"
 #include "emer-machine-id-provider.h"
+#include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
 #include "shared/metrics-util.h"
@@ -26,7 +27,7 @@
 /*
  * The version of this client's network protocol.
  */
-#define CLIENT_VERSION_NUMBER "0"
+#define CLIENT_VERSION_NUMBER "1"
 
 /* The URI of the metrics production proxy server. Is kept in a #define to
 prevent testing code from sending metrics to the production server. It ends
@@ -94,6 +95,7 @@ typedef struct _EmerDaemonPrivate {
   gchar *proxy_server_uri;
 
   EmerMachineIdProvider *machine_id_provider;
+  EmerNetworkSendProvider *network_send_provider;
   EmerPermissionsProvider *permissions_provider;
 
   EmerPersistentCache *persistent_cache;
@@ -130,6 +132,7 @@ enum
   PROP_NETWORK_SEND_INTERVAL,
   PROP_PROXY_SERVER_URI,
   PROP_MACHINE_ID_PROVIDER,
+  PROP_NETWORK_SEND_PROVIDER,
   PROP_PERMISSIONS_PROVIDER,
   PROP_PERSISTENT_CACHE,
   PROP_SINGULAR_BUFFER_LENGTH,
@@ -301,10 +304,11 @@ static GVariant *
 get_updated_request_body (EmerDaemon *self,
                           GVariant   *request_body)
 {
+  gint send_number;
   GVariantIter *machine_id_iter;
   GVariantIter *singulars_iter, *aggregates_iter, *sequences_iter;
-  g_variant_get (request_body, "(xxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))",
-                 NULL, NULL, &machine_id_iter, &singulars_iter,
+  g_variant_get (request_body, "(ixxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))",
+                 &send_number, NULL, NULL, &machine_id_iter, &singulars_iter,
                  &aggregates_iter, &sequences_iter);
 
   GVariantBuilder machine_id_builder;
@@ -342,7 +346,7 @@ get_updated_request_body (EmerDaemon *self,
     swap_bytes_64_if_big_endian (absolute_timestamp);
 
   GVariant *updated_request_body =
-    g_variant_new ("(xxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))",
+    g_variant_new ("(ixxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))", send_number,
                    little_endian_relative_timestamp,
                    little_endian_absolute_timestamp, &machine_id_builder,
                    &singulars_builder, &aggregates_builder, &sequences_builder);
@@ -356,6 +360,9 @@ handle_https_response (SoupSession         *https_session,
                        SoupMessage         *https_message,
                        NetworkCallbackData *callback_data)
 {
+  EmerDaemon *self = callback_data->daemon;
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
   guint status_code;
   g_object_get (https_message, "status-code", &status_code, NULL);
   if (SOUP_STATUS_IS_SUCCESSFUL (status_code))
@@ -368,9 +375,6 @@ handle_https_response (SoupSession         *https_session,
   g_object_get (https_message, "reason-phrase", &reason_phrase, NULL);
   g_warning ("Attempt to upload metrics failed: %s.", reason_phrase);
   g_free (reason_phrase);
-
-  EmerDaemon *self = callback_data->daemon;
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   if (++callback_data->attempt_num >= NETWORK_ATTEMPT_LIMIT)
     {
@@ -590,6 +594,12 @@ create_request_body (EmerDaemon *self)
   GVariantBuilder machine_id_builder;
   get_uuid_builder (machine_id, &machine_id_builder);
 
+  gint send_number;
+  if (!emer_network_send_provider_get_send_number (priv->network_send_provider,
+                                                   &send_number))
+    return NULL;
+  emer_network_send_provider_increment_send_number (priv->network_send_provider);
+
   GVariantBuilder singulars_builder;
   GVariantBuilder aggregates_builder;
   GVariantBuilder sequences_builder;
@@ -612,7 +622,7 @@ create_request_body (EmerDaemon *self)
     }
 
   GVariant *request_body =
-    g_variant_new ("(xxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))",
+    g_variant_new ("(ixxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))", send_number,
                    relative_timestamp, absolute_timestamp, &machine_id_builder,
                    &singulars_builder, &aggregates_builder, &sequences_builder);
 
@@ -936,6 +946,18 @@ set_machine_id_provider (EmerDaemon            *self,
 }
 
 static void
+set_network_send_provider (EmerDaemon *self,
+                           EmerNetworkSendProvider *network_send_prov)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  if (network_send_prov == NULL)
+    priv->network_send_provider = emer_network_send_provider_new ();
+  else
+    priv->network_send_provider = g_object_ref (network_send_prov);
+}
+
+static void
 set_permissions_provider (EmerDaemon              *self,
                           EmerPermissionsProvider *permissions_provider)
 {
@@ -1054,6 +1076,10 @@ emer_daemon_set_property (GObject      *object,
       set_machine_id_provider (self, g_value_get_object (value));
       break;
 
+    case PROP_NETWORK_SEND_PROVIDER:
+      set_network_send_provider (self, g_value_get_object (value));
+      break;
+
     case PROP_PERMISSIONS_PROVIDER:
       set_permissions_provider (self, g_value_get_object (value));
       break;
@@ -1094,6 +1120,7 @@ emer_daemon_finalize (GObject *object)
   g_rand_free (priv->rand);
   g_free (priv->proxy_server_uri);
   g_clear_object (&priv->machine_id_provider);
+  g_clear_object (&priv->network_send_provider);
   g_clear_object (&priv->permissions_provider);
   g_clear_object (&priv->persistent_cache);
   g_clear_object (&priv->ping_socket);
@@ -1156,6 +1183,21 @@ emer_daemon_class_init (EmerDaemonClass *klass)
     g_param_spec_object ("machine-id-provider", "Machine ID provider",
                          "Object providing machine ID",
                          EMER_TYPE_MACHINE_ID_PROVIDER,
+                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
+                         G_PARAM_STATIC_STRINGS);
+
+  /*
+   * EmerDaemon:network-send-provider:
+   *
+   * An #EmerNetworkSendProvider for getting and setting the network send
+   * metadata. If this property is not specified, the default network send
+   * provider will be used (from emer_network_send_provider_new()).
+   * You should only set this property to something else for testing purposes.
+   */
+  emer_daemon_props[PROP_NETWORK_SEND_PROVIDER] =
+    g_param_spec_object ("network-send-provider", "Network send provider",
+                         "Object providing network send metadata",
+                         EMER_TYPE_NETWORK_SEND_PROVIDER,
                          G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                          G_PARAM_STATIC_STRINGS);
 
@@ -1312,6 +1354,8 @@ emer_daemon_new (const gchar *environment)
  * @proxy_server_uri: URI to use
  * @machine_id_provider: (allow-none): The #EmerMachineIdProvider to supply the
  *   machine ID, or %NULL to use the default
+ * @network_send_provider: (allow-none): The #EmerNetworkSendProvider to supply
+ *   the network send metadata, or %NULL to use the default.
  * @permissions_provider: The #EmerPermissionsProvider to supply information
  *   about opting out of metrics collection
  * @persistent_cache: (allow-none): The #EmerPersistentCache in which to store
@@ -1332,6 +1376,7 @@ emer_daemon_new_full (GRand                   *rand,
                       guint                    network_send_interval,
                       const gchar             *proxy_server_uri,
                       EmerMachineIdProvider   *machine_id_provider,
+                      EmerNetworkSendProvider *network_send_provider,
                       EmerPermissionsProvider *permissions_provider,
                       EmerPersistentCache     *persistent_cache,
                       gint                     buffer_length)
@@ -1341,6 +1386,7 @@ emer_daemon_new_full (GRand                   *rand,
                        "network-send-interval", network_send_interval,
                        "proxy-server-uri", proxy_server_uri,
                        "machine-id-provider", machine_id_provider,
+                       "network-send-provider", network_send_provider,
                        "permissions-provider", permissions_provider,
                        "persistent-cache", persistent_cache,
                        "singular-buffer-length", buffer_length,

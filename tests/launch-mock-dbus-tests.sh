@@ -20,8 +20,8 @@ python -m dbusmock --system \
     /com/endlessm/Metrics \
     com.endlessm.Metrics.EventRecorderServer &
 
-# FIXME need a better way to wait for the service to come up
-sleep 1s
+# Wait for the service to come up
+python `dirname $0`/wait-for-service-helper.py
 
 gdbus call --system \
     -d com.endlessm.Metrics \

@@ -169,4 +169,5 @@ EXTRA_DIST += \
 	tests/test-opt-out-integration.py \
 	tests/smoke-tests/smoke.js \
 	tests/smoke-tests/event-types.js \
+	tests/wait-for-service-helper.py \
 	$(NULL)

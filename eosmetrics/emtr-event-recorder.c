@@ -365,13 +365,13 @@ emtr_event_recorder_new (void)
 EmtrEventRecorder *
 emtr_event_recorder_get_default (void)
 {
-  static EmtrEventRecorder *singleton;
-  G_LOCK_DEFINE_STATIC (singleton);
+  static EmtrEventRecorder *singleton = NULL;
 
-  G_LOCK (singleton);
-  if (singleton == NULL)
-    singleton = g_object_new (EMTR_TYPE_EVENT_RECORDER, NULL);
-  G_UNLOCK (singleton);
+  if (g_once_init_enter (&singleton))
+    {
+      EmtrEventRecorder *retval = g_object_new (EMTR_TYPE_EVENT_RECORDER, NULL);
+      g_once_init_leave (&singleton, retval);
+    }
 
   return singleton;
 }

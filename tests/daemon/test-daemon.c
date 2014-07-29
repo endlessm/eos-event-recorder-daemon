@@ -327,7 +327,7 @@ static void
 test_daemon_does_not_record_singular_event_if_not_allowed (Fixture      *fixture,
                                                            gconstpointer unused)
 {
-  guint num_calls =
+  gint num_calls =
     mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
@@ -336,38 +336,38 @@ test_daemon_does_not_record_singular_event_if_not_allowed (Fixture      *fixture
   /* FIXME: nothing can currently be asserted about whether the EmerDaemon tries
   to send its metrics, but at least we can confirm that it read the enabled
   property: */
-  g_assert_cmpuint (mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov),
-                    >=, num_calls + 1);
+  g_assert_cmpint (mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov),
+                   >=, num_calls + 1);
 }
 
 static void
 test_daemon_does_not_record_aggregate_event_if_not_allowed (Fixture      *fixture,
                                                             gconstpointer unused)
 {
-  guint num_calls =
+  gint num_calls =
     mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
   test_daemon_can_record_aggregate_events (fixture, unused);
 
   /* FIXME: See note above. */
-  g_assert_cmpuint (mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov),
-                    >=, num_calls + 1);
+  g_assert_cmpint (mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov),
+                   >=, num_calls + 1);
 }
 
 static void
 test_daemon_does_not_record_event_sequence_if_not_allowed (Fixture      *fixture,
                                                            gconstpointer unused)
 {
-  guint num_calls =
+  gint num_calls =
     mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
   test_daemon_can_record_event_sequence (fixture, unused);
 
   /* FIXME: See note above. */
-  g_assert_cmpuint (mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov),
-                    >=, num_calls + 1);
+  g_assert_cmpint (mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov),
+                   >=, num_calls + 1);
 }
 
 static void
@@ -382,7 +382,7 @@ static void
 test_daemon_flushes_to_persistent_cache_once_on_shutdown (Fixture      *fixture,
                                                           gconstpointer unused)
 {
-  guint num_calls =
+  gint num_calls =
     mock_persistent_cache_get_store_metrics_called (fixture->mock_persistent_cache);
 
   emit_shutdown_signal (TRUE);
@@ -391,8 +391,8 @@ test_daemon_flushes_to_persistent_cache_once_on_shutdown (Fixture      *fixture,
   while (g_main_context_pending (NULL))
     g_main_context_iteration (NULL, TRUE);
 
-  g_assert_cmpuint (mock_persistent_cache_get_store_metrics_called (fixture->mock_persistent_cache),
-                    ==, num_calls + 1);
+  g_assert_cmpint (mock_persistent_cache_get_store_metrics_called (fixture->mock_persistent_cache),
+                   ==, num_calls + 1);
 }
 
 static void

@@ -7,7 +7,7 @@
 
 typedef struct _EmerPersistentCachePrivate
 {
-  guint store_metrics_called;
+  gint store_metrics_called;
 } EmerPersistentCachePrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerPersistentCache, emer_persistent_cache,
@@ -90,7 +90,7 @@ emer_persistent_cache_store_metrics (EmerPersistentCache *self,
 /* API OF MOCK OBJECT */
 
 /* Return number of calls to emer_persistent_cache_store_metrics() */
-guint
+gint
 mock_persistent_cache_get_store_metrics_called (EmerPersistentCache *self)
 {
   EmerPersistentCachePrivate *priv =

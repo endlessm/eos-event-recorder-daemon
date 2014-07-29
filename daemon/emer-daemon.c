@@ -940,9 +940,9 @@ set_machine_id_provider (EmerDaemon            *self,
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   if (machine_id_prov == NULL)
-    machine_id_prov = emer_machine_id_provider_new ();
-
-  priv->machine_id_provider = g_object_ref (machine_id_prov);
+    priv->machine_id_provider = emer_machine_id_provider_new ();
+  else
+    priv->machine_id_provider = g_object_ref (machine_id_prov);
 }
 
 static void

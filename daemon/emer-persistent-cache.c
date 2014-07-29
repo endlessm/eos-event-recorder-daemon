@@ -896,6 +896,10 @@ emer_persistent_cache_drain_metrics (EmerPersistentCache  *self,
     {
       // The error has served its purpose in the previous call.
       g_error_free (error);
+
+      free_variant_list (*list_of_individual_metrics);
+      free_variant_list (*list_of_aggregate_metrics);
+      free_variant_list (*list_of_sequence_metrics);
       return FALSE;
     }
 

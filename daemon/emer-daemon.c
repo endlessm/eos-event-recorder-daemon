@@ -838,10 +838,12 @@ inhibit_shutdown (EmerDaemon *self)
       g_warning ("Error inhibiting shutdown. Login manager returned %d file "
                  "descriptors, but we expected 1 file descriptor.",
                  fd_list_length);
-      return;
+      goto finally;
     }
 
   priv->shutdown_inhibitor = fds[0];
+
+finally:
   g_free (fds);
 }
 

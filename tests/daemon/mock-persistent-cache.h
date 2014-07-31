@@ -11,7 +11,7 @@
 
 G_BEGIN_DECLS
 
-// TODO: Add any necessary extensions to the persistent cache API.
+gint mock_persistent_cache_get_store_metrics_called (EmerPersistentCache *self);
 
 G_END_DECLS
 

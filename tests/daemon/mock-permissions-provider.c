@@ -12,7 +12,7 @@ typedef struct _EmerPermissionsProviderPrivate
 {
   gboolean mock_daemon_enabled;
 
-  guint get_daemon_enabled_called;
+  gint get_daemon_enabled_called;
 } EmerPermissionsProviderPrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerPermissionsProvider, emer_permissions_provider, G_TYPE_OBJECT)
@@ -72,7 +72,7 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
 /* API OF MOCK OBJECT */
 
 /* Return number of calls to emer_permissions_provider_get_daemon_enabled() */
-guint
+gint
 mock_permissions_provider_get_daemon_enabled_called (EmerPermissionsProvider *self)
 {
   EmerPermissionsProviderPrivate *priv =

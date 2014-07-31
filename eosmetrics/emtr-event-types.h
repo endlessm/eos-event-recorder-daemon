@@ -33,12 +33,17 @@ EMTR_ALL_API_VERSIONS
 gboolean emtr_event_id_to_name (const gchar  *event_id,
                                 const gchar **event_name);
 
+#ifndef EMTR_DISABLE_DEPRECATED
 /**
  * EMTR_EVENT_USER_IS_LOGGED_IN:
  *
  * Started when a user logs in and stopped when that user logs out.
+ *
+ * Deprecated: 0.2: A newer version of this metric is defined in
+ * eos-metrics-instrumentation.c in the eos-metrics-instrumentation repo.
  */
 #define EMTR_EVENT_USER_IS_LOGGED_IN "ab839fd2-a927-456c-8c18-f1136722666b"
+#endif
 
 /**
  * EMTR_EVENT_NETWORK_STATUS_CHANGED:

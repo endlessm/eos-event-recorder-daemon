@@ -29,12 +29,21 @@ G_BEGIN_DECLS
  * ]|
  */
 
+EMTR_ALL_API_VERSIONS
+gboolean emtr_event_id_to_name (const gchar  *event_id,
+                                const gchar **event_name);
+
+#ifndef EMTR_DISABLE_DEPRECATED
 /**
  * EMTR_EVENT_USER_IS_LOGGED_IN:
  *
  * Started when a user logs in and stopped when that user logs out.
+ *
+ * Deprecated: 0.2: A newer version of this metric is defined in
+ * eos-metrics-instrumentation.c in the eos-metrics-instrumentation repo.
  */
 #define EMTR_EVENT_USER_IS_LOGGED_IN "ab839fd2-a927-456c-8c18-f1136722666b"
+#endif
 
 /**
  * EMTR_EVENT_NETWORK_STATUS_CHANGED:
@@ -51,7 +60,7 @@ G_BEGIN_DECLS
 
 /**
  * EMTR_EVENT_SHELL_APP_IS_OPEN:
- * 
+ *
  * Occurs when an application visible to the shell is opened or closed. The payload
  * varies depending on whether it is given as an opening event or a closed event.
  * If it is an opening event, the payload is a human-readable application name.
@@ -66,7 +75,7 @@ G_BEGIN_DECLS
  * This is started when the social bar is visible and stopped when hidden.
  */
 #define EMTR_EVENT_SOCIAL_BAR_IS_VISIBLE "9c33a734-7ed8-4348-9e39-3c27f4dc2e62"
- 
+
 /**
  * EMTR_EVENT_SHELL_APP_ADDED:
  *
@@ -77,7 +86,7 @@ G_BEGIN_DECLS
 /**
  * EMTR_EVENT_SHELL_APP_REMOVED:
  *
- * Occurs when an application is uninstalled, aka is removed from the desktop's app 
+ * Occurs when an application is uninstalled, aka is removed from the desktop's app
  * grid. This can happen via uninstalling in the app store or dragging / dropping an app to the
  * trash.
  */

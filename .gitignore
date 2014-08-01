@@ -1,11 +1,13 @@
 # Build products
 eos-metrics-0.0.0
 /eosmetrics-0.pc
-/tests/test-library.dbus
+/tests/test-library.dbuseventrecorder
+/tests/test-event-types
 /tests/daemon/test-boot-id-provider
 /tests/daemon/test-cache-version-provider
-/tests/daemon/test-daemon
+/tests/daemon/test-daemon.dbusdaemon
 /tests/daemon/test-machine-id-provider
+/tests/daemon/test-network-send-provider
 /tests/daemon/test-permissions-provider
 /tests/daemon/test-persistent-cache
 /EosMetrics-0.gir
@@ -19,7 +21,7 @@ eos-metrics-0.0.0
 /data/eos-metrics-event-recorder.service
 /data/com.endlessm.Metrics.service
 /data/eos-metrics-persistent-cache.conf
-/tools/eos-set-metrics-env
+/tools/eos-select-metrics-env
 
 # Test products
 *.log

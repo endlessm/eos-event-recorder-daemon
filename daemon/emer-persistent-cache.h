@@ -35,11 +35,6 @@ G_BEGIN_DECLS
                                                                          EmerPersistentCacheClass))
 
 /*
- * The location of the meta-file containing the local cache meta-data.
- */
-#define LOCAL_CACHE_VERSION_METAFILE "local_metafile"
-
-/*
  * The name of the meta-file containing the relative time, absolute time, and
  * boot id meta-data.
  */
@@ -132,7 +127,7 @@ gboolean             emer_persistent_cache_store_metrics       (EmerPersistentCa
  */
 EmerPersistentCache *emer_persistent_cache_new_full            (GCancellable             *cancellable,
                                                                 GError                  **error,
-                                                                gchar                    *custom_directory,
+                                                                const gchar              *custom_directory,
                                                                 guint64                   custom_cache_size,
                                                                 EmerBootIdProvider       *boot_id_provider,
                                                                 EmerCacheVersionProvider *version_provider,

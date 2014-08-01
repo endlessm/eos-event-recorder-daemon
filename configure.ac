@@ -192,14 +192,6 @@ AC_ARG_WITH([systemdsystemunitdir],
     [systemdsystemunitdir="$withval"])
 AC_SUBST([systemdsystemunitdir])
 
-# --disable-login-tests: Tests that use systemd-logind are enabled by default, but we are temporarily
-# disabling them on distcheck to workaround issues on Jenkins.
-AC_ARG_ENABLE([login-tests],
-    [AS_HELP_STRING([--disable-login-tests], [prevent login tests from being run by "make check"])],
-        [],
-        [enable_login_tests=yes])
-AM_CONDITIONAL([ENABLE_LOGIN_TESTS], [test "x$enable_login_tests" = xyes])
-
 # Required libraries
 # ------------------
 PKG_CHECK_MODULES([EOSMETRICS], [

@@ -7,7 +7,7 @@
 
 typedef struct _EmerPersistentCachePrivate
 {
-  gboolean foo;
+  gint store_metrics_called;
 } EmerPersistentCachePrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerPersistentCache, emer_persistent_cache,
@@ -33,7 +33,7 @@ emer_persistent_cache_new (GCancellable *cancellable,
 EmerPersistentCache *
 emer_persistent_cache_new_full (GCancellable             *cancellable,
                                 GError                  **error,
-                                gchar                    *custom_directory,
+                                const gchar              *custom_directory,
                                 guint64                   custom_cache_size,
                                 EmerBootIdProvider       *boot_id_provider,
                                 EmerCacheVersionProvider *version_provider,
@@ -74,9 +74,27 @@ emer_persistent_cache_store_metrics (EmerPersistentCache *self,
                                      gint                *num_sequences_stored,
                                      capacity_t          *capacity)
 {
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
   *num_singulars_stored = num_singulars_buffered;
   *num_aggregates_stored = num_aggregates_buffered;
   *num_sequences_stored = num_sequences_buffered;
   *capacity = CAPACITY_LOW;
+
+  priv->store_metrics_called++;
+
   return TRUE;
+}
+
+/* API OF MOCK OBJECT */
+
+/* Return number of calls to emer_persistent_cache_store_metrics() */
+gint
+mock_persistent_cache_get_store_metrics_called (EmerPersistentCache *self)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  return priv->store_metrics_called;
 }

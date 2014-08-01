@@ -26,7 +26,7 @@
 /*
  * The version of this client's network protocol.
  */
-#define CLIENT_VERSION_NUMBER "0"
+#define CLIENT_VERSION_NUMBER "1"
 
 /* The URI of the metrics production proxy server. Is kept in a #define to
 prevent testing code from sending metrics to the production server. It ends
@@ -702,6 +702,9 @@ flush_to_persistent_cache (EmerDaemon *self)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
+  if (!priv->recording_enabled)
+    return;
+
   g_mutex_lock (&priv->singular_buffer_lock);
   g_mutex_lock (&priv->aggregate_buffer_lock);
   g_mutex_lock (&priv->sequence_buffer_lock);
@@ -835,10 +838,12 @@ inhibit_shutdown (EmerDaemon *self)
       g_warning ("Error inhibiting shutdown. Login manager returned %d file "
                  "descriptors, but we expected 1 file descriptor.",
                  fd_list_length);
-      return;
+      goto finally;
     }
 
   priv->shutdown_inhibitor = fds[0];
+
+finally:
   g_free (fds);
 }
 
@@ -851,9 +856,9 @@ handle_login_manager_signal (GDBusProxy *dbus_proxy,
 {
   if (strcmp ("PrepareForShutdown", signal_name) == 0)
     {
-      gboolean before_shutdown;
-      g_variant_get_child (parameters, 0, "b", &before_shutdown);
-      if (before_shutdown)
+      gboolean shutting_down;
+      g_variant_get_child (parameters, 0, "b", &shutting_down);
+      if (shutting_down)
         {
           flush_to_persistent_cache (self);
           release_shutdown_inhibitor (self);
@@ -925,9 +930,9 @@ set_machine_id_provider (EmerDaemon            *self,
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   if (machine_id_prov == NULL)
-    machine_id_prov = emer_machine_id_provider_new ();
-
-  priv->machine_id_provider = g_object_ref (machine_id_prov);
+    priv->machine_id_provider = emer_machine_id_provider_new ();
+  else
+    priv->machine_id_provider = g_object_ref (machine_id_prov);
 }
 
 static void

@@ -14,22 +14,4 @@ export DBUS_SESSION_BUS_PID
 # fail the tests; think of a bash trap as a "finally" clause.
 trap finally EXIT
 
-# Start the mock service and add its methods.
-python -m dbusmock --system \
-    com.endlessm.Metrics \
-    /com/endlessm/Metrics \
-    com.endlessm.Metrics.EventRecorderServer &
-
-# FIXME need a better way to wait for the service to come up
-sleep 1s
-
-gdbus call --system \
-    -d com.endlessm.Metrics \
-    -o /com/endlessm/Metrics \
-    -m org.freedesktop.DBus.Mock.AddMethods \
-    com.endlessm.Metrics.EventRecorderServer \
-    '[("RecordSingularEvent", "uayxbv", "", ""),
-    ("RecordAggregateEvent", "uayxxbv", "", ""),
-    ("RecordEventSequence", "uaya(xbv)", "", "")]'
-
 gtester "$@"

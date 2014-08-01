@@ -11,7 +11,7 @@
 
 G_BEGIN_DECLS
 
-guint mock_permissions_provider_get_daemon_enabled_called (EmerPermissionsProvider *self);
+gint mock_permissions_provider_get_daemon_enabled_called (EmerPermissionsProvider *self);
 
 G_END_DECLS
 

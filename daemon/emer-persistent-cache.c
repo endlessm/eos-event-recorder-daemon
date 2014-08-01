@@ -35,100 +35,6 @@
  * the new version number.
  */
 
-static gboolean   append_variant_to_string               (EmerPersistentCache *self,
-                                                          GString             *variant_string,
-                                                          GVariant            *variant);
-
-static gboolean   apply_cache_versioning                 (EmerPersistentCache *self,
-                                                          GCancellable        *cancellable,
-                                                          GError             **error);
-
-static gboolean   cache_has_room                         (EmerPersistentCache *self,
-                                                          gsize                size);
-
-static gboolean   compute_boot_offset                    (EmerPersistentCache *self,
-                                                          gint64               relative_time,
-                                                          gint64               absolute_time,
-                                                          gint64              *boot_offset);
-
-static gboolean   drain_metrics_file                     (EmerPersistentCache *self,
-                                                          GVariant          ***return_list,
-                                                          gchar               *path_ending,
-                                                          gchar               *variant_type);
-
-static void       emer_persistent_cache_initable_init    (GInitableIface      *iface);
-
-static gboolean   emer_persistent_cache_may_fail_init    (GInitable           *self,
-                                                          GCancellable        *cancellable,
-                                                          GError             **error);
-
-static void       free_variant_list                      (GVariant           **list);
-
-static GFile *    get_cache_file                         (gchar               *path_ending);
-
-static gboolean   get_saved_boot_id                      (EmerPersistentCache *self,
-                                                          uuid_t               boot_id,
-                                                          GError             **error);
-
-static gboolean   get_system_boot_id                     (EmerPersistentCache *self,
-                                                          uuid_t               boot_id,
-                                                          GError             **error);
-
-static gboolean   load_cache_size                        (EmerPersistentCache *self,
-                                                          GCancellable        *cancellable,
-                                                          GError             **error);
-
-static gboolean   purge_cache_files                      (EmerPersistentCache *self,
-                                                          GCancellable        *cancellable,
-                                                          GError             **error);
-
-static gboolean   reset_boot_offset_metafile             (EmerPersistentCache *self,
-                                                          gint64              *relative_time_ptr,
-                                                          gint64              *absolute_time_ptr);
-
-static gboolean   save_timing_metadata                   (EmerPersistentCache *self,
-                                                          const gint64        *relative_time_ptr,
-                                                          const gint64        *absolute_time_ptr,
-                                                          const gint64        *boot_offset_ptr,
-                                                          const gchar         *boot_id_string,
-                                                          const gboolean      *was_reset_ptr,
-                                                          GError              **error);
-
-static void       set_boot_id_provider                   (EmerPersistentCache *self,
-                                                          EmerBootIdProvider  *boot_id_provider);
-
-static void       set_to_empty_list                      (GVariant          ***list);
-
-static gboolean   store_aggregates                       (EmerPersistentCache *self,
-                                                          AggregateEvent      *aggregate_buffer,
-                                                          gint                 num_aggregates_buffered,
-                                                          gint                *num_aggregates_stored,
-                                                          capacity_t          *capacity);
-
-static gboolean   store_singulars                        (EmerPersistentCache *self,
-                                                          SingularEvent       *singular_buffer,
-                                                          gint                 num_singulars_buffered,
-                                                          gint                *num_singulars_stored,
-                                                          capacity_t          *capacity);
-
-static gboolean   store_sequences                        (EmerPersistentCache *self,
-                                                          SequenceEvent       *sequence_buffer,
-                                                          gint                 num_sequences_buffered,
-                                                          gint                *num_sequences_stored,
-                                                          capacity_t          *capacity);
-
-static gboolean   update_boot_offset                     (EmerPersistentCache *self,
-                                                          gboolean             always_update_timestamps);
-
-static gboolean   update_boot_offset_source_func         (EmerPersistentCache *self);
-
-static capacity_t update_capacity                        (EmerPersistentCache *self,
-                                                          gboolean             set_to_max);
-
-static gboolean   write_variant_string_to_file           (EmerPersistentCache *self,
-                                                          GFile               *file,
-                                                          GString             *variant_string);
-
 typedef struct GVariantWritable
 {
   gsize length;
@@ -137,10 +43,17 @@ typedef struct GVariantWritable
 
 typedef struct _EmerPersistentCachePrivate
 {
+  guint64 max_cache_size;
+  guint64 cache_size;
+  capacity_t capacity;
+
   EmerBootIdProvider *boot_id_provider;
 
   EmerCacheVersionProvider *cache_version_provider;
 
+  guint boot_offset_update_timeout_source_id;
+
+  gchar *cache_directory;
   gchar *boot_metafile_path;
 
   gint64 boot_offset;
@@ -150,13 +63,9 @@ typedef struct _EmerPersistentCachePrivate
   gboolean boot_id_initialized;
 
   GKeyFile *boot_offset_key_file;
-
-  guint boot_offset_update_timeout_source_id;
-
-  guint64 max_cache_size;
-  guint64 cache_size;
-  capacity_t capacity;
 } EmerPersistentCachePrivate;
+
+static void emer_persistent_cache_initable_init (GInitableIface *iface);
 
 G_DEFINE_TYPE_WITH_CODE (EmerPersistentCache, emer_persistent_cache, G_TYPE_OBJECT,
                          G_ADD_PRIVATE (EmerPersistentCache)
@@ -185,11 +94,6 @@ G_DEFINE_TYPE_WITH_CODE (EmerPersistentCache, emer_persistent_cache, G_TYPE_OBJE
  */
 #define BOOT_ID_FILE_LENGTH 37
 
-#define PERSISTENT_CACHE_PRIVATE(o) \
-  (G_TYPE_INSTANCE_GET_PRIVATE ((o), EMER_TYPE_PERSISTENT_CACHE, EmerPersistentCachePrivate))
-
-G_LOCK_DEFINE_STATIC (update_boot_offset);
-
 /*
  * The largest amount of memory (in bytes) that the metrics cache may
  * occupy before incoming metrics are ignored.
@@ -209,16 +113,11 @@ G_LOCK_DEFINE_STATIC (update_boot_offset);
  */
 #define SYSTEM_BOOT_ID_FILE "/proc/sys/kernel/random/boot_id"
 
-/*
- * The directory metrics and their meta-file are saved to.
- * Is listed in all caps because it should be treated as though
- * it were immutable by production code.  Only testing code should
- * ever alter this variable.
- */
-static gchar *CACHE_DIRECTORY = PERSISTENT_CACHE_DIR;
+G_LOCK_DEFINE_STATIC (update_boot_offset);
 
 enum {
   PROP_0,
+  PROP_CACHE_DIRECTORY,
   PROP_MAX_CACHE_SIZE,
   PROP_BOOT_ID_PROVIDER,
   PROP_CACHE_VERSION_PROVIDER,
@@ -228,250 +127,173 @@ enum {
 
 static GParamSpec *emer_persistent_cache_props[NPROPS] = { NULL, };
 
-static void
-set_max_cache_size (EmerPersistentCache *self,
-                    guint64              size_in_bytes)
-{
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
-  priv->max_cache_size = size_in_bytes;
-}
-
-static void
-set_boot_offset_update_interval (EmerPersistentCache *self,
-                                 guint                seconds)
-{
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
-
-  priv->boot_offset_update_timeout_source_id =
-    g_timeout_add_seconds (seconds,
-                           (GSourceFunc) update_boot_offset_source_func, self);
-}
-
-static void
-set_boot_id_provider (EmerPersistentCache *self,
-                      EmerBootIdProvider  *boot_id_provider)
+/*
+ * Will read the boot id from a metadata file or cached value. This boot id will
+ * not be as recent as the one stored in the system file if the system has been
+ * rebooted since the last time we wrote to the metafile. If the metafile
+ * doesn't exist, or another I/O error occurs, this will return FALSE and set
+ * the error. Returns TRUE on success, and sets the boot_id out parameter to the
+ * correct boot id.
+ */
+static gboolean
+get_saved_boot_id (EmerPersistentCache *self,
+                   uuid_t               boot_id,
+                   GError             **error)
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  if (priv->boot_id_provider == NULL)
-    priv->boot_id_provider = emer_boot_id_provider_new ();
-  else
-    priv->boot_id_provider = g_object_ref_sink (boot_id_provider);
-}
-
-static void
-set_cache_version_provider (EmerPersistentCache      *self,
-                            EmerCacheVersionProvider *cache_version_provider)
-{
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
-
-  if (cache_version_provider == NULL)
-    priv->cache_version_provider = emer_cache_version_provider_new ();
-  else
-    priv->cache_version_provider = g_object_ref (cache_version_provider);
-}
-
-static void
-emer_persistent_cache_set_property (GObject      *object,
-                                    guint         property_id,
-                                    const GValue *value,
-                                    GParamSpec   *pspec)
-{
-  EmerPersistentCache *self = EMER_PERSISTENT_CACHE (object);
-
-  switch (property_id)
+  if (priv->boot_id_initialized)
     {
-    case PROP_MAX_CACHE_SIZE:
-      set_max_cache_size (self, g_value_get_uint64 (value));
-      break;
-
-    case PROP_BOOT_ID_PROVIDER:
-      set_boot_id_provider (self, g_value_get_object (value));
-      break;
-
-    case PROP_CACHE_VERSION_PROVIDER:
-      set_cache_version_provider (self, g_value_get_object (value));
-      break;
-
-    case PROP_BOOT_OFFSET_UPDATE_INTERVAL:
-      set_boot_offset_update_interval (self, g_value_get_uint (value));
-      break;
-
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+      uuid_copy (boot_id, priv->saved_boot_id);
+      return TRUE;
     }
+
+  if (!g_key_file_load_from_file (priv->boot_offset_key_file,
+                                  priv->boot_metafile_path,
+                                  G_KEY_FILE_NONE,
+                                  error))
+    {
+      g_prefix_error (error, "Failed to open KeyFile at: %s .",
+                      priv->boot_metafile_path);
+      return FALSE;
+    }
+
+  gchar *id_as_string = g_key_file_get_string (priv->boot_offset_key_file,
+                                               CACHE_TIMING_GROUP_NAME,
+                                               CACHE_LAST_BOOT_ID_KEY,
+                                               error);
+  if (id_as_string == NULL)
+    {
+      g_prefix_error (error, "Failed to read boot_id from %s .",
+                      priv->boot_metafile_path);
+      return FALSE;
+    }
+
+  /* Strangely, with both the keyfile and the system file, a newline is appended
+     and retrieved when a uuid is changed to a string and stored on disk.
+     We chomp it off here because uuid_parse will fail otherwise. */
+  g_strchomp (id_as_string);
+  if (uuid_parse (id_as_string, priv->saved_boot_id) != 0)
+    {
+      g_prefix_error (error, "Failed to parse the saved boot id: %s.",
+                      id_as_string);
+      g_free (id_as_string);
+      return FALSE;
+    }
+
+  g_free (id_as_string);
+  uuid_copy (boot_id, priv->saved_boot_id);
+  priv->boot_id_initialized = TRUE;
+  return TRUE;
 }
 
-static void
-emer_persistent_cache_finalize (GObject *object)
+/*
+ * Reads the Operating System's boot id from disk or cached value, returning it
+ * via the out parameter boot_id.  Returns FALSE on failure and sets the GError.
+ * Returns TRUE on success.
+ */
+static gboolean
+get_system_boot_id (EmerPersistentCache *self,
+                    uuid_t               boot_id,
+                    GError             **error)
 {
-  EmerPersistentCache *self = EMER_PERSISTENT_CACHE (object);
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  g_source_remove (priv->boot_offset_update_timeout_source_id);
-
-  g_object_unref (priv->boot_id_provider);
-  g_object_unref (priv->cache_version_provider);
-  g_free (priv->boot_metafile_path);
-  g_key_file_unref (priv->boot_offset_key_file);
-
-  G_OBJECT_CLASS (emer_persistent_cache_parent_class)->finalize (object);
+  if (!emer_boot_id_provider_get_id (priv->boot_id_provider, boot_id))
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                   "Failed to get the boot ID from the EmerBootIdProvider.");
+      return FALSE;
+    }
+  return TRUE;
 }
 
-static void
-emer_persistent_cache_class_init (EmerPersistentCacheClass *klass)
+/*
+ * Creates and returns a newly allocated GFile * corresponding to the cache
+ * file ending or metafile ending given to it as path_ending.
+ */
+static GFile *
+get_cache_file (EmerPersistentCache *self,
+                gchar               *path_ending)
 {
-  GObjectClass *object_class = G_OBJECT_CLASS (klass);
-
-  object_class->set_property = emer_persistent_cache_set_property;
-  object_class->finalize = emer_persistent_cache_finalize;
-
-  /* Blurb string is good enough default documentation for this. */
-  emer_persistent_cache_props[PROP_MAX_CACHE_SIZE] =
-    g_param_spec_uint64 ("max-cache-size", "Maximum cache size",
-                         "The maximum number of bytes allowed to be stored in"
-                         " the persistent cache.",
-                         0, G_MAXUINT64, DEFAULT_MAX_CACHE_SIZE,
-                         G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
-
-  /* Blurb string is good enough default documentation for this. */
-  emer_persistent_cache_props[PROP_BOOT_ID_PROVIDER] =
-    g_param_spec_object ("boot-id-provider", "Boot id provider",
-                         "The provider for the system boot id used to establish"
-                         " whether the current boot is the same as the previous"
-                         " boot encountered when last writing to the Persistent"
-                         " Cache.",
-                         EMER_TYPE_BOOT_ID_PROVIDER,
-                         G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
-
-  /* Blurb string is good enough default documentation for this. */
-  emer_persistent_cache_props[PROP_CACHE_VERSION_PROVIDER] =
-    g_param_spec_object ("cache-version-provider", "Cache version provider",
-                         "The provider for the version of the local cache's"
-                         " format.",
-                         EMER_TYPE_CACHE_VERSION_PROVIDER,
-                         G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
-
-  /* Blurb string is good enough default documentation for this. */
-  emer_persistent_cache_props[PROP_BOOT_OFFSET_UPDATE_INTERVAL] =
-    g_param_spec_uint ("boot-offset-update-interval", "Boot offset update interval",
-                       "The number of seconds between each automatic update"
-                       " of the boot offset metafile.",
-                       0, G_MAXUINT, DEFAULT_BOOT_TIMESTAMPS_UPDATE,
-                       G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
-
-  g_object_class_install_properties (object_class, NPROPS,
-                                     emer_persistent_cache_props);
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+  gchar *path;
+  path = g_strconcat (priv->cache_directory, CACHE_PREFIX, path_ending, NULL);
+  GFile *file = g_file_new_for_path (path);
+  g_free (path);
+  return file;
 }
 
-static void
-emer_persistent_cache_init (EmerPersistentCache *self)
+/*
+ * Should only be called if the version is out of date, corrupted, or the cache
+ * file does not exist. Replaces the content of all cache files with the empty
+ * string. Will create these empty files if they do not already exist.
+ * Returns TRUE on success and FALSE on I/O failure.
+ */
+static gboolean
+purge_cache_files (EmerPersistentCache *self,
+                   GCancellable        *cancellable,
+                   GError             **error)
 {
+  GFile *ind_file = get_cache_file (self, INDIVIDUAL_SUFFIX);
+  gboolean success =
+    g_file_replace_contents (ind_file, "", 0, NULL, FALSE,
+                             G_FILE_CREATE_REPLACE_DESTINATION,
+                             NULL, cancellable, error);
+  if (!success)
+    {
+      if (error != NULL)
+        g_critical ("Failed to purge cache files. Error: %s.",
+                    (*error)->message);
+      else
+        g_critical ("Failed to purge cache files.");
+      g_object_unref (ind_file);
+      return FALSE;
+    }
+  g_object_unref (ind_file);
+
+  GFile *agg_file = get_cache_file (self, AGGREGATE_SUFFIX);
+  success =
+    g_file_replace_contents (agg_file, "", 0, NULL, FALSE,
+                             G_FILE_CREATE_REPLACE_DESTINATION,
+                             NULL, cancellable, error);
+  if (!success)
+    {
+      if (error != NULL)
+        g_critical ("Failed to purge cache files. Error: %s.",
+                    (*error)->message);
+      else
+        g_critical ("Failed to purge cache files.");
+      g_object_unref (agg_file);
+      return FALSE;
+    }
+  g_object_unref (agg_file);
+
+  GFile *seq_file = get_cache_file (self, SEQUENCE_SUFFIX);
+  success =
+    g_file_replace_contents (seq_file, "", 0, NULL, FALSE,
+                             G_FILE_CREATE_REPLACE_DESTINATION,
+                             NULL, cancellable, error);
+  if (!success)
+    {
+      if (error != NULL)
+        g_critical ("Failed to purge cache files. Error: %s.",
+                    (*error)->message);
+      else
+        g_critical ("Failed to purge cache files.");
+      g_object_unref (seq_file);
+      return FALSE;
+    }
+  g_object_unref (seq_file);
+
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
   priv->cache_size = 0L;
   priv->capacity = CAPACITY_LOW;
-  priv->boot_metafile_path = g_strconcat (CACHE_DIRECTORY, BOOT_OFFSET_METAFILE,
-                                          NULL);
-  priv->boot_offset_key_file = g_key_file_new ();
-}
 
-static gboolean
-emer_persistent_cache_may_fail_init (GInitable    *self,
-                                     GCancellable *cancellable,
-                                     GError      **error)
-{
-  gboolean versioning_success = apply_cache_versioning (EMER_PERSISTENT_CACHE (self),
-                                                        cancellable,
-                                                        error);
-  if (!versioning_success)
-    return FALSE;
-
-  return load_cache_size (EMER_PERSISTENT_CACHE (self), cancellable, error);
-}
-
-static void
-emer_persistent_cache_initable_init (GInitableIface *iface)
-{
-  iface->init = emer_persistent_cache_may_fail_init;
-}
-
-/*
- * Constructor for creating a new Persistent Cache.
- * Please use this in production instead of the testing constructor!
- */
-EmerPersistentCache *
-emer_persistent_cache_new (GCancellable *cancellable,
-                           GError      **error)
-{
-  return g_initable_new (EMER_TYPE_PERSISTENT_CACHE, cancellable, error, NULL);
-}
-
-/*
- * You should use emer_persistent_cache_new() instead of this function.
- * Function should only be used in testing code, NOT in production code.
- * Should always use a custom directory.
- */
-EmerPersistentCache *
-emer_persistent_cache_new_full (GCancellable             *cancellable,
-                                GError                  **error,
-                                gchar                    *custom_directory,
-                                guint64                   custom_cache_size,
-                                EmerBootIdProvider       *boot_id_provider,
-                                EmerCacheVersionProvider *cache_version_provider,
-                                guint                     boot_offset_update_interval)
-{
-  CACHE_DIRECTORY = custom_directory;
-  return g_initable_new (EMER_TYPE_PERSISTENT_CACHE,
-                         cancellable,
-                         error,
-                         "boot-id-provider", boot_id_provider,
-                         "cache-version-provider", cache_version_provider,
-                         "boot-offset-update-interval", boot_offset_update_interval,
-                         "max-cache-size", custom_cache_size,
-                         NULL);
-}
-
-/*
- * Gets the boot time offset and stores it in the out parameter offset.
- * If the always_update_timestamps parameter is FALSE, this will not perform
- * writes to disk to update the timestamps during this operation unless the boot
- * id is out of date, or some corruption is detected which forces a rewrite of
- * the boot timing metafile.
- *
- * Will return TRUE on success. Will return FALSE on failure, will not set the
- * offset in the out parameter and will set the GError if error is not NULL.
- */
-gboolean
-emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
-                                            gint64              *offset,
-                                            GError             **error,
-                                            gboolean             always_update_timestamps)
-{
-  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
-
-  G_LOCK (update_boot_offset);
-
-  // When always_update_timestamps is FALSE, the timestamps won't be written
-  // unless the boot offset in the metadata file is being overwritten.
-  if (!update_boot_offset (self, always_update_timestamps))
-    {
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                   "Couldn't read boot offset.");
-      G_UNLOCK (update_boot_offset);
-      return FALSE;
-    }
-
-  G_UNLOCK (update_boot_offset);
-
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
-  *offset = priv->boot_offset;
   return TRUE;
 }
 
@@ -538,88 +360,6 @@ save_timing_metadata (EmerPersistentCache *self,
 }
 
 /*
- * Will read the boot id from a metadata file or cached value. This boot id will
- * not be as recent as the one stored in the system file if the system has been
- * rebooted since the last time we wrote to the metafile. If that file
- * doesn't exist, or another I/O error occurs, this will return FALSE and set
- * the error. Returns TRUE on success, and sets the boot_id out parameter to the
- * correct boot id.
- */
-static gboolean
-get_saved_boot_id (EmerPersistentCache *self,
-                   uuid_t               boot_id,
-                   GError             **error)
-{
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
-
-  if (priv->boot_id_initialized)
-    {
-      uuid_copy (boot_id, priv->saved_boot_id);
-      return TRUE;
-    }
-
-  if (!g_key_file_load_from_file (priv->boot_offset_key_file,
-                                  priv->boot_metafile_path,
-                                  G_KEY_FILE_NONE,
-                                  error))
-    {
-      g_prefix_error (error, "Failed to open KeyFile at: %s .",
-                      priv->boot_metafile_path);
-      return FALSE;
-    }
-
-  gchar *id_as_string = g_key_file_get_string (priv->boot_offset_key_file,
-                                               CACHE_TIMING_GROUP_NAME,
-                                               CACHE_LAST_BOOT_ID_KEY,
-                                               error);
-  if (id_as_string == NULL)
-    {
-      g_prefix_error (error, "Failed to read boot_id from %s .",
-                      priv->boot_metafile_path);
-      return FALSE;
-    }
-
-  /* Strangely, with both the keyfile and the system file, a newline is appended
-     and retrieved when a uuid is changed to a string and stored on disk.
-     We chomp it off here because uuid_parse will fail otherwise. */
-  g_strchomp (id_as_string);
-  if (uuid_parse (id_as_string, priv->saved_boot_id) != 0)
-    {
-      g_prefix_error (error, "Failed to parse the saved boot id: %s.",
-                      id_as_string);
-      g_free (id_as_string);
-      return FALSE;
-    }
-
-  uuid_copy (boot_id, priv->saved_boot_id);
-  priv->boot_id_initialized = TRUE;
-  return TRUE;
-}
-
-/*
- * Reads the Operating System's boot id from disk or cached value, returning it
- * via the out parameter boot_id.  Returns FALSE on failure and sets the GError.
- * Returns TRUE on success.
- */
-static gboolean
-get_system_boot_id (EmerPersistentCache *self,
-                    uuid_t               boot_id,
-                    GError             **error)
-{
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
-
-  if (!emer_boot_id_provider_get_id (priv->boot_id_provider, boot_id))
-    {
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                   "Failed to get the boot ID from the EmerBootIdProvider.");
-      return FALSE;
-    }
-  return TRUE;
-}
-
-/*
  * Resets the boot timing metafile to default values, completely replacing any
  * previously existing boot timing metafile, if one even existed.
  *
@@ -645,7 +385,7 @@ reset_boot_offset_metafile (EmerPersistentCache *self,
   GError *error = NULL;
   GFileOutputStream *unused_stream =
     g_file_replace (meta_file, NULL, FALSE,
-                    G_FILE_CREATE_PRIVATE | G_FILE_CREATE_REPLACE_DESTINATION,
+                    G_FILE_CREATE_REPLACE_DESTINATION,
                     NULL, &error);
   g_object_unref (meta_file);
   if (unused_stream == NULL)
@@ -696,16 +436,82 @@ reset_boot_offset_metafile (EmerPersistentCache *self,
 }
 
 /*
- * Callback for updating the boot offset file.
+ * Takes an already open GKeyFile and cached timestamps and computes the
+ * new and correct boot offset, storing it in the out parameter.
+ * Returns TRUE if this is done successfully, and returns FALSE if there is an
+ * error loading the stored timestamps from the metafile, which are needed to
+ * compute the correct boot offset.
  */
 static gboolean
-update_boot_offset_source_func (EmerPersistentCache *self)
+compute_boot_offset (EmerPersistentCache *self,
+                     gint64               relative_time,
+                     gint64               absolute_time,
+                     gint64              *boot_offset)
 {
-  G_LOCK (update_boot_offset);
-  update_boot_offset (self, TRUE);
-  G_UNLOCK (update_boot_offset);
+  GError *error = NULL;
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
 
-  return G_SOURCE_CONTINUE;
+  /* The amount of time elapsed between the origin boot and the boot with
+     the stored ID. */
+  gint64 stored_offset = g_key_file_get_int64 (priv->boot_offset_key_file,
+                                               CACHE_TIMING_GROUP_NAME,
+                                               CACHE_BOOT_OFFSET_KEY,
+                                               &error);
+  if (error != NULL)
+    {
+      g_critical ("Failed to read relative offset from metafile %s . "
+                  "Error: %s.", priv->boot_metafile_path, error->message);
+      g_error_free (error);
+      return FALSE;
+    }
+
+  gint64 stored_relative_time =
+    g_key_file_get_int64 (priv->boot_offset_key_file, CACHE_TIMING_GROUP_NAME,
+                          CACHE_RELATIVE_TIME_KEY, &error);
+  if (error != NULL)
+    {
+      g_critical ("Failed to read relative time from metafile %s . "
+                  "Error: %s.", priv->boot_metafile_path, error->message);
+      g_error_free (error);
+      return FALSE;
+    }
+
+  gint64 stored_absolute_time =
+    g_key_file_get_int64 (priv->boot_offset_key_file, CACHE_TIMING_GROUP_NAME,
+                          CACHE_ABSOLUTE_TIME_KEY, &error);
+  if (error != NULL)
+    {
+      g_critical ("Failed to read absolute time from metafile %s . "
+                  "Error: %s.", priv->boot_metafile_path, error->message);
+      g_error_free (error);
+      return FALSE;
+    }
+
+  /* The amount of time elapsed between the origin boot and the boot with the
+     currently stored ID. */
+  gint64 previous_offset = stored_offset;
+
+  /* The amount of time elapsed between the origin boot and the time at which
+     the stored file was written. */
+  gint64 time_between_origin_boot_and_write =
+    previous_offset + stored_relative_time;
+
+  /* Our best estimate of the actual amount of time elapsed between the most
+     recent write to the store file and the current time. */
+  gint64 approximate_time_since_last_write =
+    absolute_time - stored_absolute_time;
+
+  /* Our best estimate of the amount of time elapsed between the origin boot
+     and the current time. */
+  gint64 time_since_origin_boot =
+    time_between_origin_boot_and_write + approximate_time_since_last_write;
+
+  /* Our best estimate of the amount of time elapsed between the origin boot and
+     the current boot. This is the new boot offset. */
+  *boot_offset = time_since_origin_boot - relative_time;
+
+  return TRUE;
 }
 
 /*
@@ -839,82 +645,68 @@ update_boot_offset (EmerPersistentCache *self,
 }
 
 /*
- * Takes an already open GKeyFile and cached timestamps and computes the
- * new and correct boot offset, storing it in the out parameter.
- * Returns TRUE if this is done successfully, and returns FALSE if there is an
- * error loading the stored timestamps from the metafile, which are needed to
- * compute the correct boot offset.
+ * Callback for updating the boot offset file.
  */
 static gboolean
-compute_boot_offset (EmerPersistentCache *self,
-                     gint64               relative_time,
-                     gint64               absolute_time,
-                     gint64              *boot_offset)
+update_boot_offset_source_func (EmerPersistentCache *self)
 {
-  GError *error = NULL;
+  G_LOCK (update_boot_offset);
+  update_boot_offset (self, TRUE);
+  G_UNLOCK (update_boot_offset);
+
+  return G_SOURCE_CONTINUE;
+}
+
+/*
+ * Gets the boot time offset and stores it in the out parameter offset.
+ * If the always_update_timestamps parameter is FALSE, this will not perform
+ * writes to disk to update the timestamps during this operation unless the boot
+ * id is out of date, or some corruption is detected which forces a rewrite of
+ * the boot timing metafile.
+ *
+ * Will return TRUE on success. Will return FALSE on failure, will not set the
+ * offset in the out parameter and will set the GError if error is not NULL.
+ */
+gboolean
+emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
+                                            gint64              *offset,
+                                            GError             **error,
+                                            gboolean             always_update_timestamps)
+{
+  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+  G_LOCK (update_boot_offset);
+
+  // When always_update_timestamps is FALSE, the timestamps won't be written
+  // unless the boot offset in the metadata file is being overwritten.
+  if (!update_boot_offset (self, always_update_timestamps))
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                   "Couldn't read boot offset.");
+      G_UNLOCK (update_boot_offset);
+      return FALSE;
+    }
+
+  G_UNLOCK (update_boot_offset);
+
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
-
-  /* The amount of time elapsed between the origin boot and the boot with
-     the stored ID. */
-  gint64 stored_offset = g_key_file_get_int64 (priv->boot_offset_key_file,
-                                               CACHE_TIMING_GROUP_NAME,
-                                               CACHE_BOOT_OFFSET_KEY,
-                                               &error);
-  if (error != NULL)
-    {
-      g_critical ("Failed to read relative offset from metafile %s . "
-                  "Error: %s.", priv->boot_metafile_path, error->message);
-      g_error_free (error);
-      return FALSE;
-    }
-
-  gint64 stored_relative_time =
-    g_key_file_get_int64 (priv->boot_offset_key_file, CACHE_TIMING_GROUP_NAME,
-                          CACHE_RELATIVE_TIME_KEY, &error);
-  if (error != NULL)
-    {
-      g_critical ("Failed to read relative time from metafile %s . "
-                  "Error: %s.", priv->boot_metafile_path, error->message);
-      g_error_free (error);
-      return FALSE;
-    }
-
-  gint64 stored_absolute_time =
-    g_key_file_get_int64 (priv->boot_offset_key_file, CACHE_TIMING_GROUP_NAME,
-                          CACHE_ABSOLUTE_TIME_KEY, &error);
-  if (error != NULL)
-    {
-      g_critical ("Failed to read absolute time from metafile %s . "
-                  "Error: %s.", priv->boot_metafile_path, error->message);
-      g_error_free (error);
-      return FALSE;
-    }
-
-  /* The amount of time elapsed between the origin boot and the boot with the
-     currently stored ID. */
-  gint64 previous_offset = stored_offset;
-
-  /* The amount of time elapsed between the origin boot and the time at which
-     the stored file was written. */
-  gint64 time_between_origin_boot_and_write =
-    previous_offset + stored_relative_time;
-
-  /* Our best estimate of the actual amount of time elapsed between the most
-     recent write to the store file and the current time. */
-  gint64 approximate_time_since_last_write =
-    absolute_time - stored_absolute_time;
-
-  /* Our best estimate of the amount of time elapsed between the origin boot
-     and the current time. */
-  gint64 time_since_origin_boot =
-    time_between_origin_boot_and_write + approximate_time_since_last_write;
-
-  /* Our best estimate of the amount of time elapsed between the origin boot and
-     the current boot. This is the new boot offset. */
-  *boot_offset = time_since_origin_boot - relative_time;
-
+  *offset = priv->boot_offset;
   return TRUE;
+}
+
+/*
+ * Frees all resources contained within a GVariant* list, including
+ * the list itself.
+ */
+static void
+free_variant_list (GVariant **list)
+{
+  g_return_if_fail (list != NULL);
+
+  for (gint i = 0; list[i] != NULL; i++)
+    g_variant_unref (list[i]);
+  g_free (list);
 }
 
 /*
@@ -930,7 +722,7 @@ drain_metrics_file (EmerPersistentCache *self,
                     gchar               *variant_type)
 {
   GError *error = NULL;
-  GFile *file = get_cache_file (path_ending);
+  GFile *file = get_cache_file (self, path_ending);
   GFileInputStream *file_stream = g_file_read (file, NULL, &error);
 
   if (file_stream == NULL)
@@ -1104,6 +896,10 @@ emer_persistent_cache_drain_metrics (EmerPersistentCache  *self,
     {
       // The error has served its purpose in the previous call.
       g_error_free (error);
+
+      free_variant_list (*list_of_individual_metrics);
+      free_variant_list (*list_of_aggregate_metrics);
+      free_variant_list (*list_of_sequence_metrics);
       return FALSE;
     }
 
@@ -1111,17 +907,39 @@ emer_persistent_cache_drain_metrics (EmerPersistentCache  *self,
 }
 
 /*
- * Frees all resources contained within a GVariant* list, including
- * the list itself.
+ * Will check if the cache can store 'size' additional bytes. Returns
+ * %TRUE if it can, %FALSE otherwise.
  */
-static void
-free_variant_list (GVariant **list)
+static gboolean
+cache_has_room (EmerPersistentCache *self,
+                gsize                size)
 {
-  g_return_if_fail (list != NULL);
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+  if (priv->capacity == CAPACITY_MAX)
+    return FALSE;
+  return priv->cache_size + size <= priv->max_cache_size;
+}
 
-  for (gint i = 0; list[i] != NULL; i++)
-    g_variant_unref (list[i]);
-  g_free (list);
+/*
+ * Returns a hint (capacity_t) as to how filled up the cache is and
+ * updates the internal value of capacity. If 'set_to_max' is TRUE, will update
+ * to (and return) CAPACITY_MAX.
+ */
+static capacity_t
+update_capacity (EmerPersistentCache *self,
+                 gboolean             set_to_max)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+  if (set_to_max)
+    priv->capacity = CAPACITY_MAX;
+  else if (priv->cache_size >= HIGH_CAPACITY_THRESHOLD * priv->max_cache_size)
+    priv->capacity = CAPACITY_HIGH;
+  else
+    priv->capacity = CAPACITY_LOW;
+
+  return priv->capacity;
 }
 
 /*
@@ -1160,6 +978,58 @@ append_variant_to_string (EmerPersistentCache *self,
   return FALSE;
 }
 
+/*
+ * Attempts to append (cache) one or more metrics in the form of a single
+ * GString to the end of a file. Updates the size of the cache if the store
+ * was successful.
+ *
+ * Returns TRUE on success and FALSE on failure.
+ */
+static gboolean
+write_variant_string_to_file (EmerPersistentCache *self,
+                              GFile               *file,
+                              GString             *variant_string)
+{
+  GError *error = NULL;
+  GFileOutputStream *stream = g_file_append_to (file,
+                                                G_FILE_CREATE_NONE,
+                                                NULL,
+                                                &error);
+  if (stream == NULL)
+    {
+      gchar *path = g_file_get_path (file);
+      g_critical ("Failed to open stream to cache file: %s . Error: %s.",
+                  path, error->message);
+      g_free (path);
+      g_error_free (error);
+      return FALSE;
+    }
+
+  gboolean success = g_output_stream_write_all (G_OUTPUT_STREAM (stream),
+                                                variant_string->str,
+                                                variant_string->len,
+                                                NULL,
+                                                NULL,
+                                                &error);
+  if (!success)
+    {
+      gchar *path = g_file_get_path (file);
+      g_critical ("Failed to write to cache file: %s . Error: %s.",
+                  path, error->message);
+      g_object_unref (stream);
+      g_free (path);
+      g_error_free (error);
+      return FALSE;
+    }
+
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+  priv->cache_size += variant_string->len;
+
+  g_object_unref (stream);
+  return TRUE;
+}
+
 static gboolean
 store_singulars (EmerPersistentCache *self,
                  SingularEvent       *singular_buffer,
@@ -1187,7 +1057,7 @@ store_singulars (EmerPersistentCache *self,
   gboolean write_successful = TRUE;
   if (i > 0)
     {
-      GFile *singulars_file = get_cache_file (INDIVIDUAL_SUFFIX);
+      GFile *singulars_file = get_cache_file (self, INDIVIDUAL_SUFFIX);
       write_successful =
         write_variant_string_to_file (self, singulars_file, variant_string);
       g_object_unref (singulars_file);
@@ -1229,7 +1099,7 @@ store_aggregates (EmerPersistentCache *self,
   gboolean write_successful = TRUE;
   if (i > 0)
     {
-      GFile *aggregate_file = get_cache_file (AGGREGATE_SUFFIX);
+      GFile *aggregate_file = get_cache_file (self, AGGREGATE_SUFFIX);
       write_successful =
         write_variant_string_to_file (self, aggregate_file, variant_string);
       g_object_unref (aggregate_file);
@@ -1271,7 +1141,7 @@ store_sequences (EmerPersistentCache *self,
   gboolean write_successful = TRUE;
   if (i > 0)
     {
-      GFile *sequences_file = get_cache_file (SEQUENCE_SUFFIX);
+      GFile *sequences_file = get_cache_file (self, SEQUENCE_SUFFIX);
       write_successful =
         write_variant_string_to_file (self, sequences_file, variant_string);
       g_object_unref (sequences_file);
@@ -1360,138 +1230,74 @@ emer_persistent_cache_store_metrics (EmerPersistentCache  *self,
 }
 
 /*
- * Creates and returns a newly allocated GFile * corresponding to the cache
- * file ending or metafile ending given to it as path_ending.
- */
-static GFile *
-get_cache_file (gchar *path_ending)
-{
-  gchar *path;
-  path = g_strconcat (CACHE_DIRECTORY, CACHE_PREFIX, path_ending, NULL);
-  GFile *file = g_file_new_for_path (path);
-  g_free (path);
-  return file;
-}
-
-/*
- * Should only be called if the version is out of date, corrupted, or the cache
- * file does not exist. Replaces the content of all cache files with the empty
- * string. Will create these empty files if they do not already exist.
- * Returns TRUE on success and FALSE on I/O failure.
+ * Sets the cache_size variable of self to the total size in bytes of the cache
+ * files. Returns %TRUE on success.
  */
 static gboolean
-purge_cache_files (EmerPersistentCache *self,
-                   GCancellable        *cancellable,
-                   GError             **error)
+load_cache_size (EmerPersistentCache *self,
+                 GCancellable        *cancellable,
+                 GError             **error)
 {
-  GFile *ind_file = get_cache_file (INDIVIDUAL_SUFFIX);
-  gboolean success =
-    g_file_replace_contents (ind_file, "", 0, NULL, FALSE,
-                             G_FILE_CREATE_PRIVATE | G_FILE_CREATE_REPLACE_DESTINATION,
-                             NULL, cancellable, error);
+  GFile *singular_file = get_cache_file (self, INDIVIDUAL_SUFFIX);
+  guint64 singular_disk_used;
+  gboolean success = g_file_measure_disk_usage (singular_file,
+                                                G_FILE_MEASURE_REPORT_ANY_ERROR,
+                                                NULL,
+                                                NULL,
+                                                NULL,
+                                                &singular_disk_used,
+                                                NULL,
+                                                NULL,
+                                                error);
+  g_object_unref (singular_file);
+
+  guint64 aggregate_disk_used;
+  if (success)
+    {
+      GFile *aggregate_file = get_cache_file (self, AGGREGATE_SUFFIX);
+      success = g_file_measure_disk_usage (aggregate_file,
+                                           G_FILE_MEASURE_REPORT_ANY_ERROR,
+                                           NULL,
+                                           NULL,
+                                           NULL,
+                                           &aggregate_disk_used,
+                                           NULL,
+                                           NULL,
+                                           error);
+      g_object_unref (aggregate_file);
+    }
+
+  guint64 sequence_disk_used;
+  if (success)
+    {
+      GFile *sequence_file = get_cache_file (self, SEQUENCE_SUFFIX);
+      success = g_file_measure_disk_usage (sequence_file,
+                                           G_FILE_MEASURE_REPORT_ANY_ERROR,
+                                           NULL,
+                                           NULL,
+                                           NULL,
+                                           &sequence_disk_used,
+                                           NULL,
+                                           NULL,
+                                           error);
+      g_object_unref (sequence_file);
+    }
+
   if (!success)
     {
       if (error != NULL)
-        g_critical ("Failed to purge cache files. Error: %s.",
+        g_critical ("Failed to measure disk usage. Error: %s.",
                     (*error)->message);
       else
-        g_critical ("Failed to purge cache files.");
-      g_object_unref (ind_file);
-      return FALSE;
-    }
-  g_object_unref (ind_file);
-
-  GFile *agg_file = get_cache_file (AGGREGATE_SUFFIX);
-  success =
-    g_file_replace_contents (agg_file, "", 0, NULL, FALSE,
-                             G_FILE_CREATE_PRIVATE | G_FILE_CREATE_REPLACE_DESTINATION,
-                             NULL, cancellable, error);
-  if (!success)
-    {
-      if (error != NULL)
-        g_critical ("Failed to purge cache files. Error: %s.",
-                    (*error)->message);
-      else
-        g_critical ("Failed to purge cache files.");
-      g_object_unref (agg_file);
-      return FALSE;
-    }
-  g_object_unref (agg_file);
-
-  GFile *seq_file = get_cache_file (SEQUENCE_SUFFIX);
-  success =
-    g_file_replace_contents (seq_file, "", 0, NULL, FALSE,
-                             G_FILE_CREATE_PRIVATE | G_FILE_CREATE_REPLACE_DESTINATION,
-                             NULL, cancellable, error);
-  if (!success)
-    {
-      if (error != NULL)
-        g_critical ("Failed to purge cache files. Error: %s.",
-                    (*error)->message);
-      else
-        g_critical ("Failed to purge cache files.");
-      g_object_unref (seq_file);
-      return FALSE;
-    }
-  g_object_unref (seq_file);
-
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
-  priv->cache_size = 0L;
-  priv->capacity = CAPACITY_LOW;
-
-  return TRUE;
-}
-
-/*
- * Attempts to append (cache) one or more metrics in the form of a single
- * GString to the end of a file. Updates the size of the cache if the store
- * was successful.
- *
- * Returns TRUE on success and FALSE on failure.
- */
-static gboolean
-write_variant_string_to_file (EmerPersistentCache *self,
-                              GFile               *file,
-                              GString             *variant_string)
-{
-  GError *error = NULL;
-  GFileOutputStream *stream = g_file_append_to (file,
-                                                G_FILE_CREATE_PRIVATE,
-                                                NULL,
-                                                &error);
-  if (stream == NULL)
-    {
-      gchar *path = g_file_get_path (file);
-      g_critical ("Failed to open stream to cache file: %s . Error: %s.",
-                  path, error->message);
-      g_free (path);
-      g_error_free (error);
-      return FALSE;
-    }
-
-  gboolean success = g_output_stream_write_all (G_OUTPUT_STREAM (stream),
-                                                variant_string->str,
-                                                variant_string->len,
-                                                NULL,
-                                                NULL,
-                                                &error);
-  if (!success)
-    {
-      gchar *path = g_file_get_path (file);
-      g_critical ("Failed to write to cache file: %s . Error: %s.",
-                   path, error->message);
-      g_object_unref (stream);
-      g_free (path);
-      g_error_free (error);
+        g_critical ("Failed to measure disk usage.");
       return FALSE;
     }
 
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
-  priv->cache_size += variant_string->len;
-
-  g_object_unref (stream);
+  priv->cache_size = singular_disk_used + aggregate_disk_used +
+                     sequence_disk_used;
+  update_capacity (self, FALSE);
   return TRUE;
 }
 
@@ -1506,19 +1312,19 @@ apply_cache_versioning (EmerPersistentCache *self,
                         GCancellable        *cancellable,
                         GError             **error)
 {
-  if (g_mkdir_with_parents (CACHE_DIRECTORY, 02770) != 0)
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  if (g_mkdir_with_parents (priv->cache_directory, 02774) != 0)
     {
       const gchar *err_str = g_strerror (errno); // Don't free.
       g_critical ("Failed to create directory: %s . Error: %s.",
-                  CACHE_DIRECTORY, err_str);
+                  priv->cache_directory, err_str);
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
                    "Failed to create directory: %s . Error: %s.",
-                   CACHE_DIRECTORY, err_str);
+                   priv->cache_directory, err_str);
       return FALSE;
     }
-
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
 
   gint old_version;
   gboolean read_success =
@@ -1557,110 +1363,241 @@ apply_cache_versioning (EmerPersistentCache *self,
   return TRUE;
 }
 
-/*
- * Sets the cache_size variable of self to the total size in bytes of the cache
- * files. Returns %TRUE on success.
- */
-static gboolean
-load_cache_size (EmerPersistentCache *self,
-                 GCancellable        *cancellable,
-                 GError             **error)
+static void
+set_cache_directory (EmerPersistentCache *self,
+                     const gchar         *directory)
 {
-  GFile *singular_file = get_cache_file (INDIVIDUAL_SUFFIX);
-  guint64 singular_disk_used;
-  gboolean success = g_file_measure_disk_usage (singular_file,
-                                                G_FILE_MEASURE_REPORT_ANY_ERROR,
-                                                NULL,
-                                                NULL,
-                                                NULL,
-                                                &singular_disk_used,
-                                                NULL,
-                                                NULL,
-                                                error);
-  g_object_unref (singular_file);
-
-  guint64 aggregate_disk_used;
-  if (success)
-    {
-      GFile *aggregate_file = get_cache_file (AGGREGATE_SUFFIX);
-      success = g_file_measure_disk_usage (aggregate_file,
-                                           G_FILE_MEASURE_REPORT_ANY_ERROR,
-                                           NULL,
-                                           NULL,
-                                           NULL,
-                                           &aggregate_disk_used,
-                                           NULL,
-                                           NULL,
-                                           error);
-      g_object_unref (aggregate_file);
-    }
-
-  guint64 sequence_disk_used;
-  if (success)
-    {
-      GFile *sequence_file = get_cache_file (SEQUENCE_SUFFIX);
-      success = g_file_measure_disk_usage (sequence_file,
-                                           G_FILE_MEASURE_REPORT_ANY_ERROR,
-                                           NULL,
-                                           NULL,
-                                           NULL,
-                                           &sequence_disk_used,
-                                           NULL,
-                                           NULL,
-                                           error);
-      g_object_unref (sequence_file);
-    }
-
-  if (!success)
-    {
-      if (error != NULL)
-        g_critical ("Failed to measure disk usage. Error: %s.",
-                    (*error)->message);
-      else
-        g_critical ("Failed to measure disk usage.");
-      return FALSE;
-    }
-
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
-  priv->cache_size = singular_disk_used + aggregate_disk_used +
-                     sequence_disk_used;
-  update_capacity (self, FALSE);
-  return TRUE;
+  priv->cache_directory = g_strdup (directory);
 }
 
-/*
- * Returns a hint (capacity_t) as to how filled up the cache is and
- * updates the internal value of capacity. If 'set_to_max' is TRUE, will update
- * to (and return) CAPACITY_MAX.
- */
-static capacity_t
-update_capacity (EmerPersistentCache *self,
-                 gboolean             set_to_max)
+static void
+set_max_cache_size (EmerPersistentCache *self,
+                    guint64              size_in_bytes)
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
-  if (set_to_max)
-    priv->capacity = CAPACITY_MAX;
-  else if (priv->cache_size >= HIGH_CAPACITY_THRESHOLD * priv->max_cache_size)
-    priv->capacity = CAPACITY_HIGH;
+  priv->max_cache_size = size_in_bytes;
+}
+
+static void
+set_boot_id_provider (EmerPersistentCache *self,
+                      EmerBootIdProvider  *boot_id_provider)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  if (priv->boot_id_provider == NULL)
+    priv->boot_id_provider = emer_boot_id_provider_new ();
   else
-    priv->capacity = CAPACITY_LOW;
-
-  return priv->capacity;
+    priv->boot_id_provider = g_object_ref_sink (boot_id_provider);
 }
 
-/*
- * Will check if the cache can store 'size' additional bytes. Returns
- * %TRUE if it can, %FALSE otherwise.
- */
-static gboolean
-cache_has_room (EmerPersistentCache *self,
-                gsize                size)
+static void
+set_cache_version_provider (EmerPersistentCache      *self,
+                            EmerCacheVersionProvider *cache_version_provider)
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
-  if (priv->capacity == CAPACITY_MAX)
+
+  if (cache_version_provider == NULL)
+    priv->cache_version_provider = emer_cache_version_provider_new ();
+  else
+    priv->cache_version_provider = g_object_ref (cache_version_provider);
+}
+
+static void
+set_boot_offset_update_interval (EmerPersistentCache *self,
+                                 guint                seconds)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  priv->boot_offset_update_timeout_source_id =
+    g_timeout_add_seconds (seconds,
+                           (GSourceFunc) update_boot_offset_source_func, self);
+}
+
+static void
+emer_persistent_cache_set_property (GObject      *object,
+                                    guint         property_id,
+                                    const GValue *value,
+                                    GParamSpec   *pspec)
+{
+  EmerPersistentCache *self = EMER_PERSISTENT_CACHE (object);
+
+  switch (property_id)
+    {
+    case PROP_CACHE_DIRECTORY:
+      set_cache_directory (self, g_value_get_string (value));
+      break;
+
+    case PROP_MAX_CACHE_SIZE:
+      set_max_cache_size (self, g_value_get_uint64 (value));
+      break;
+
+    case PROP_BOOT_ID_PROVIDER:
+      set_boot_id_provider (self, g_value_get_object (value));
+      break;
+
+    case PROP_CACHE_VERSION_PROVIDER:
+      set_cache_version_provider (self, g_value_get_object (value));
+      break;
+
+    case PROP_BOOT_OFFSET_UPDATE_INTERVAL:
+      set_boot_offset_update_interval (self, g_value_get_uint (value));
+      break;
+
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+    }
+}
+
+static void
+emer_persistent_cache_finalize (GObject *object)
+{
+  EmerPersistentCache *self = EMER_PERSISTENT_CACHE (object);
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  g_source_remove (priv->boot_offset_update_timeout_source_id);
+
+  g_object_unref (priv->boot_id_provider);
+  g_object_unref (priv->cache_version_provider);
+  g_free (priv->boot_metafile_path);
+  g_key_file_unref (priv->boot_offset_key_file);
+  g_free (priv->cache_directory);
+
+  G_OBJECT_CLASS (emer_persistent_cache_parent_class)->finalize (object);
+}
+
+static void
+emer_persistent_cache_constructed (GObject *self)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (EMER_PERSISTENT_CACHE (self));
+  priv->boot_metafile_path = g_strconcat (priv->cache_directory,
+                                          BOOT_OFFSET_METAFILE,
+                                          NULL);
+}
+
+static void
+emer_persistent_cache_class_init (EmerPersistentCacheClass *klass)
+{
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+
+  object_class->set_property = emer_persistent_cache_set_property;
+  object_class->finalize = emer_persistent_cache_finalize;
+  object_class->constructed = emer_persistent_cache_constructed;
+
+  /* Blurb string is good enough default documentation for this. */
+  emer_persistent_cache_props[PROP_CACHE_DIRECTORY] =
+    g_param_spec_string ("cache-directory", "Cache directory",
+                         "The directory to save metrics and metadata in.",
+                         PERSISTENT_CACHE_DIR,
+                         G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
+
+  /* Blurb string is good enough default documentation for this. */
+  emer_persistent_cache_props[PROP_MAX_CACHE_SIZE] =
+    g_param_spec_uint64 ("max-cache-size", "Maximum cache size",
+                         "The maximum number of bytes allowed to be stored in"
+                         " the persistent cache.",
+                         0, G_MAXUINT64, DEFAULT_MAX_CACHE_SIZE,
+                         G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
+
+  /* Blurb string is good enough default documentation for this. */
+  emer_persistent_cache_props[PROP_BOOT_ID_PROVIDER] =
+    g_param_spec_object ("boot-id-provider", "Boot id provider",
+                         "The provider for the system boot id used to establish"
+                         " whether the current boot is the same as the previous"
+                         " boot encountered when last writing to the Persistent"
+                         " Cache.",
+                         EMER_TYPE_BOOT_ID_PROVIDER,
+                         G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
+
+  /* Blurb string is good enough default documentation for this. */
+  emer_persistent_cache_props[PROP_CACHE_VERSION_PROVIDER] =
+    g_param_spec_object ("cache-version-provider", "Cache version provider",
+                         "The provider for the version of the local cache's"
+                         " format.",
+                         EMER_TYPE_CACHE_VERSION_PROVIDER,
+                         G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
+
+  /* Blurb string is good enough default documentation for this. */
+  emer_persistent_cache_props[PROP_BOOT_OFFSET_UPDATE_INTERVAL] =
+    g_param_spec_uint ("boot-offset-update-interval", "Boot offset update interval",
+                       "The number of seconds between each automatic update"
+                       " of the boot offset metafile.",
+                       0, G_MAXUINT, DEFAULT_BOOT_TIMESTAMPS_UPDATE,
+                       G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
+
+  g_object_class_install_properties (object_class, NPROPS,
+                                     emer_persistent_cache_props);
+}
+
+static void
+emer_persistent_cache_init (EmerPersistentCache *self)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+  priv->cache_size = 0L;
+  priv->capacity = CAPACITY_LOW;
+  priv->boot_offset_key_file = g_key_file_new ();
+}
+
+static gboolean
+emer_persistent_cache_may_fail_init (GInitable    *self,
+                                     GCancellable *cancellable,
+                                     GError      **error)
+{
+  gboolean versioning_success = apply_cache_versioning (EMER_PERSISTENT_CACHE (self),
+                                                        cancellable,
+                                                        error);
+  if (!versioning_success)
     return FALSE;
-  return priv->cache_size + size <= priv->max_cache_size;
+
+  return load_cache_size (EMER_PERSISTENT_CACHE (self), cancellable, error);
+}
+
+static void
+emer_persistent_cache_initable_init (GInitableIface *iface)
+{
+  iface->init = emer_persistent_cache_may_fail_init;
+}
+
+/*
+ * Constructor for creating a new Persistent Cache.
+ * Please use this in production instead of the testing constructor!
+ */
+EmerPersistentCache *
+emer_persistent_cache_new (GCancellable *cancellable,
+                           GError      **error)
+{
+  return g_initable_new (EMER_TYPE_PERSISTENT_CACHE, cancellable, error, NULL);
+}
+
+/*
+ * You should use emer_persistent_cache_new() instead of this function.
+ * Function should only be used in testing code, NOT in production code.
+ * Should always use a custom directory.
+ */
+EmerPersistentCache *
+emer_persistent_cache_new_full (GCancellable             *cancellable,
+                                GError                  **error,
+                                const gchar              *custom_directory,
+                                guint64                   custom_cache_size,
+                                EmerBootIdProvider       *boot_id_provider,
+                                EmerCacheVersionProvider *cache_version_provider,
+                                guint                     boot_offset_update_interval)
+{
+  return g_initable_new (EMER_TYPE_PERSISTENT_CACHE,
+                         cancellable,
+                         error,
+                         "cache-directory", custom_directory,
+                         "max-cache-size", custom_cache_size,
+                         "boot-id-provider", boot_id_provider,
+                         "cache-version-provider", cache_version_provider,
+                         "boot-offset-update-interval", boot_offset_update_interval,
+                         NULL);
 }

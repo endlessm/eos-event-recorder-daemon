@@ -333,6 +333,20 @@ send_event_sequence_to_dbus (EmtrEventRecorderPrivate *priv,
                                                          (FinishCallback) emer_event_recorder_server_call_record_event_sequence_finish);
 }
 
+#ifdef DEBUG
+/*
+ * This is only needed for extra-helpful debug messages. Free the return value
+ * with g_free().
+ */
+static inline char *
+pretty_print_variant_or_null (GVariant *variant)
+{
+  if (variant != NULL)
+    return g_variant_print (variant, TRUE);
+  return g_strdup ("(nil)");
+}
+#endif /* DEBUG */
+
 /* PUBLIC API */
 
 /**
@@ -421,6 +435,20 @@ emtr_event_recorder_record_event (EmtrEventRecorder *self,
   g_return_if_fail (event_id != NULL);
   g_return_if_fail (auxiliary_payload == NULL || _IS_VARIANT(auxiliary_payload));
 
+#ifdef DEBUG
+  {
+    gchar *payload_string = pretty_print_variant_or_null (auxiliary_payload);
+    g_debug ("%s: Event ID: %s, payload: %s", G_STRFUNC, event_id,
+             payload_string);
+    g_free (payload_string);
+  }
+#else
+  {
+    g_debug ("%s: Event ID: %s, payload: %p", G_STRFUNC, event_id,
+             auxiliary_payload);
+  }
+#endif /* DEBUG */
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
@@ -491,6 +519,20 @@ emtr_event_recorder_record_events (EmtrEventRecorder *self,
   g_return_if_fail (self != NULL && EMTR_IS_EVENT_RECORDER (self));
   g_return_if_fail (event_id != NULL);
   g_return_if_fail (auxiliary_payload == NULL || _IS_VARIANT(auxiliary_payload));
+
+#ifdef DEBUG
+  {
+    gchar *payload_string = pretty_print_variant_or_null (auxiliary_payload);
+    g_debug ("%s: Event ID: %s, number of events: %" G_GINT64_FORMAT ", "
+             "payload: %s", G_STRFUNC, event_id, num_events, payload_string);
+    g_free (payload_string);
+  }
+#else
+  {
+    g_debug ("%s: Event ID: %s, number of events: %" G_GINT64_FORMAT ", "
+             "payload: %p", G_STRFUNC, event_id, num_events, auxiliary_payload);
+  }
+#endif /* DEBUG */
 
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
@@ -568,6 +610,22 @@ emtr_event_recorder_record_start (EmtrEventRecorder *self,
   g_return_if_fail (key == NULL || _IS_VARIANT (key));
   g_return_if_fail (auxiliary_payload == NULL ||
                     _IS_VARIANT (auxiliary_payload));
+
+#ifdef DEBUG
+  {
+    gchar *payload_string = pretty_print_variant_or_null (auxiliary_payload);
+    gchar *key_string = pretty_print_variant_or_null (key);
+    g_debug ("%s: Event ID: %s, key: %s, payload: %s", G_STRFUNC, event_id,
+             key_string, payload_string);
+    g_free (key_string);
+    g_free (payload_string);
+  }
+#else
+  {
+    g_debug ("%s: Event ID: %s, key: %p, payload: %p", G_STRFUNC, event_id, key,
+             auxiliary_payload);
+  }
+#endif /* DEBUG */
 
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
@@ -667,6 +725,22 @@ emtr_event_recorder_record_progress (EmtrEventRecorder *self,
   g_return_if_fail (auxiliary_payload == NULL ||
                     _IS_VARIANT (auxiliary_payload));
 
+#ifdef DEBUG
+  {
+    gchar *payload_string = pretty_print_variant_or_null (auxiliary_payload);
+    gchar *key_string = pretty_print_variant_or_null (key);
+    g_debug ("%s: Event ID: %s, key: %s, payload: %s", G_STRFUNC, event_id,
+             key_string, payload_string);
+    g_free (key_string);
+    g_free (payload_string);
+  }
+#else
+  {
+    g_debug ("%s: Event ID: %s, key: %p, payload: %p", G_STRFUNC, event_id, key,
+             auxiliary_payload);
+  }
+#endif /* DEBUG */
+
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);
 
@@ -764,6 +838,22 @@ emtr_event_recorder_record_stop (EmtrEventRecorder *self,
   g_return_if_fail (key == NULL || _IS_VARIANT (key));
   g_return_if_fail (auxiliary_payload == NULL ||
                     _IS_VARIANT (auxiliary_payload));
+
+#ifdef DEBUG
+  {
+    gchar *payload_string = pretty_print_variant_or_null (auxiliary_payload);
+    gchar *key_string = pretty_print_variant_or_null (key);
+    g_debug ("%s: Event ID: %s, key: %s, payload: %s", G_STRFUNC, event_id,
+             key_string, payload_string);
+    g_free (key_string);
+    g_free (payload_string);
+  }
+#else
+  {
+    g_debug ("%s: Event ID: %s, key: %p, payload: %p", G_STRFUNC, event_id, key,
+             auxiliary_payload);
+  }
+#endif /* DEBUG */
 
   EmtrEventRecorderPrivate *priv =
     emtr_event_recorder_get_instance_private (self);

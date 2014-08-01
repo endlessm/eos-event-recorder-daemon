@@ -26,7 +26,7 @@
 /*
  * The version of this client's network protocol.
  */
-#define CLIENT_VERSION_NUMBER "0"
+#define CLIENT_VERSION_NUMBER "1"
 
 /* The URI of the metrics production proxy server. Is kept in a #define to
 prevent testing code from sending metrics to the production server. It ends

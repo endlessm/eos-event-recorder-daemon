@@ -9,7 +9,13 @@
 #include <glib.h>
 #include <gio/gio.h>
 
-#define MAX_TEST_TIMEOUT_SEC 5
+#define SIGNAL_TIMEOUT_SEC 5
+
+/*
+ * The maximum number of calls to g_main_loop_run in any single test that aren't
+ * guaranteed to be paired with calls to g_main_loop_quit.
+ */
+#define MAX_NUM_TIMEOUTS 2
 
 #define CONFIG_FILE_ENABLED_CONTENTS \
   "[global]\n" \
@@ -27,6 +33,7 @@ typedef struct {
 
   GMainLoop *main_loop; /* for asynchronous tests */
   guint failsafe_source_id;
+  gint num_timeouts;
 
   gboolean notify_daemon_called;
   gboolean notify_daemon_called_with;
@@ -46,12 +53,14 @@ on_notify_daemon_enabled (GObject    *test_object,
   g_main_loop_quit (fixture->main_loop);
 }
 
-static void
-abort_hung_test (void)
+static gboolean
+quit_main_loop (Fixture *fixture)
 {
-  g_critical ("Test timed out after " G_STRINGIFY (MAX_TEST_TIMEOUT_SEC)
-              " seconds.");
-  g_assert_not_reached ();
+  if (g_main_loop_is_running (fixture->main_loop))
+    g_main_loop_quit (fixture->main_loop);
+
+  return ++fixture->num_timeouts < MAX_NUM_TIMEOUTS ?
+    G_SOURCE_CONTINUE : G_SOURCE_REMOVE;
 }
 
 /* Pass NULL to config_file_contents if you don't want to create a file on disk.
@@ -93,10 +102,11 @@ setup (Fixture      *fixture,
   g_signal_connect (fixture->test_object, "notify::daemon-enabled",
                     G_CALLBACK (on_notify_daemon_enabled), fixture);
 
-  /* Failsafe: quit any hung async tests after MAX_TEST_TIMEOUT_SEC seconds. */
-  fixture->failsafe_source_id = g_timeout_add_seconds (MAX_TEST_TIMEOUT_SEC,
-                                                       (GSourceFunc) abort_hung_test,
-                                                       NULL);
+  /* Failsafe: stop waiting for signals in async tests after
+     SIGNAL_TIMEOUT_SEC seconds. */
+  fixture->failsafe_source_id =
+    g_timeout_add_seconds (SIGNAL_TIMEOUT_SEC, (GSourceFunc) quit_main_loop,
+                           fixture);
 }
 
 static void
@@ -191,9 +201,6 @@ on_config_file_changed (GFileMonitor     *monitor,
     g_main_loop_quit (fixture->main_loop);
 }
 
-/* FIXME: the following test fails on Jenkins, but not locally; the notify event
-for the property occurs, but the file monitor does not trigger. */
-#if 0
 static void
 test_permissions_provider_set_daemon_enabled_updates_config_file (Fixture      *fixture,
                                                                   gconstpointer unused)
@@ -222,10 +229,9 @@ test_permissions_provider_set_daemon_enabled_updates_config_file (Fixture      *
 
   g_assert (g_file_load_contents (fixture->temp_file, NULL, &contents, NULL,
                                   NULL, NULL));
-  g_assert (strstr (contents, "enabled=false"));
+  g_assert_nonnull (strstr (contents, "enabled=false"));
   g_free (contents);
 }
-#endif
 
 int
 main (int                argc,
@@ -261,9 +267,9 @@ main (int                argc,
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/set-daemon-enabled",
                                  CONFIG_FILE_ENABLED_CONTENTS, setup,
                                  test_permissions_provider_set_daemon_enabled);
-  /*ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/set-daemon-enabled-updates-config-file",
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/set-daemon-enabled-updates-config-file",
                                  CONFIG_FILE_ENABLED_CONTENTS, setup,
-                                 test_permissions_provider_set_daemon_enabled_updates_config_file);*/
+                                 test_permissions_provider_set_daemon_enabled_updates_config_file);
 
 #undef ADD_PERMISSIONS_PROVIDER_TEST
 

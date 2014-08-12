@@ -5,6 +5,7 @@
 #include "emer-daemon.h"
 #include "emer-boot-id-provider.h"
 #include "emer-machine-id-provider.h"
+#include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
 #include "mock-permissions-provider.h"
@@ -34,6 +35,7 @@
 typedef struct
 {
   EmerDaemon *test_object;
+  EmerNetworkSendProvider *mock_network_send_prov;
   EmerPermissionsProvider *mock_permissions_prov;
   EmerPersistentCache *mock_persistent_cache;
 
@@ -226,11 +228,13 @@ setup (Fixture      *fixture,
     emer_machine_id_provider_new_full (MACHINE_ID_PATH);
   fixture->mock_permissions_prov = emer_permissions_provider_new ();
   fixture->mock_persistent_cache = emer_persistent_cache_new (NULL, NULL);
+  fixture->mock_network_send_prov = emer_network_send_provider_new ();
   fixture->test_object =
     emer_daemon_new_full (g_rand_new_with_seed (18),
                           5,  // Network Send Interval
                           "http://localhost/", // uri,
                           id_prov, // MachineIdProvider
+                          fixture->mock_network_send_prov, // NetworkSendProvider
                           fixture->mock_permissions_prov, // PermissionsProvider
                           fixture->mock_persistent_cache, // PersistentCache
                           20); // Buffer length
@@ -242,6 +246,7 @@ teardown (Fixture      *fixture,
           gconstpointer unused)
 {
   g_object_unref (fixture->test_object);
+  g_object_unref (fixture->mock_network_send_prov);
   g_object_unref (fixture->mock_permissions_prov);
   g_object_unref (fixture->mock_persistent_cache);
   g_unlink (MACHINE_ID_PATH);

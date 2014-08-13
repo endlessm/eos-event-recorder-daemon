@@ -170,7 +170,11 @@ TESTS_ENVIRONMENT = \
 EXTRA_DIST += \
 	tests/test-daemon-integration.py \
 	tests/test-opt-out-integration.py \
-	tests/smoke-tests/smoke.js \
 	tests/smoke-tests/event-types.js \
+	tests/smoke-tests/smokeEventRecorderHeavyPayload.js \
+	tests/smoke-tests/smokeEventRecorder.js \
+	tests/smoke-tests/smokeLibrary.js \
+	tests/smoke-tests/smokeOpenProgram.js \
+	tests/smoke-tests/smokeProgram.js \
 	tests/wait-for-service-helper.py \
 	$(NULL)

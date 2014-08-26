@@ -55,8 +55,8 @@ permissions_file=$(permissionsdir)eos-metrics-permissions.conf
 # chown and chgrp are not allowed unless you are root or under some specific
 # other conditions that may not be met every time you run 'make'.
 install-data-hook:
-	$(MKDIR_P) --mode=g+s,ug+rwx,a+r $(DESTDIR)$(persistentcachedir) $(DESTDIR)$(permissionsdir)
-	chmod --recursive g+s,ug+rwx,a+r $(DESTDIR)$(persistentcachedir) $(DESTDIR)$(permissionsdir)
+	$(MKDIR_P) --mode=g+s,ug+rwx,a+rx $(DESTDIR)$(persistentcachedir) $(DESTDIR)$(permissionsdir)
+	chmod --recursive g+s,ug+rwx,a+rx $(DESTDIR)$(persistentcachedir) $(DESTDIR)$(permissionsdir)
 	@if id -u metrics 2> /dev/null; then \
 		if ! chown --recursive metrics:metrics $(DESTDIR)$(persistentcachedir) $(DESTDIR)$(permissionsdir); then \
 			echo "*************************************"; \

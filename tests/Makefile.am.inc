@@ -70,6 +70,8 @@ tests_daemon_test_daemon_dbusdaemon_SOURCES = \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
 	daemon/emer-cache-version-provider.c daemon/emer-cache-version-provider.h \
 	daemon/emer-machine-id-provider.c daemon/emer-machine-id-provider.h \
+	tests/daemon/mock-network-send-provider.c \
+	daemon/emer-network-send-provider.h \
 	tests/daemon/mock-permissions-provider.c \
 	tests/daemon/mock-permissions-provider.h \
 	daemon/emer-permissions-provider.h \
@@ -168,7 +170,11 @@ TESTS_ENVIRONMENT = \
 EXTRA_DIST += \
 	tests/test-daemon-integration.py \
 	tests/test-opt-out-integration.py \
-	tests/smoke-tests/smoke.js \
 	tests/smoke-tests/event-types.js \
+	tests/smoke-tests/smokeEventRecorderHeavyPayload.js \
+	tests/smoke-tests/smokeEventRecorder.js \
+	tests/smoke-tests/smokeLibrary.js \
+	tests/smoke-tests/smokeOpenProgram.js \
+	tests/smoke-tests/smokeProgram.js \
 	tests/wait-for-service-helper.py \
 	$(NULL)

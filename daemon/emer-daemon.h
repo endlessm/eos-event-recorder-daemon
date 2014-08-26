@@ -6,6 +6,7 @@
 #define EMER_DAEMON_H
 
 #include "emer-machine-id-provider.h"
+#include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
 
@@ -56,6 +57,7 @@ EmerDaemon *             emer_daemon_new_full                 (GRand            
                                                                guint                    network_send_interval,
                                                                const gchar             *proxy_server_uri,
                                                                EmerMachineIdProvider   *machine_id_provider,
+                                                               EmerNetworkSendProvider *network_send_provider,
                                                                EmerPermissionsProvider *permissions_provider,
                                                                EmerPersistentCache     *persistent_cache,
                                                                gint                     buffer_length);

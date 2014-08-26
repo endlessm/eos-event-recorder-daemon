@@ -29,7 +29,7 @@ G_BEGIN_DECLS
  * ]|
  */
 
-EMTR_ALL_API_VERSIONS
+EMTR_AVAILABLE_IN_0_0
 gboolean emtr_event_id_to_name (const gchar  *event_id,
                                 const gchar **event_name);
 

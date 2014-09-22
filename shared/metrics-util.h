@@ -74,6 +74,8 @@ void      free_aggregate_buffer    (AggregateEvent  *aggregate_buffer,
 void      free_sequence_buffer     (SequenceEvent   *sequence_buffer,
                                     gint             num_sequences_buffered);
 
+void      free_variant_array       (GVariant       **variant_array);
+
 GVariant *singular_to_variant      (SingularEvent   *singular);
 
 GVariant *aggregate_to_variant     (AggregateEvent  *aggregate);

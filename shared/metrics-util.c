@@ -76,6 +76,15 @@ free_sequence_buffer (SequenceEvent *sequence_buffer,
   g_free (sequence_buffer);
 }
 
+void
+free_variant_array (GVariant **variant_array)
+{
+  for (gint i = 0; variant_array[i] != NULL; i++)
+    g_variant_unref (variant_array[i]);
+
+  g_free (variant_array);
+}
+
 GVariant *
 singular_to_variant (SingularEvent *singular)
 {

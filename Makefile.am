@@ -36,6 +36,9 @@ DISTCLEANFILES =
 # Generated sources that should be built before other sources
 BUILT_SOURCES =
 
+# Binaries that should be produced but not installed.
+noinst_PROGRAMS =
+
 # Make sure that 'make dist' includes documentation
 if CAN_MAKE_DIST
 dist-hook:

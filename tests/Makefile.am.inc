@@ -4,7 +4,7 @@ noinst_PROGRAMS = \
 	tests/test-event-types \
 	tests/test-library.dbuseventrecorder \
 	tests/daemon/test-boot-id-provider \
-    tests/daemon/test-cache-version-provider \
+	tests/daemon/test-cache-version-provider \
 	tests/daemon/test-daemon.dbusdaemon \
 	tests/daemon/test-machine-id-provider \
 	tests/daemon/test-network-send-provider \

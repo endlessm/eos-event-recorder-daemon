@@ -14,7 +14,6 @@
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <uuid/uuid.h>
-#include <errno.h>
 #include <string.h>
 #include <signal.h>
 #include "shared/metrics-util.h"

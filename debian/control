@@ -8,7 +8,6 @@ Build-Depends: autotools-dev,
                gtk-doc-tools (>= 1.18),
                libgirepository1.0-dev,
                libglib2.0-dev (>= 2.38),
-               libjson-glib-dev (>= 0.16),
                libpolkit-gobject-1-dev,
                libsoup2.4-dev (>= 2.42),
                pkg-config,
@@ -32,7 +31,6 @@ Package: eos-metrics-0-dev
 Section: non-free/libdevel
 Architecture: any
 Depends: libeosmetrics-0-0 (= ${binary:Version}),
-         libjson-glib-dev (>= 0.16),
          libsoup2.4-dev (>= 2.42),
          uuid-dev,
          ${misc:Depends}

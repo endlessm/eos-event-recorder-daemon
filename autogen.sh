@@ -1,7 +1,7 @@
 # Bootstrap script for EosMetrics
 # Run this script on a clean source checkout to get ready for building.
 
-FILE_MUST_EXIST=eosmetrics/eosmetrics.h
+FILE_MUST_EXIST=configure.ac
 
 test -n "$srcdir" || srcdir=`dirname "$0"`
 test -n "$srcdir" || srcdir=.

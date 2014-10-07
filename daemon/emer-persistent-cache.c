@@ -696,20 +696,6 @@ emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
 }
 
 /*
- * Frees all resources contained within a GVariant* list, including
- * the list itself.
- */
-static void
-free_variant_list (GVariant **list)
-{
-  g_return_if_fail (list != NULL);
-
-  for (gint i = 0; list[i] != NULL; i++)
-    g_variant_unref (list[i]);
-  g_free (list);
-}
-
-/*
  * Will transfer all metrics in the corresponding file into the out parameter
  * 'return_list'. The list will be NULL-terminated.  Returns TRUE on success,
  * and FALSE if any I/O error occured. Contents of return_list are undefined if
@@ -876,7 +862,7 @@ emer_persistent_cache_drain_metrics (EmerPersistentCache  *self,
                                              AGGREGATE_TYPE);
   if (!agg_success)
     {
-      free_variant_list (*list_of_individual_metrics);
+      free_variant_array (*list_of_individual_metrics);
       return FALSE;
     }
 
@@ -886,8 +872,8 @@ emer_persistent_cache_drain_metrics (EmerPersistentCache  *self,
                                              SEQUENCE_TYPE);
   if (!seq_success)
     {
-      free_variant_list (*list_of_individual_metrics);
-      free_variant_list (*list_of_aggregate_metrics);
+      free_variant_array (*list_of_individual_metrics);
+      free_variant_array (*list_of_aggregate_metrics);
       return FALSE;
     }
 
@@ -897,9 +883,9 @@ emer_persistent_cache_drain_metrics (EmerPersistentCache  *self,
       // The error has served its purpose in the previous call.
       g_error_free (error);
 
-      free_variant_list (*list_of_individual_metrics);
-      free_variant_list (*list_of_aggregate_metrics);
-      free_variant_list (*list_of_sequence_metrics);
+      free_variant_array (*list_of_individual_metrics);
+      free_variant_array (*list_of_aggregate_metrics);
+      free_variant_array (*list_of_sequence_metrics);
       return FALSE;
     }
 

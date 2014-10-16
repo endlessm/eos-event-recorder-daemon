@@ -10,13 +10,13 @@
 #include "emer-persistent-cache.h"
 #include "mock-permissions-provider.h"
 #include "mock-persistent-cache.h"
+#include "shared/metrics-util.h"
 
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <uuid/uuid.h>
 #include <string.h>
 #include <signal.h>
-#include "shared/metrics-util.h"
 
 #define MEANINGLESS_EVENT "350ac4ff-3026-4c25-9e7e-e8103b4fd5d8"
 #define MEANINGLESS_EVENT_2 "d936cd5c-08de-4d4e-8a87-8df1f4a33cba"

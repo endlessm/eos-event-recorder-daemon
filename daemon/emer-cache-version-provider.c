@@ -36,7 +36,6 @@ static GParamSpec *emer_cache_version_provider_props[NPROPS] = { NULL, };
  * SECTION:emer-cache-version-provider
  * @title: Cache Version Provider
  * @short_description: Provides the local cache format version.
- * @include: eosmetrics/eosmetrics.h
  *
  * The version provider supplies a version number which identifies the current
  * format this system's persistent cache is configured to store and

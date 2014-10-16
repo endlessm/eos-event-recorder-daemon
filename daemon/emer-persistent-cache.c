@@ -13,13 +13,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <eosmetrics/eosmetrics.h>
+
 #include "shared/metrics-util.h"
 
 /*
  * SECTION:emer-persistent-cache.c
  * @title: Persistent Cache
  * @short_description: Stores metrics locally (on the user's machine).
- * @include: eosmetrics/eosmetrics.h
  *
  * The Persistent Cache is the sink to which an event recorder flushes
  * metrics. It will store these metrics until a drain operation is
@@ -537,8 +538,8 @@ update_boot_offset (EmerPersistentCache *self,
                     gboolean             always_update_timestamps)
 {
   gint64 relative_time, absolute_time;
-  if (!get_current_time (CLOCK_BOOTTIME, &relative_time) ||
-      !get_current_time (CLOCK_REALTIME, &absolute_time))
+  if (!emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) ||
+      !emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time))
     {
       g_critical ("Could not get the boot offset because getting the current "
                   "time failed.");

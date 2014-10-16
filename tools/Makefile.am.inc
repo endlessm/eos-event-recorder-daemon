@@ -5,7 +5,7 @@ noinst_PROGRAMS += \
 	$(NULL)
 
 PERSISTENT_CACHE_TOOL_FLAGS = \
-	@EOSMETRICS_EVENT_RECORDER_CFLAGS@ \
+	@EOS_EVENT_RECORDER_DAEMON_CFLAGS@ \
 	-I$(top_srcdir) \
 	-I$(top_srcdir)/daemon \
 	-I$(top_srcdir)/shared \
@@ -13,7 +13,7 @@ PERSISTENT_CACHE_TOOL_FLAGS = \
 	-DPERSISTENT_CACHE_DIR="\"$(persistentcachedir)\"" \
 	-D_POSIX_C_SOURCE=200112L \
 	$(NULL)
-PERSISTENT_CACHE_TOOL_LIBS = @EOSMETRICS_EVENT_RECORDER_LIBS@
+PERSISTENT_CACHE_TOOL_LIBS = @EOS_EVENT_RECORDER_DAEMON_LIBS@
 
 tools_print_persistent_cache_SOURCES = \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \

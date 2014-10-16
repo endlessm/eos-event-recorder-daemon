@@ -13,7 +13,6 @@ eos-metrics-0.0.0
 /EosMetrics-0.gir
 /EosMetrics-0.typelib
 /docs/reference/eosmetrics/version.xml
-/tools/print-persistent-cache
 /emer-event-recorder-server.[ch]
 /eos-metrics-event-recorder
 /data/eos-metrics.conf
@@ -22,6 +21,7 @@ eos-metrics-0.0.0
 /data/com.endlessm.Metrics.service
 /data/eos-metrics-persistent-cache.conf
 /tools/eos-select-metrics-env
+/tools/print-persistent-cache
 
 # Test products
 *.log

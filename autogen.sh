@@ -1,3 +1,5 @@
+# Copyright 2013-2014 Endless Mobile, Inc.
+
 # Bootstrap script for event recorder daemon.
 # Run this script on a clean source checkout to get ready for building.
 

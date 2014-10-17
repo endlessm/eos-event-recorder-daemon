@@ -1,6 +1,6 @@
 ## Process this file with automake to produce Makefile.in
 
-# Copyright 2013 Endless Mobile, Inc.
+# Copyright 2013-2014 Endless Mobile, Inc.
 
 ## -----------
 ## Makefile.am

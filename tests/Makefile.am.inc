@@ -1,4 +1,4 @@
-# Copyright 2013, 2014 Endless Mobile, Inc.
+# Copyright 2013-2014 Endless Mobile, Inc.
 
 noinst_PROGRAMS += \
 	tests/daemon/test-boot-id-provider \

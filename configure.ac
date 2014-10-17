@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to produce configure
 
-# Copyright 2013 Endless Mobile, Inc.
+# Copyright 2013-2014 Endless Mobile, Inc.
 
 dnl ------------
 dnl configure.ac

@@ -35,7 +35,6 @@ static GParamSpec *emer_network_send_provider_props[NPROPS] = { NULL, };
  * @title: Network Send Provider
  * @short_description: Provides data regarding attempts to send metrics over the
  * network.
- * @include: eosmetrics/eosmetrics.h
  *
  * The network send provider provides information on our attempts to send
  * network requests containing bundles of metrics to remote servers.

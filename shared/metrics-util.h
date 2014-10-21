@@ -14,9 +14,6 @@
 #include <gio/gio.h>
 #include <uuid/uuid.h>
 
-/* The number of nanoseconds in one second. */
-#define NANOSECONDS_PER_SECOND 1000000000L
-
 /* The number of elements in a uuid_t. uuid_t is assumed to be a fixed-length
 array of guchar. */
 #define UUID_LENGTH (sizeof (uuid_t) / sizeof (guchar))
@@ -86,9 +83,6 @@ GVariant *swap_bytes_if_big_endian (GVariant        *variant);
 
 void      get_uuid_builder         (uuid_t           uuid,
                                     GVariantBuilder *uuid_builder);
-
-gboolean  get_current_time         (clockid_t        clock_id,
-                                    gint64          *current_time);
 
 G_END_DECLS
 

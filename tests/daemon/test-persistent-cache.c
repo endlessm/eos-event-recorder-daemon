@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <glib/gstdio.h>
 
+#include <eosmetrics/eosmetrics.h>
+
 #include "shared/metrics-util.h"
 
 #define TEST_DIRECTORY "/tmp/metrics_testing/"
@@ -308,21 +310,22 @@ read_absolute_time (void)
  * timestamps.
  */
 static gboolean
-boot_timestamp_is_valid (gint64 previous_relative_timestamp,
-                         gint64 previous_absolute_timestamp)
+boot_timestamp_is_valid (gint64 previous_relative_time,
+                         gint64 previous_absolute_time)
 {
-  gint64 stored_relative_timestamp = read_relative_time ();
-  gint64 stored_absolute_timestamp = read_absolute_time ();
+  gint64 stored_relative_time = read_relative_time ();
+  gint64 stored_absolute_time = read_absolute_time ();
 
-  gint64 after_relative_timestamp, after_absolute_timestamp;
-  g_assert (get_current_time (CLOCK_BOOTTIME, &after_relative_timestamp) &&
-            get_current_time (CLOCK_REALTIME, &after_absolute_timestamp));
+  gint64 after_relative_time, after_absolute_time;
+
+  g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &after_relative_time) &&
+            emtr_util_get_current_time (CLOCK_REALTIME, &after_absolute_time));
 
   // The actual testing:
-  return (previous_relative_timestamp <= stored_relative_timestamp &&
-          stored_relative_timestamp   <= after_relative_timestamp  &&
-          previous_absolute_timestamp <= stored_absolute_timestamp &&
-          stored_absolute_timestamp   <= after_absolute_timestamp);
+  return (previous_relative_time <= stored_relative_time &&
+          stored_relative_time   <= after_relative_time  &&
+          previous_absolute_time <= stored_absolute_time &&
+          stored_absolute_time   <= after_absolute_time);
 }
 
 static void
@@ -1508,8 +1511,8 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
   g_assert (read_whether_boot_offset_is_reset_value ());
 
   gint64 absolute_time, relative_time;
-  g_assert (get_current_time (CLOCK_BOOTTIME, &relative_time) &&
-            get_current_time (CLOCK_REALTIME, &absolute_time));
+  g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) &&
+            emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
 
   g_object_unref (cache);
   set_boot_id_in_metafile (FAKE_BOOT_ID);
@@ -1563,8 +1566,8 @@ test_persistent_cache_computes_reasonable_offset (gboolean     *unused,
   g_assert (read_whether_boot_offset_is_reset_value ());
 
   gint64 absolute_time, relative_time;
-  g_assert (get_current_time (CLOCK_BOOTTIME, &relative_time) &&
-            get_current_time (CLOCK_REALTIME, &absolute_time));
+  g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) &&
+            emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
 
   g_object_unref (cache);
   EmerPersistentCache *cache2 = make_testing_cache ();
@@ -1611,8 +1614,8 @@ test_persistent_cache_builds_boot_metafile (gboolean     *unused,
 
   gint64 first_offset = read_offset ();
   gint64 absolute_time, relative_time;
-  g_assert (get_current_time (CLOCK_BOOTTIME, &relative_time) &&
-            get_current_time (CLOCK_REALTIME, &absolute_time));
+  g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) &&
+            emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
 
   g_assert (emer_persistent_cache_get_boot_time_offset (cache, &unused_offset,
                                                         &error, TRUE));
@@ -1646,8 +1649,8 @@ test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
   g_assert_no_error (error);
 
   gint64 absolute_time, relative_time;
-  g_assert (get_current_time (CLOCK_BOOTTIME, &relative_time) &&
-            get_current_time (CLOCK_REALTIME, &absolute_time));
+  g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) &&
+            emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
 
   // This value should never be read because the persistent cache should read
   // from its cached value next call.

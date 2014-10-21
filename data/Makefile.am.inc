@@ -1,14 +1,5 @@
 # Copyright 2014 Endless Mobile, Inc.
 
-daemon_dbus_name = emer-event-recorder-server
-daemon_dbus_sources = $(daemon_dbus_name).c $(daemon_dbus_name).h
-BUILT_SOURCES += $(daemon_dbus_sources)
-$(daemon_dbus_sources): data/com.endlessm.Metrics.xml
-	$(AM_V_GEN)$(GDBUS_CODEGEN) --generate-c-code $(daemon_dbus_name) \
-		--c-namespace Emer \
-		--interface-prefix com.endlessm.Metrics. \
-		$<
-
 # Defined as systemdsystemunitdir in ../configure.ac.
 systemdsystemunit_DATA = data/eos-metrics-event-recorder.service
 
@@ -54,14 +45,12 @@ tmpfilesddir = $(libdir)/tmpfiles.d/
 tmpfilesd_DATA = data/eos-metrics.conf
 
 EXTRA_DIST += \
-	data/com.endlessm.Metrics.xml \
 	data/com.endlessm.Metrics.service.in \
 	data/eos-metrics-event-recorder.service.in \
 	data/eos-metrics.conf.in \
 	$(NULL)
 
 CLEANFILES += \
-	$(daemon_dbus_sources) \
 	data/com.endlessm.Metrics.service \
 	data/eos-metrics-event-recorder.service \
 	data/eos-metrics.conf \

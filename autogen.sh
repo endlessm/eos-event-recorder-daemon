@@ -1,4 +1,6 @@
-# Bootstrap script for EosMetrics
+# Copyright 2013-2014 Endless Mobile, Inc.
+
+# Bootstrap script for event recorder daemon.
 # Run this script on a clean source checkout to get ready for building.
 
 FILE_MUST_EXIST=configure.ac
@@ -22,7 +24,6 @@ if test -z "$NOCONFIGURE"; then
 fi
 
 # Run the actual tools to prepare the clean checkout
-gtkdocize || exit $?
 autoreconf -fi || exit $?
 
 cd "$olddir"

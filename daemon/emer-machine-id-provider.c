@@ -4,6 +4,8 @@
 
 #include "emer-machine-id-provider.h"
 
+#include "shared/metrics-util.h"
+
 #include <stdio.h>
 #include <string.h>
 #include <uuid/uuid.h>
@@ -17,12 +19,6 @@ typedef struct EmerMachineIdProviderPrivate
 } EmerMachineIdProviderPrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerMachineIdProvider, emer_machine_id_provider, G_TYPE_OBJECT)
-
-/*
- * The number of elements in a uuid_t. uuid_t is assumed to be a fixed-length
- * array of guchar.
- */
-#define UUID_LENGTH (sizeof (uuid_t) / sizeof (guchar))
 
 /*
  * The expected size in bytes of the file located at
@@ -55,7 +51,6 @@ static GParamSpec *emer_machine_id_provider_props[NPROPS] = { NULL, };
  * SECTION:emer-machine-id-provider
  * @title: Machine ID Provider
  * @short_description: Provides unique machine identifiers.
- * @include: eosmetrics/eosmetrics.h
  *
  * The machine ID provider supplies UUIDs which anonymously identify the
  * machine (not the user) sending metrics.

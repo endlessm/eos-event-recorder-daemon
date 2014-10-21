@@ -4,7 +4,7 @@ Maintainer: Kurt von Laven <kurt@endlessm.com>
 Build-Depends: autotools-dev,
                debhelper (>= 8.0.0),
                dh-systemd,
-               eos-metrics-0-dev,
+               eos-metrics-0-dev (>= 0.2),
                libglib2.0-dev (>= 2.38),
                libpolkit-gobject-1-dev,
                libsoup2.4-dev (>= 2.42),
@@ -22,8 +22,7 @@ Architecture: any
 Breaks: eos-metrics-event-recorder
 Replaces: eos-metrics-event-recorder
 Provides: eos-metrics-event-recorder
-Depends: libeosmetrics-0-0 (= ${binary:Version}),
-         ${shlibs:Depends},
+Depends: ${shlibs:Depends},
          ${misc:Depends}
 Description: EndlessOS Event Recorder Daemon
  Daemon for aggregating and recording metrics data in EndlessOS.

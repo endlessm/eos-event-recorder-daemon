@@ -1,5 +1,5 @@
-eos-metrics (0.0.0) unstable; urgency=low
+eos-event-recorder-daemon (0.0.0) unstable; urgency=low
 
   * Initial release
 
- -- Philip Chimento <philip@endlessm.com>  Sat, 11 Jan 2014 20:03:11 -0500
+ -- Kurt von Laven <kurt@endlessm.com>  Thu, 25 Sep 2014 09:18:00 -0700

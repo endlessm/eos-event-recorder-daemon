@@ -1,69 +1,29 @@
-Source: eos-metrics
+Source: eos-event-recorder-daemon
 Priority: standard
-Maintainer: Philip Chimento <philip@endlessm.com>
+Maintainer: Kurt von Laven <kurt@endlessm.com>
 Build-Depends: autotools-dev,
                debhelper (>= 8.0.0),
                dh-systemd,
-               gobject-introspection,
-               gtk-doc-tools (>= 1.18),
-               libgirepository1.0-dev,
+               eos-metrics-0-dev,
                libglib2.0-dev (>= 2.38),
                libpolkit-gobject-1-dev,
                libsoup2.4-dev (>= 2.42),
                pkg-config,
                python-dbusmock,
                systemd,
-               uuid-dev,
-               yelp-tools,
-               yelp-xsl
+               uuid-dev
 Standards-Version: 3.9.4
 Section: non-free/libs
 Homepage: http://www.endlessm.com
 
-Package: eos-metrics-event-recorder
+Package: eos-event-recorder-daemon
 Section: non-free/net
 Architecture: any
-Depends: ${misc:Depends}
-Description: EndlessOS Metrics Kit
- Daemon for aggregating and recording metrics data in EndlessOS.
-
-Package: eos-metrics-0-dev
-Section: non-free/libdevel
-Architecture: any
+Breaks: eos-metrics-event-recorder
+Replaces: eos-metrics-event-recorder
+Provides: eos-metrics-event-recorder
 Depends: libeosmetrics-0-0 (= ${binary:Version}),
-         libsoup2.4-dev (>= 2.42),
-         uuid-dev,
-         ${misc:Depends}
-Description: Files needed for developing using the EndlessOS Metrics Kit
- Install this package if you are compiling C programs that use the EndlessOS
- Metrics Kit.
-
-Package: libeosmetrics-0-0
-Section: non-free/libs
-Architecture: any
-Depends: eos-metrics-event-recorder,
          ${shlibs:Depends},
          ${misc:Depends}
-Description: EndlessOS Metrics Kit
- Library for recording and sending metrics data in EndlessOS.
-
-Package: eos-metrics-0-doc
-Section: non-free/doc
-Architecture: all
-Depends: ${misc:Depends}
-Suggests: devhelp
-Description: EndlessOS Metrics Kit API documentation
- API documentation for the EndlessOS Metrics Kit. Install this if you want to
- access the API documentation locally, either in your browser or in the Devhelp
- program.
-
-Package: gir1.2-eosmetrics-0
-Section: non-free/introspection
-Architecture: any
-Depends: ${gir:Depends},
-         ${misc:Depends}
-Description: EndlessOS Metrics Kit introspection files
- Introspection data for the EndlessOS Metrics Kit. Install this if you want to
- use the GObject introspection bindings for the EndlessOS Metrics Kit from a
- language such as Javascript.
-
+Description: EndlessOS Event Recorder Daemon
+ Daemon for aggregating and recording metrics data in EndlessOS.

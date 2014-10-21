@@ -1,8 +1,0 @@
-etc/dbus-1/system.d/com.endlessm.Metrics.conf
-etc/metrics/eos-metrics-permissions.conf
-lib/systemd/system/eos-metrics-event-recorder.service
-usr/lib/eos-metrics/eos-metrics-event-recorder
-usr/lib/tmpfiles.d/eos-metrics.conf
-usr/share/dbus-1/system-services/com.endlessm.Metrics.service
-usr/share/polkit-1/actions/com.endlessm.Metrics.policy
-usr/bin/eos-select-metrics-env

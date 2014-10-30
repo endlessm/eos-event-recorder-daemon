@@ -17,6 +17,8 @@
 #include <libsoup/soup.h>
 #include <uuid/uuid.h>
 
+#include <eosmetrics/eosmetrics.h>
+
 #include "emer-daemon.h"
 #include "emer-machine-id-provider.h"
 #include "emer-network-send-provider.h"
@@ -279,8 +281,8 @@ get_offset_timestamps (EmerDaemon *self,
                        gint64     *abs_timestamp_ptr)
 {
 
-  if (!get_current_time (CLOCK_BOOTTIME, rel_timestamp_ptr) ||
-      !get_current_time (CLOCK_REALTIME, abs_timestamp_ptr))
+  if (!emtr_util_get_current_time (CLOCK_BOOTTIME, rel_timestamp_ptr) ||
+      !emtr_util_get_current_time (CLOCK_REALTIME, abs_timestamp_ptr))
     return FALSE;
 
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);

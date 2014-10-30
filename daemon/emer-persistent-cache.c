@@ -13,13 +13,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <eosmetrics/eosmetrics.h>
+
 #include "shared/metrics-util.h"
 
 /*
  * SECTION:emer-persistent-cache.c
  * @title: Persistent Cache
  * @short_description: Stores metrics locally (on the user's machine).
- * @include: eosmetrics/eosmetrics.h
  *
  * The Persistent Cache is the sink to which an event recorder flushes
  * metrics. It will store these metrics until a drain operation is
@@ -537,8 +538,8 @@ update_boot_offset (EmerPersistentCache *self,
                     gboolean             always_update_timestamps)
 {
   gint64 relative_time, absolute_time;
-  if (!get_current_time (CLOCK_BOOTTIME, &relative_time) ||
-      !get_current_time (CLOCK_REALTIME, &absolute_time))
+  if (!emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) ||
+      !emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time))
     {
       g_critical ("Could not get the boot offset because getting the current "
                   "time failed.");
@@ -693,20 +694,6 @@ emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
     emer_persistent_cache_get_instance_private (self);
   *offset = priv->boot_offset;
   return TRUE;
-}
-
-/*
- * Frees all resources contained within a GVariant* list, including
- * the list itself.
- */
-static void
-free_variant_list (GVariant **list)
-{
-  g_return_if_fail (list != NULL);
-
-  for (gint i = 0; list[i] != NULL; i++)
-    g_variant_unref (list[i]);
-  g_free (list);
 }
 
 /*
@@ -876,7 +863,7 @@ emer_persistent_cache_drain_metrics (EmerPersistentCache  *self,
                                              AGGREGATE_TYPE);
   if (!agg_success)
     {
-      free_variant_list (*list_of_individual_metrics);
+      free_variant_array (*list_of_individual_metrics);
       return FALSE;
     }
 
@@ -886,8 +873,8 @@ emer_persistent_cache_drain_metrics (EmerPersistentCache  *self,
                                              SEQUENCE_TYPE);
   if (!seq_success)
     {
-      free_variant_list (*list_of_individual_metrics);
-      free_variant_list (*list_of_aggregate_metrics);
+      free_variant_array (*list_of_individual_metrics);
+      free_variant_array (*list_of_aggregate_metrics);
       return FALSE;
     }
 
@@ -897,9 +884,9 @@ emer_persistent_cache_drain_metrics (EmerPersistentCache  *self,
       // The error has served its purpose in the previous call.
       g_error_free (error);
 
-      free_variant_list (*list_of_individual_metrics);
-      free_variant_list (*list_of_aggregate_metrics);
-      free_variant_list (*list_of_sequence_metrics);
+      free_variant_array (*list_of_individual_metrics);
+      free_variant_array (*list_of_aggregate_metrics);
+      free_variant_array (*list_of_sequence_metrics);
       return FALSE;
     }
 

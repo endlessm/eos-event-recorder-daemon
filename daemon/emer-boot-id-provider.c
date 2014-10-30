@@ -47,7 +47,6 @@ static GParamSpec *emer_boot_id_provider_props[NPROPS] = { NULL, };
  * SECTION:emer-boot-id-provider
  * @title: Boot ID Provider
  * @short_description: Provides unique boot identifiers.
- * @include: eosmetrics/eosmetrics.h
  *
  * The boot ID provider supplies UUIDs which uniquely identify each boot of the
  * computer.

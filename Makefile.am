@@ -66,6 +66,18 @@ uninstall-hook:
 
 include $(top_srcdir)/data/Makefile.am.inc
 
+# # # CODE COVERAGE # # #
+
+EOS_COVERAGE_BLACKLIST_PATTERNS =	\
+	*/tests/*			\
+	*emer-event-recorder-server.c	\
+	$(NULL)
+
+@EOS_COVERAGE_RULES@
+
+AM_CFLAGS += @EOS_C_COVERAGE_CFLAGS@
+AM_LDFLAGS = @EOS_C_COVERAGE_LDFLAGS@
+
 # # # DBUS DAEMON ("EVENT RECORDER SERVER") # # #
 
 include $(top_srcdir)/daemon/Makefile.am.inc

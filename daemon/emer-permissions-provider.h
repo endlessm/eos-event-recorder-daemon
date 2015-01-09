@@ -55,6 +55,8 @@ gboolean                 emer_permissions_provider_get_daemon_enabled (EmerPermi
 void                     emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
                                                                        gboolean                 enabled);
 
+gchar                   *emer_permissions_provider_get_environment    (EmerPermissionsProvider *self);
+
 G_END_DECLS
 
 #endif /* EMER_PERMISSIONS_PROVIDER_H */

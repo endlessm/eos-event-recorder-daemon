@@ -51,11 +51,10 @@ struct _EmerDaemonClass
 
 GType                    emer_daemon_get_type                 (void) G_GNUC_CONST;
 
-EmerDaemon *             emer_daemon_new                      (const gchar             *environment);
+EmerDaemon *             emer_daemon_new                      (void);
 
 EmerDaemon *             emer_daemon_new_full                 (GRand                   *rand,
                                                                guint                    network_send_interval,
-                                                               const gchar             *proxy_server_uri,
                                                                EmerMachineIdProvider   *machine_id_provider,
                                                                EmerNetworkSendProvider *network_send_provider,
                                                                EmerPermissionsProvider *permissions_provider,

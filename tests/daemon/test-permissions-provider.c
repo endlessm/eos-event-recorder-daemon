@@ -17,15 +17,23 @@
  */
 #define MAX_NUM_TIMEOUTS 2
 
-#define CONFIG_FILE_ENABLED_CONTENTS \
+#define CONFIG_FILE_ENABLED_TEST \
   "[global]\n" \
   "enabled=true\n" \
   "environment=test\n"
-#define CONFIG_FILE_DISABLED_CONTENTS \
+#define CONFIG_FILE_DISABLED_TEST \
   "[global]\n" \
   "enabled=false\n" \
   "environment=test\n"
-#define CONFIG_FILE_INVALID_CONTENTS "lavubeu;f'w943ty[jdn;fbl\n"
+#define CONFIG_FILE_INVALID "lavubeu;f'w943ty[jdn;fbl\n"
+#define CONFIG_FILE_ENABLED_DEV \
+  "[global]\n" \
+  "enabled=true\n" \
+  "environment=dev\n"
+#define CONFIG_FILE_ENABLED_INVALID_ENVIRONMENT \
+  "[global]\n" \
+  "enabled=true\n" \
+  "environment=invalid\n"
 
 typedef struct {
   GFile *temp_file;
@@ -120,6 +128,20 @@ setup_invalid_file (Fixture      *fixture,
 }
 
 static void
+setup_invalid_environment (Fixture      *fixture,
+                           gconstpointer contents)
+{
+  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
+                         "*Error: Metrics environment is set to: * in *. "
+                         "Valid metrics environments are: dev, test, "
+                         "production.");
+  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
+                         "Metrics environment was not present or was invalid. "
+                         "Assuming 'test' environment.");
+  setup (fixture, contents);
+}
+
+static void
 teardown (Fixture      *fixture,
           gconstpointer unused)
 {
@@ -166,6 +188,37 @@ test_permissions_provider_get_daemon_enabled_fallback (Fixture      *fixture,
                                                        gconstpointer unused)
 {
   g_assert_false (emer_permissions_provider_get_daemon_enabled (fixture->test_object));
+  g_test_assert_expected_messages ();
+}
+
+static void
+test_permissions_provider_get_environment_test (Fixture      *fixture,
+                                                gconstpointer unused)
+{
+  gchar *environment =
+    emer_permissions_provider_get_environment (fixture->test_object);
+  g_assert_cmpstr (environment, ==, "test");
+  g_clear_pointer (&environment, g_free);
+}
+
+static void
+test_permissions_provider_get_environment_dev (Fixture      *fixture,
+                                               gconstpointer unused)
+{
+  gchar *environment =
+    emer_permissions_provider_get_environment (fixture->test_object);
+  g_assert_cmpstr (environment, ==, "dev");
+  g_clear_pointer (&environment, g_free);
+}
+
+static void
+test_permissions_provider_get_environment_test_fallback (Fixture      *fixture,
+                                                         gconstpointer unused)
+{
+  gchar *environment =
+    emer_permissions_provider_get_environment (fixture->test_object);
+  g_assert_cmpstr (environment, ==, "test");
+  g_clear_pointer (&environment, g_free);
   g_test_assert_expected_messages ();
 }
 
@@ -243,32 +296,43 @@ main (int                argc,
   g_test_add ((path), Fixture, (file_contents), (setup), (test_func), teardown);
 
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/existing-config-file",
-                                 CONFIG_FILE_ENABLED_CONTENTS, setup,
+                                 CONFIG_FILE_ENABLED_TEST, setup,
                                  test_permissions_provider_new);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/absent-config-file",
                                  NULL, setup, test_permissions_provider_new);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/invalid-config-file",
-                                 CONFIG_FILE_INVALID_CONTENTS,
+                                 CONFIG_FILE_INVALID,
                                  setup_invalid_file,
                                  test_permissions_provider_new_invalid_file);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/existing-config-file-yes",
-                                 CONFIG_FILE_ENABLED_CONTENTS, setup,
+                                 CONFIG_FILE_ENABLED_TEST, setup,
                                  test_permissions_provider_get_daemon_enabled);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/existing-config-file-no",
-                                 CONFIG_FILE_DISABLED_CONTENTS, setup,
+                                 CONFIG_FILE_DISABLED_TEST, setup,
                                  test_permissions_provider_get_daemon_enabled_false);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/absent-config-file",
                                  NULL, setup,
                                  test_permissions_provider_get_daemon_enabled_fallback);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/invalid-config-file",
-                                 CONFIG_FILE_INVALID_CONTENTS,
+                                 CONFIG_FILE_INVALID,
                                  setup_invalid_file,
                                  test_permissions_provider_get_daemon_enabled_fallback);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-environment/existing-config-file",
+                                 CONFIG_FILE_ENABLED_TEST, setup,
+                                 test_permissions_provider_get_environment_test);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-environment/dev",
+                                 CONFIG_FILE_ENABLED_DEV,
+                                 setup,
+                                 test_permissions_provider_get_environment_dev);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-environment/invalid-environment",
+                                 CONFIG_FILE_ENABLED_INVALID_ENVIRONMENT,
+                                 setup_invalid_environment,
+                                 test_permissions_provider_get_environment_test_fallback);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/set-daemon-enabled",
-                                 CONFIG_FILE_ENABLED_CONTENTS, setup,
+                                 CONFIG_FILE_ENABLED_TEST, setup,
                                  test_permissions_provider_set_daemon_enabled);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/set-daemon-enabled-updates-config-file",
-                                 CONFIG_FILE_ENABLED_CONTENTS, setup,
+                                 CONFIG_FILE_ENABLED_TEST, setup,
                                  test_permissions_provider_set_daemon_enabled_updates_config_file);
 
 #undef ADD_PERMISSIONS_PROVIDER_TEST

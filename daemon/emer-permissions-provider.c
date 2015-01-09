@@ -20,12 +20,12 @@ typedef struct _EmerPermissionsProviderPrivate
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerPermissionsProvider, emer_permissions_provider, G_TYPE_OBJECT)
 
-#define DAEMON_ENABLED_GROUP_NAME "global"
+#define DAEMON_GLOBAL_GROUP_NAME "global"
 #define DAEMON_ENABLED_KEY_NAME "enabled"
 #define DAEMON_ENVIRONMENT_KEY_NAME "environment"
 
 #define FALLBACK_CONFIG_FILE_DATA \
-  "[" DAEMON_ENABLED_GROUP_NAME "]\n" \
+  "[" DAEMON_GLOBAL_GROUP_NAME "]\n" \
   DAEMON_ENABLED_KEY_NAME "=false\n" \
   DAEMON_ENVIRONMENT_KEY_NAME "=production\n"
 
@@ -294,13 +294,13 @@ emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self)
 
   GError *error = NULL;
   gboolean retval = g_key_file_get_boolean (priv->permissions,
-                                            DAEMON_ENABLED_GROUP_NAME,
+                                            DAEMON_GLOBAL_GROUP_NAME,
                                             DAEMON_ENABLED_KEY_NAME, &error);
   if (error != NULL)
     {
       g_critical ("Couldn't find key '%s:%s' in permissions config file. "
                   "Returning default value. Message: %s.",
-                  DAEMON_ENABLED_GROUP_NAME, DAEMON_ENABLED_KEY_NAME,
+                  DAEMON_GLOBAL_GROUP_NAME, DAEMON_ENABLED_KEY_NAME,
                   error->message);
       g_error_free (error);
       /* retval is FALSE in case of error */
@@ -323,10 +323,62 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
   EmerPermissionsProviderPrivate *priv =
     emer_permissions_provider_get_instance_private (self);
 
-  g_key_file_set_boolean (priv->permissions, DAEMON_ENABLED_GROUP_NAME,
+  g_key_file_set_boolean (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
                           DAEMON_ENABLED_KEY_NAME, enabled);
 
   write_config_file_async (self);
 
   g_object_notify (G_OBJECT (self), "daemon-enabled");
+}
+
+/*
+ * emer_permissions_provider_get_environment:
+ * @self: the permissions provider
+ *
+ * Returns the current metrics environment.
+ *
+ * Returns: the metrics environment string if it exists in the permissions file
+ * and is valid. The default value of the environment string is "test".
+ */
+gchar *
+emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
+{
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  /* Update the cached permissions file. */
+  read_config_file_sync (self);
+
+  GError *error = NULL;
+  gchar *environment = g_key_file_get_value (priv->permissions,
+                                             DAEMON_GLOBAL_GROUP_NAME,
+                                             DAEMON_ENVIRONMENT_KEY_NAME,
+                                             &error);
+  if (error != NULL)
+    {
+      g_critical ("Couldn't find key '%s:%s' in permissions config file. "
+                  "Returning default value. Message: %s.",
+                  DAEMON_GLOBAL_GROUP_NAME, DAEMON_ENVIRONMENT_KEY_NAME,
+                  error->message);
+      g_error_free (error);
+    }
+
+  if (g_strcmp0 (environment, "dev") != 0 &&
+      g_strcmp0 (environment, "test") != 0 &&
+      g_strcmp0 (environment, "production") != 0)
+    {
+      g_warning ("Error: Metrics environment is set to: %s in %s. "
+                 "Valid metrics environments are: dev, test, production.",
+                 environment, PERMISSIONS_FILE);
+      g_clear_pointer (&environment, g_free);
+    }
+
+  if (environment == NULL)
+    {
+      g_warning ("Metrics environment was not present or was invalid. Assuming "
+                 "'test' environment.");
+      return g_strdup ("test");
+    }
+
+  return environment;
 }

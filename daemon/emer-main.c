@@ -193,45 +193,7 @@ int
 main (int                argc,
       const char * const argv[])
 {
-  EmerDaemon *daemon;
-
-  /* Read configuration file to determine metrics environment. */
-  GKeyFile *configuration_file = g_key_file_new ();
-  GError *error = NULL;
-
-  gchar *environment = NULL;
-  if (g_key_file_load_from_file (configuration_file, PERMISSIONS_FILE,
-                                 G_KEY_FILE_NONE, &error))
-    {
-      environment = g_key_file_get_value (configuration_file, "global",
-                                          "environment", NULL);
-      g_key_file_free (configuration_file);
-    }
-  else
-    {
-      g_warning ("Unable to load configuration file. Error: %s.",
-                 error->message);
-      g_clear_error (&error);
-    }
-  if (g_strcmp0 (environment, "dev") != 0 &&
-      g_strcmp0 (environment, "test") != 0 &&
-      g_strcmp0 (environment, "production") != 0)
-    {
-      g_warning ("Error: Metrics environment is set to: %s in %s. "
-                 "Valid metrics environments are: dev, test, production.",
-                 environment, PERMISSIONS_FILE);
-      g_clear_pointer (&environment, g_free);
-    }
-
-  if (environment == NULL)
-    {
-      g_warning ("Metrics environment was not present or was invalid. Assuming "
-                 "'test' environment.");
-      environment = g_strdup ("test");
-    }
-
-  daemon = emer_daemon_new (environment);
-  g_free (environment);
+  EmerDaemon *daemon = emer_daemon_new ();
 
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
 

@@ -69,6 +69,12 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
   g_signal_emit_by_name (self, "notify::daemon-enabled", NULL);
 }
 
+gchar *
+emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
+{
+  return g_strdup ("test");
+}
+
 /* API OF MOCK OBJECT */
 
 /* Return number of calls to emer_permissions_provider_get_daemon_enabled() */

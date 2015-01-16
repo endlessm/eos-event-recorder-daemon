@@ -56,3 +56,8 @@ Makefile.in
 .dirstamp
 /test-driver
 *.tar.gz
+
+# Unit test / coverage reports
+*.gcda
+*.gcno
+/_coverage

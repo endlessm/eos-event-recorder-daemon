@@ -4,8 +4,11 @@
 
 #include "emer-permissions-provider.h"
 
+#include <string.h>
+
 #include <glib.h>
 #include <gio/gio.h>
+#include <ostree-1/ostree-repo.h>
 
 #include "shared/metrics-util.h"
 
@@ -15,7 +18,10 @@ typedef struct _EmerPermissionsProviderPrivate
   GKeyFile *permissions;
 
   /* For reading the config file */
-  GFile *config_file;
+  GFile *permissions_config_file;
+
+  /* For reading the OSTree config file */
+  GFile *ostree_config_file;
 } EmerPermissionsProviderPrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerPermissionsProvider, emer_permissions_provider, G_TYPE_OBJECT)
@@ -32,7 +38,8 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerPermissionsProvider, emer_permissions_provider, 
 enum
 {
   PROP_0,
-  PROP_CONFIG_FILE_PATH,
+  PROP_PERMISSIONS_CONFIG_FILE_PATH,
+  PROP_OSTREE_CONFIG_FILE_PATH,
   PROP_DAEMON_ENABLED,
   NPROPS
 };
@@ -62,17 +69,19 @@ write_config_file_sync (EmerPermissionsProvider *self)
   EmerPermissionsProviderPrivate *priv =
     emer_permissions_provider_get_instance_private (self);
 
-  gchar *config_file_path = g_file_get_path (priv->config_file);
+  gchar *permissions_config_file_path =
+    g_file_get_path (priv->permissions_config_file);
   GError *error = NULL;
 
-  if (!g_key_file_save_to_file (priv->permissions, config_file_path, &error))
+  if (!g_key_file_save_to_file (priv->permissions, permissions_config_file_path,
+      &error))
     {
       g_critical ("Could not write to permissions config file '%s': %s.",
-                  config_file_path, error->message);
+                  permissions_config_file_path, error->message);
       g_clear_error (&error);
     }
 
-  g_free (config_file_path);
+  g_free (permissions_config_file_path);
 }
 
 /* Read config values from the config file, and if that fails assume the
@@ -85,7 +94,7 @@ read_config_file_sync (EmerPermissionsProvider *self)
 
   GError *error = NULL;
 
-  gchar *path = g_file_get_path (priv->config_file);
+  gchar *path = g_file_get_path (priv->permissions_config_file);
   gboolean success = g_key_file_load_from_file (priv->permissions, path,
                                                 G_KEY_FILE_NONE, &error);
   if (!success)
@@ -129,6 +138,153 @@ write_config_file_async (EmerPermissionsProvider *self)
   g_object_unref (task);
 }
 
+static gchar *
+get_ostree_url_from_file (EmerPermissionsProvider *self)
+{
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  gchar *path = g_file_get_path (priv->ostree_config_file);
+
+  if (path == NULL)
+    {
+      g_warning ("Unable to get file path from given OSTree config file.");
+      return NULL;
+    }
+
+  GKeyFile *ostree_configuration_key_file = g_key_file_new ();
+  GError *error = NULL;
+  if (!g_key_file_load_from_file (ostree_configuration_key_file, path,
+                                 G_KEY_FILE_NONE, &error))
+    {
+      g_warning ("Unable to load OSTree GKeyFile from given OSTree config "
+                 "file path %s. Error: %s.", path, error->message);
+      g_free (path);
+      g_clear_error (&error);
+      return NULL;
+    }
+
+  g_free (path);
+
+  gchar *ostree_url = g_key_file_get_value (ostree_configuration_key_file,
+                                            "remote \"eos\"",
+                                            "url",
+                                            &error);
+  g_key_file_unref (ostree_configuration_key_file);
+
+  if (ostree_url == NULL)
+    {
+      g_warning ("Unable to read OSTree URL from given OSTree config file. "
+                 "Error: %s.", error->message);
+      g_clear_error (&error);
+    }
+
+  return ostree_url;
+}
+
+static gchar *
+get_ostree_url_from_ostree_repo (void)
+{
+  OstreeRepo *ostree_repo = ostree_repo_new_default ();
+
+  GError *error = NULL;
+  if (!ostree_repo_check (ostree_repo, &error))
+    {
+      g_warning ("Unable to open OSTree repo. Error: %s.", error->message);
+      g_clear_error (&error);
+      g_object_unref (ostree_repo);
+      return NULL;
+    }
+
+  GKeyFile *ostree_configuration_file = ostree_repo_get_config (ostree_repo);
+
+  if (ostree_configuration_file == NULL)
+    {
+      g_warning ("Unable to load OSTree configuration file.");
+      g_object_unref (ostree_repo);
+      return NULL;
+    }
+
+  gchar *ostree_url = g_key_file_get_value (ostree_configuration_file,
+                                            "remote \"eos\"",
+                                            "url",
+                                            &error);
+  g_object_unref (ostree_repo);
+
+  if (ostree_url == NULL)
+    {
+      g_warning ("Unable to read OSTree URL. Error: %s.", error->message);
+      g_clear_error (&error);
+    }
+
+  return ostree_url;
+}
+
+static gchar *
+read_ostree_url (EmerPermissionsProvider *self)
+{
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  if (priv->ostree_config_file == NULL)
+    return get_ostree_url_from_ostree_repo ();
+  else
+    return get_ostree_url_from_file (self);
+}
+
+static gchar *
+read_environment (EmerPermissionsProvider *self)
+{
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  GError *error = NULL;
+  gchar *environment = g_key_file_get_value (priv->permissions,
+                                             DAEMON_GLOBAL_GROUP_NAME,
+                                             DAEMON_ENVIRONMENT_KEY_NAME,
+                                             &error);
+  if (error != NULL)
+    {
+      g_critical ("Couldn't find key '%s:%s' in permissions config file. "
+                  "Returning default value. Message: %s.",
+                  DAEMON_GLOBAL_GROUP_NAME, DAEMON_ENVIRONMENT_KEY_NAME,
+                  error->message);
+      g_error_free (error);
+    }
+
+  if (g_strcmp0 (environment, "dev") != 0 &&
+      g_strcmp0 (environment, "test") != 0 &&
+      g_strcmp0 (environment, "production") != 0)
+    {
+      g_warning ("Error: Metrics environment is set to: %s in %s. "
+                 "Valid metrics environments are: dev, test, production.",
+                 environment, PERMISSIONS_FILE);
+      g_clear_pointer (&environment, g_free);
+    }
+
+  if (environment == NULL)
+    {
+      g_warning ("Metrics environment was not present or was invalid. Assuming "
+                 "'test' environment.");
+      return g_strdup ("test");
+    }
+
+  return environment;
+}
+
+static void
+set_environment (EmerPermissionsProvider *self,
+                 const gchar             *environment)
+{
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  g_key_file_set_string (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
+                         DAEMON_ENVIRONMENT_KEY_NAME, environment);
+
+  write_config_file_async (self);
+}
+
 static void
 emer_permissions_provider_constructed (GObject *object)
 {
@@ -148,7 +304,21 @@ set_config_file_path (EmerPermissionsProvider *self,
   EmerPermissionsProviderPrivate *priv =
     emer_permissions_provider_get_instance_private (self);
 
-  priv->config_file = g_file_new_for_path (path);
+  priv->permissions_config_file = g_file_new_for_path (path);
+}
+
+/* Construct-only setter */
+static void
+set_ostree_config_file_path (EmerPermissionsProvider *self,
+                             const gchar             *path)
+{
+  if (path == NULL)
+    return;
+
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  priv->ostree_config_file = g_file_new_for_path (path);
 }
 
 static void
@@ -181,8 +351,12 @@ emer_permissions_provider_set_property (GObject      *object,
 
   switch (property_id)
     {
-    case PROP_CONFIG_FILE_PATH:
+    case PROP_PERMISSIONS_CONFIG_FILE_PATH:
       set_config_file_path (self, g_value_get_string (value));
+      break;
+
+    case PROP_OSTREE_CONFIG_FILE_PATH:
+      set_ostree_config_file_path (self, g_value_get_string (value));
       break;
 
     case PROP_DAEMON_ENABLED:
@@ -203,7 +377,8 @@ emer_permissions_provider_finalize (GObject *object)
     emer_permissions_provider_get_instance_private (self);
 
   g_key_file_unref (priv->permissions);
-  g_clear_object (&priv->config_file);
+  g_clear_object (&priv->permissions_config_file);
+  g_clear_object (&priv->ostree_config_file);
 
   G_OBJECT_CLASS (emer_permissions_provider_parent_class)->finalize (object);
 }
@@ -218,10 +393,15 @@ emer_permissions_provider_class_init (EmerPermissionsProviderClass *klass)
   object_class->set_property = emer_permissions_provider_set_property;
   object_class->finalize = emer_permissions_provider_finalize;
 
-  emer_permissions_provider_props[PROP_CONFIG_FILE_PATH] =
+  emer_permissions_provider_props[PROP_PERMISSIONS_CONFIG_FILE_PATH] =
     g_param_spec_string ("config-file-path", "Config file path",
                          "Path to permissions configuration file",
                          PERMISSIONS_FILE,
+                         G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
+  emer_permissions_provider_props[PROP_OSTREE_CONFIG_FILE_PATH] =
+    g_param_spec_string ("ostree-config-file-path", "OSTree config file path",
+                         "Path to OSTree configuration file",
+                         NULL,
                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
   emer_permissions_provider_props[PROP_DAEMON_ENABLED] =
     g_param_spec_boolean ("daemon-enabled", "Daemon enabled",
@@ -240,6 +420,7 @@ emer_permissions_provider_init (EmerPermissionsProvider *self)
     emer_permissions_provider_get_instance_private (self);
 
   priv->permissions = g_key_file_new ();
+  priv->ostree_config_file = NULL;
 }
 
 /* PUBLIC API */
@@ -263,17 +444,19 @@ emer_permissions_provider_new (void)
 /*
  * emer_permissions_provider_new_full:
  *
- * Creates a new permissions provider with a custom config file path.
- * Use this function only for testing purposes.
+ * Creates a new permissions provider with a custom config file path and custom
+ * OSTree config file path. Use this function only for testing purposes.
  *
  * Returns: (transfer full): a new permissions provider.
  *   Free with g_object_unref() when done.
  */
 EmerPermissionsProvider *
-emer_permissions_provider_new_full (const char *config_file_path)
+emer_permissions_provider_new_full (const char *permissions_config_file_path,
+                                    const char *ostree_config_file_path)
 {
   return g_object_new (EMER_TYPE_PERMISSIONS_PROVIDER,
-                       "config-file-path", config_file_path,
+                       "config-file-path", permissions_config_file_path,
+                       "ostree-config-file-path", ostree_config_file_path,
                        NULL);
 }
 
@@ -343,42 +526,29 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
 gchar *
 emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
   /* Update the cached permissions file. */
   read_config_file_sync (self);
 
-  GError *error = NULL;
-  gchar *environment = g_key_file_get_value (priv->permissions,
-                                             DAEMON_GLOBAL_GROUP_NAME,
-                                             DAEMON_ENVIRONMENT_KEY_NAME,
-                                             &error);
-  if (error != NULL)
+  gchar *environment = read_environment (self);
+  gchar *ostree_url = read_ostree_url (self);
+
+  if (ostree_url == NULL)
     {
-      g_critical ("Couldn't find key '%s:%s' in permissions config file. "
-                  "Returning default value. Message: %s.",
-                  DAEMON_GLOBAL_GROUP_NAME, DAEMON_ENVIRONMENT_KEY_NAME,
-                  error->message);
-      g_error_free (error);
+      return environment;
     }
 
-  if (g_strcmp0 (environment, "dev") != 0 &&
-      g_strcmp0 (environment, "test") != 0 &&
-      g_strcmp0 (environment, "production") != 0)
+  /* Check if the environment is set to "production" and if the term "staging"
+  is in the OSTree URL, which indicates that the metrics environment should be
+  set to "dev". */
+  if (g_strcmp0 (environment, "production") == 0 &&
+      strstr (ostree_url, "staging") != NULL)
     {
-      g_warning ("Error: Metrics environment is set to: %s in %s. "
-                 "Valid metrics environments are: dev, test, production.",
-                 environment, PERMISSIONS_FILE);
       g_clear_pointer (&environment, g_free);
+      environment = g_strdup ("dev");
+
+      set_environment (self, environment);
     }
 
-  if (environment == NULL)
-    {
-      g_warning ("Metrics environment was not present or was invalid. Assuming "
-                 "'test' environment.");
-      return g_strdup ("test");
-    }
-
+  g_clear_pointer (&ostree_url, g_free);
   return environment;
 }

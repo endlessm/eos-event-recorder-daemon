@@ -48,7 +48,8 @@ GType                    emer_permissions_provider_get_type           (void) G_G
 
 EmerPermissionsProvider *emer_permissions_provider_new                (void);
 
-EmerPermissionsProvider *emer_permissions_provider_new_full           (const gchar             *config_file_path);
+EmerPermissionsProvider *emer_permissions_provider_new_full           (const gchar             *config_file_path,
+                                                                       const gchar             *ostree_config_file_path);
 
 gboolean                 emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self);
 

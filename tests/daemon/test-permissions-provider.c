@@ -17,26 +17,46 @@
  */
 #define MAX_NUM_TIMEOUTS 2
 
-#define CONFIG_FILE_ENABLED_TEST \
+#define PERMISSIONS_CONFIG_FILE_ENABLED_TEST \
   "[global]\n" \
   "enabled=true\n" \
-  "environment=test\n"
-#define CONFIG_FILE_DISABLED_TEST \
+  "environment=test"
+#define PERMISSIONS_CONFIG_FILE_DISABLED_TEST \
   "[global]\n" \
   "enabled=false\n" \
-  "environment=test\n"
-#define CONFIG_FILE_INVALID "lavubeu;f'w943ty[jdn;fbl\n"
-#define CONFIG_FILE_ENABLED_DEV \
+  "environment=test"
+#define PERMISSIONS_CONFIG_FILE_INVALID_ENVIRONMENT \
+  "lavubeu;f'w943ty[jdn;fbl\n"
+#define PERMISSIONS_CONFIG_FILE_ENABLED_DEV \
   "[global]\n" \
   "enabled=true\n" \
-  "environment=dev\n"
-#define CONFIG_FILE_ENABLED_INVALID_ENVIRONMENT \
+  "environment=dev"
+#define PERMISSIONS_CONFIG_FILE_ENABLED_PRODUCTION \
   "[global]\n" \
   "enabled=true\n" \
-  "environment=invalid\n"
+  "environment=production"
+#define PERMISSIONS_CONFIG_FILE_ENABLED_INVALID_ENVIRONMENT \
+  "[global]\n" \
+  "enabled=true\n" \
+  "environment=invalid"
+#define OSTREE_CONFIG_FILE_STAGING_URL \
+  "[core]\n" \
+  "repo_version=1\n" \
+  "mode=bare\n\n" \
+  "[remote \"eos\"]\n" \
+  "url=http://fakeurl.with/staging/in/path\n" \
+  "branches=master/i386;"
+#define OSTREE_CONFIG_FILE_NON_STAGING_URL \
+  "[core]\n" \
+  "repo_version=1\n" \
+  "mode=bare\n\n" \
+  "[remote \"eos\"]\n" \
+  "url=http://fakeurl.without/term/in/path\n" \
+  "branches=master/i386;"
 
 typedef struct {
-  GFile *temp_file;
+  GFile *permissions_config_file;
+  GFile *ostree_config_file;
   EmerPermissionsProvider *test_object;
 
   GMainLoop *main_loop; /* for asynchronous tests */
@@ -71,26 +91,17 @@ quit_main_loop (Fixture *fixture)
     G_SOURCE_CONTINUE : G_SOURCE_REMOVE;
 }
 
-/* Pass NULL to config_file_contents if you don't want to create a file on disk.
-A file name will be created in any case and passed to the object's constructor.
-*/
-static void
-setup (Fixture      *fixture,
-       gconstpointer data)
+static gchar *
+write_config_file (GFileIOStream *stream,
+                   const gchar   *contents,
+                   GFile         *config_file)
 {
-  const gchar *config_file_contents = (const gchar *)data;
-
-  GFileIOStream *stream = NULL;
-  fixture->temp_file = g_file_new_tmp ("test-permissions-providerXXXXXX",
-                                       &stream, NULL);
-  g_assert (fixture->temp_file != NULL);
-
   GOutputStream *ostream = g_io_stream_get_output_stream (G_IO_STREAM (stream));
 
-  if (config_file_contents != NULL)
+  if (contents != NULL)
     {
-      g_assert (g_output_stream_write_all (ostream, config_file_contents,
-                                           strlen (config_file_contents),
+      g_assert (g_output_stream_write_all (ostream, contents,
+                                           strlen (contents),
                                            NULL /* bytes written */,
                                            NULL, NULL));
       g_object_unref (stream);
@@ -98,12 +109,40 @@ setup (Fixture      *fixture,
   else
     {
       g_object_unref (stream);
-      g_assert (g_file_delete (fixture->temp_file, NULL, NULL));
+      g_assert (g_file_delete (config_file, NULL, NULL));
     }
 
-  gchar *config_file_path = g_file_get_path (fixture->temp_file);
-  fixture->test_object = emer_permissions_provider_new_full (config_file_path);
-  g_free (config_file_path);
+  return g_file_get_path (config_file);
+}
+
+static void
+setup_config_files (Fixture     *fixture,
+                    const gchar *permissions_config_file_contents,
+                    const gchar *ostree_config_file_contents)
+{
+  GFileIOStream *stream = NULL;
+  fixture->permissions_config_file =
+    g_file_new_tmp ("test-permissions-providerXXXXXX", &stream, NULL);
+  g_assert_nonnull (fixture->permissions_config_file);
+
+  gchar *permissions_config_file_path =
+    write_config_file (stream,
+                       permissions_config_file_contents,
+                       fixture->permissions_config_file);
+
+  fixture->ostree_config_file =
+    g_file_new_tmp ("test-permissions-providerXXXXXX", &stream, NULL);
+  g_assert_nonnull (fixture->ostree_config_file);
+
+  gchar *ostree_config_file_path =
+    write_config_file (stream,
+                       ostree_config_file_contents,
+                       fixture->ostree_config_file);
+  fixture->test_object =
+    emer_permissions_provider_new_full (permissions_config_file_path,
+                                        ostree_config_file_path);
+  g_free (permissions_config_file_path);
+  g_free (ostree_config_file_path);
 
   fixture->main_loop = g_main_loop_new (NULL, FALSE);
   fixture->notify_daemon_called = FALSE;
@@ -117,19 +156,58 @@ setup (Fixture      *fixture,
                            fixture);
 }
 
+/* Pass NULL to permissions_config_file_contents if you don't want to create a
+file on disk. A filename will be created in any case and passed to the object's
+constructor. */
+static void
+setup_with_config_file (Fixture       *fixture,
+                        gconstpointer  permissions_config_file_contents)
+{
+  setup_config_files (fixture,
+                      (const gchar *) permissions_config_file_contents,
+                      (const gchar *) OSTREE_CONFIG_FILE_NON_STAGING_URL);
+}
+
+/* Pass NULL to ostree_config_file_contents if you don't want to create a file
+on disk. A filename will be created in any case and passed to the object's
+constructor. */
+static void
+setup_dev_environment_with_ostree_file (Fixture       *fixture,
+                                        gconstpointer  ostree_config_file_contents)
+{
+  setup_config_files (fixture,
+                      (const gchar *) PERMISSIONS_CONFIG_FILE_ENABLED_DEV,
+                      (const gchar *) ostree_config_file_contents);
+}
+
+/* Pass NULL to ostree_config_file_contents if you don't want to create a file
+on disk. A filename will be created in any case and passed to the object's
+constructor. */
+static void
+setup_production_environment_with_ostree_file (Fixture       *fixture,
+                                               gconstpointer  ostree_config_file_contents)
+{
+  const gchar *permissions_config_file_contents =
+    (const gchar *) PERMISSIONS_CONFIG_FILE_ENABLED_PRODUCTION;
+
+  setup_config_files (fixture,
+                      permissions_config_file_contents,
+                      (const gchar *) ostree_config_file_contents);
+}
+
 static void
 setup_invalid_file (Fixture      *fixture,
-                    gconstpointer contents)
+                    gconstpointer permissions_config_file_contents)
 {
   g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_CRITICAL,
                          "*Permissions config file*was invalid or could not be "
                          "read. Loading fallback data*");
-  setup (fixture, contents);
+  setup_with_config_file (fixture, permissions_config_file_contents);
 }
 
 static void
 setup_invalid_environment (Fixture      *fixture,
-                           gconstpointer contents)
+                           gconstpointer permissions_config_file_contents)
 {
   g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
                          "*Error: Metrics environment is set to: * in *. "
@@ -138,7 +216,7 @@ setup_invalid_environment (Fixture      *fixture,
   g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
                          "Metrics environment was not present or was invalid. "
                          "Assuming 'test' environment.");
-  setup (fixture, contents);
+  setup_with_config_file (fixture, permissions_config_file_contents);
 }
 
 static void
@@ -146,8 +224,16 @@ teardown (Fixture      *fixture,
           gconstpointer unused)
 {
   g_source_remove (fixture->failsafe_source_id);
-  g_file_delete (fixture->temp_file, NULL, NULL); /* might not exist */
-  g_clear_object (&fixture->temp_file);
+
+  /* Might not exist. */
+  g_file_delete (fixture->permissions_config_file, NULL, NULL);
+
+  g_clear_object (&fixture->permissions_config_file);
+
+  /* Might not exist. */
+  g_file_delete (fixture->ostree_config_file, NULL, NULL);
+
+  g_clear_object (&fixture->ostree_config_file);
   g_clear_object (&fixture->test_object);
   g_main_loop_unref (fixture->main_loop);
 }
@@ -158,14 +244,14 @@ static void
 test_permissions_provider_new (Fixture      *fixture,
                                gconstpointer unused)
 {
-  g_assert (fixture->test_object != NULL);
+  g_assert_nonnull (fixture->test_object);
 }
 
 static void
 test_permissions_provider_new_invalid_file (Fixture      *fixture,
                                             gconstpointer unused)
 {
-  g_assert (fixture->test_object != NULL);
+  g_assert_nonnull (fixture->test_object);
   g_test_assert_expected_messages ();
 }
 
@@ -202,6 +288,17 @@ test_permissions_provider_get_environment_test (Fixture      *fixture,
 }
 
 static void
+test_permissions_provider_get_environment_test_fallback (Fixture      *fixture,
+                                                         gconstpointer unused)
+{
+  gchar *environment =
+    emer_permissions_provider_get_environment (fixture->test_object);
+  g_assert_cmpstr (environment, ==, "test");
+  g_clear_pointer (&environment, g_free);
+  g_test_assert_expected_messages ();
+}
+
+static void
 test_permissions_provider_get_environment_dev (Fixture      *fixture,
                                                gconstpointer unused)
 {
@@ -212,14 +309,13 @@ test_permissions_provider_get_environment_dev (Fixture      *fixture,
 }
 
 static void
-test_permissions_provider_get_environment_test_fallback (Fixture      *fixture,
-                                                         gconstpointer unused)
+test_permissions_provider_get_environment_production (Fixture      *fixture,
+                                                      gconstpointer unused)
 {
   gchar *environment =
     emer_permissions_provider_get_environment (fixture->test_object);
-  g_assert_cmpstr (environment, ==, "test");
+  g_assert_cmpstr (environment, ==, "production");
   g_clear_pointer (&environment, g_free);
-  g_test_assert_expected_messages ();
 }
 
 /* This is run in an idle function so that it doesn't quit the main loop before
@@ -259,15 +355,16 @@ test_permissions_provider_set_daemon_enabled_updates_config_file (Fixture      *
                                                                   gconstpointer unused)
 {
   gchar *contents;
-  g_assert (g_file_load_contents (fixture->temp_file, NULL, &contents, NULL,
-                                  NULL, NULL));
+  g_assert (g_file_load_contents (fixture->permissions_config_file, NULL,
+                                  &contents, NULL, NULL, NULL));
   g_assert (strstr (contents, "enabled=true"));
   g_free (contents);
 
   g_idle_add ((GSourceFunc) set_daemon_enabled_false_idle, fixture);
 
-  GFileMonitor *monitor = g_file_monitor_file (fixture->temp_file,
-                                               G_FILE_MONITOR_NONE, NULL, NULL);
+  GFileMonitor *monitor =
+    g_file_monitor_file (fixture->permissions_config_file, G_FILE_MONITOR_NONE,
+                         NULL, NULL);
   g_assert_nonnull (monitor);
 
   g_signal_connect (monitor, "changed", G_CALLBACK (on_config_file_changed),
@@ -280,8 +377,8 @@ test_permissions_provider_set_daemon_enabled_updates_config_file (Fixture      *
 
   g_object_unref (monitor);
 
-  g_assert (g_file_load_contents (fixture->temp_file, NULL, &contents, NULL,
-                                  NULL, NULL));
+  g_assert (g_file_load_contents (fixture->permissions_config_file, NULL,
+                                  &contents, NULL, NULL, NULL));
   g_assert_nonnull (strstr (contents, "enabled=false"));
   g_free (contents);
 }
@@ -295,44 +392,64 @@ main (int                argc,
 #define ADD_PERMISSIONS_PROVIDER_TEST(path, file_contents, setup, test_func) \
   g_test_add ((path), Fixture, (file_contents), (setup), (test_func), teardown);
 
-  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/existing-config-file",
-                                 CONFIG_FILE_ENABLED_TEST, setup,
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/existing-permissions-config-file",
+                                 PERMISSIONS_CONFIG_FILE_ENABLED_TEST,
+                                 setup_with_config_file,
                                  test_permissions_provider_new);
-  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/absent-config-file",
-                                 NULL, setup, test_permissions_provider_new);
-  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/invalid-config-file",
-                                 CONFIG_FILE_INVALID,
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/absent-permissions-config-file",
+                                 NULL, setup_with_config_file,
+                                 test_permissions_provider_new);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/invalid-permissions-config-file",
+                                 PERMISSIONS_CONFIG_FILE_INVALID_ENVIRONMENT,
                                  setup_invalid_file,
                                  test_permissions_provider_new_invalid_file);
-  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/existing-config-file-yes",
-                                 CONFIG_FILE_ENABLED_TEST, setup,
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/enabled",
+                                 PERMISSIONS_CONFIG_FILE_ENABLED_TEST,
+                                 setup_with_config_file,
                                  test_permissions_provider_get_daemon_enabled);
-  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/existing-config-file-no",
-                                 CONFIG_FILE_DISABLED_TEST, setup,
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/disabled",
+                                 PERMISSIONS_CONFIG_FILE_DISABLED_TEST,
+                                 setup_with_config_file,
                                  test_permissions_provider_get_daemon_enabled_false);
-  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/absent-config-file",
-                                 NULL, setup,
-                                 test_permissions_provider_get_daemon_enabled_fallback);
-  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/invalid-config-file",
-                                 CONFIG_FILE_INVALID,
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/invalid-permissions-config-file",
+                                 PERMISSIONS_CONFIG_FILE_INVALID_ENVIRONMENT,
                                  setup_invalid_file,
                                  test_permissions_provider_get_daemon_enabled_fallback);
-  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-environment/existing-config-file",
-                                 CONFIG_FILE_ENABLED_TEST, setup,
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-environment/test",
+                                 PERMISSIONS_CONFIG_FILE_ENABLED_TEST,
+                                 setup_with_config_file,
                                  test_permissions_provider_get_environment_test);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-environment/dev",
-                                 CONFIG_FILE_ENABLED_DEV,
-                                 setup,
+                                 PERMISSIONS_CONFIG_FILE_ENABLED_DEV,
+                                 setup_with_config_file,
                                  test_permissions_provider_get_environment_dev);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-environment/production",
+                                 PERMISSIONS_CONFIG_FILE_ENABLED_PRODUCTION,
+                                 setup_with_config_file,
+                                 test_permissions_provider_get_environment_production);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-environment/invalid-environment",
-                                 CONFIG_FILE_ENABLED_INVALID_ENVIRONMENT,
+                                 PERMISSIONS_CONFIG_FILE_ENABLED_INVALID_ENVIRONMENT,
                                  setup_invalid_environment,
                                  test_permissions_provider_get_environment_test_fallback);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-environment/production-staging",
+                                 OSTREE_CONFIG_FILE_STAGING_URL,
+                                 setup_production_environment_with_ostree_file,
+                                 test_permissions_provider_get_environment_dev);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-environment/production-non-staging",
+                                 OSTREE_CONFIG_FILE_NON_STAGING_URL,
+                                 setup_production_environment_with_ostree_file,
+                                 test_permissions_provider_get_environment_production);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-environment/dev-non-staging",
+                                 OSTREE_CONFIG_FILE_NON_STAGING_URL,
+                                 setup_dev_environment_with_ostree_file,
+                                 test_permissions_provider_get_environment_dev);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/set-daemon-enabled",
-                                 CONFIG_FILE_ENABLED_TEST, setup,
+                                 PERMISSIONS_CONFIG_FILE_ENABLED_TEST,
+                                 setup_with_config_file,
                                  test_permissions_provider_set_daemon_enabled);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/set-daemon-enabled-updates-config-file",
-                                 CONFIG_FILE_ENABLED_TEST, setup,
+                                 PERMISSIONS_CONFIG_FILE_ENABLED_TEST,
+                                 setup_with_config_file,
                                  test_permissions_provider_set_daemon_enabled_updates_config_file);
 
 #undef ADD_PERMISSIONS_PROVIDER_TEST

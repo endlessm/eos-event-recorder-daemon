@@ -213,7 +213,7 @@ main (int                argc,
 
   g_main_loop_run (main_loop);
 
-  g_bus_unown_name(name_id);
+  g_bus_unown_name (name_id);
   g_main_loop_unref (main_loop);
 
   g_object_unref (daemon);

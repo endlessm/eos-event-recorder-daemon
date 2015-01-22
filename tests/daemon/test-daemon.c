@@ -232,9 +232,9 @@ setup (Fixture      *fixture,
     emer_daemon_new_full (g_rand_new_with_seed (18),
                           5, // Network Send Interval
                           id_prov, // MachineIdProvider
-                          fixture->mock_network_send_prov, // NetworkSendProvider
-                          fixture->mock_permissions_prov, // PermissionsProvider
-                          fixture->mock_persistent_cache, // PersistentCache
+                          fixture->mock_network_send_prov,
+                          fixture->mock_permissions_prov,
+                          fixture->mock_persistent_cache,
                           20); // Buffer length
   g_object_unref (id_prov);
 }

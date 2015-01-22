@@ -415,7 +415,7 @@ handle_https_response (SoupSession         *https_session,
         get_https_request_uri (callback_data->daemon, serialized_request_body,
                                request_body_length);
       SoupMessage *new_https_message =
-        soup_message_new_from_uri ("PUT",  https_request_uri);
+        soup_message_new_from_uri ("PUT", https_request_uri);
       soup_uri_free (https_request_uri);
 
       soup_message_set_request (new_https_message, "application/octet-stream",

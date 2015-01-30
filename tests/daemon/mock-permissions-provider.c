@@ -40,7 +40,8 @@ emer_permissions_provider_new (void)
 }
 
 EmerPermissionsProvider *
-emer_permissions_provider_new_full (const char *config_file_path)
+emer_permissions_provider_new_full (const char *config_file_path,
+                                    const char *ostree_config_file_path)
 {
   return emer_permissions_provider_new ();
 }
@@ -67,6 +68,12 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
   /* This works for faking a property notification even though there isn't a
   property by that name in this mock object */
   g_signal_emit_by_name (self, "notify::daemon-enabled", NULL);
+}
+
+gchar *
+emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
+{
+  return g_strdup ("test");
 }
 
 /* API OF MOCK OBJECT */

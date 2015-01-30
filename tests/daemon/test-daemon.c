@@ -230,12 +230,11 @@ setup (Fixture      *fixture,
   fixture->mock_network_send_prov = emer_network_send_provider_new ();
   fixture->test_object =
     emer_daemon_new_full (g_rand_new_with_seed (18),
-                          5,  // Network Send Interval
-                          "http://localhost/", // uri,
+                          5, // Network Send Interval
                           id_prov, // MachineIdProvider
-                          fixture->mock_network_send_prov, // NetworkSendProvider
-                          fixture->mock_permissions_prov, // PermissionsProvider
-                          fixture->mock_persistent_cache, // PersistentCache
+                          fixture->mock_network_send_prov,
+                          fixture->mock_permissions_prov,
+                          fixture->mock_persistent_cache,
                           20); // Buffer length
   g_object_unref (id_prov);
 }
@@ -261,7 +260,7 @@ static void
 test_daemon_new_succeeds (Fixture      *fixture,
                           gconstpointer unused)
 {
-  EmerDaemon *daemon = emer_daemon_new ("test");
+  EmerDaemon *daemon = emer_daemon_new ();
   g_assert (daemon != NULL);
   g_object_unref (daemon);
 }

@@ -133,7 +133,8 @@ G_DEFINE_TYPE_WITH_CODE (EmerPersistentCache, emer_persistent_cache, G_TYPE_OBJE
 
 G_LOCK_DEFINE_STATIC (update_boot_offset);
 
-enum {
+enum
+{
   PROP_0,
   PROP_CACHE_DIRECTORY,
   PROP_MAX_CACHE_SIZE,
@@ -1306,10 +1307,10 @@ load_cache_size (EmerPersistentCache *self,
 }
 
 /*
- * If the cache version file is out of date or not found, it wil attempt to
- * remove all cached metrics. If it succeeds, it will update the cache version
- * file to the new_version provided. Will create the cache directory if it
- * doesn't exist. Returns %TRUE on success and %FALSE on failure.
+ * Attempts to remove all cached metrics if the cache version file is out of date
+ * or not found. Updates the cache version file as specified by the cache
+ * provider if successful. Creates the cache directory if it doesn't exist.
+ * Returns %TRUE on success and %FALSE on failure.
  */
 static gboolean
 apply_cache_versioning (EmerPersistentCache *self,
@@ -1424,6 +1425,17 @@ set_boot_offset_update_interval (EmerPersistentCache *self,
 }
 
 static void
+emer_persistent_cache_constructed (GObject *object)
+{
+  EmerPersistentCache *self = EMER_PERSISTENT_CACHE (object);
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+  priv->boot_metafile_path = g_strconcat (priv->cache_directory,
+                                          BOOT_OFFSET_METAFILE,
+                                          NULL);
+}
+
+static void
 emer_persistent_cache_set_property (GObject      *object,
                                     guint         property_id,
                                     const GValue *value,
@@ -1477,23 +1489,13 @@ emer_persistent_cache_finalize (GObject *object)
 }
 
 static void
-emer_persistent_cache_constructed (GObject *self)
-{
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (EMER_PERSISTENT_CACHE (self));
-  priv->boot_metafile_path = g_strconcat (priv->cache_directory,
-                                          BOOT_OFFSET_METAFILE,
-                                          NULL);
-}
-
-static void
 emer_persistent_cache_class_init (EmerPersistentCacheClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
+  object_class->constructed = emer_persistent_cache_constructed;
   object_class->set_property = emer_persistent_cache_set_property;
   object_class->finalize = emer_persistent_cache_finalize;
-  object_class->constructed = emer_persistent_cache_constructed;
 
   /* Blurb string is good enough default documentation for this. */
   emer_persistent_cache_props[PROP_CACHE_DIRECTORY] =

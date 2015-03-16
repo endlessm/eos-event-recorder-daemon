@@ -115,7 +115,7 @@ on_logind_name_appeared (GDBusConnection *connection,
 }
 
 static gboolean
-on_logind_name_timeout (Fixture *fixture)
+on_logind_name_timeout (gpointer unused)
 {
   g_assert_not_reached ();
 }
@@ -138,6 +138,7 @@ start_mock_logind_service_and_wait (Fixture *fixture)
                                           (GBusNameAppearedCallback) on_logind_name_appeared,
                                           NULL,
                                           fixture, NULL);
+
   fixture->watcher_timeout_id =
     g_timeout_add_seconds (5, (GSourceFunc) on_logind_name_timeout, NULL);
   fixture->watcher_loop = g_main_loop_new (NULL, FALSE);
@@ -153,25 +154,30 @@ terminate_mock_logind_service_and_wait (Fixture *fixture)
 
   g_subprocess_send_signal (fixture->logind_mock, SIGTERM);
 
-  /* Make sure it was the SIGTERM that finished the process, and not something
-  else. */
+  /*
+   * Make sure it was the SIGTERM that finished the process, and not something
+   * else.
+   */
   g_assert_false (g_subprocess_wait_check (fixture->logind_mock, NULL, &error));
   g_assert_error (error, G_SPAWN_ERROR, G_SPAWN_ERROR_FAILED);
   g_assert_cmpstr (error->message, ==, "Child process killed by signal 15");
 }
 
-/* Parse the stdout stream of a mock DBus process and ensure that in the not-yet
-read part of the call log there is a call matching @method_name (and, if
-@arguments is given, containing the string @arguments in its arguments).
-@arguments may be %NULL if you are not interested in the latter behavior.
-
-Returns %TRUE if the call was found in the call log and @arguments matched, if
-given. The input stream is consumed up to the requested call, so if you are
-expecting more than one method call you must expect them in order or rewind the
-stream in between calls to expect_dbus_call().
-
-Returns %FALSE if the call was not found, or the call was found but @arguments
-was given and did not match. In that case the entire input stream is consumed.*/
+/*
+ * Parse the stdout stream of a mock DBus process and ensure that in the not-yet
+ * read part of the call log there is a call matching @method_name (and, if
+ * @arguments is given, containing the string @arguments in its arguments).
+ * @arguments may be %NULL if you are not interested in the latter behavior.
+ *
+ * Returns %TRUE if the call was found in the call log and @arguments matched,
+ * if given. The input stream is consumed up to the requested call, so if you
+ * are expecting more than one method call you must expect them in order or
+ * rewind the stream in between calls to expect_dbus_call().
+ *
+ * Returns %FALSE if the call was not found, or the call was found but
+ * @arguments was given and did not match. In that case the entire input stream
+ * is consumed.
+ */
 static gboolean
 expect_dbus_call (GDataInputStream *stream,
                   const gchar      *method_name,
@@ -192,6 +198,7 @@ expect_dbus_call (GDataInputStream *stream,
           continue;
         }
       g_free (line);
+
       if (strcmp (method_name, method_called) != 0)
         {
           g_free (method_called);
@@ -199,14 +206,15 @@ expect_dbus_call (GDataInputStream *stream,
           continue;
         }
       g_free (method_called);
+
       if (arguments == NULL || strstr (arguments_given, arguments) != NULL)
         {
           g_free (arguments_given);
           return TRUE;
         }
-
       g_free (arguments_given);
     }
+
   return FALSE;
 }
 
@@ -347,47 +355,55 @@ static void
 test_daemon_does_not_record_singular_event_if_not_allowed (Fixture      *fixture,
                                                            gconstpointer unused)
 {
-  gint num_calls =
+  gint num_calls_before =
     mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
   test_daemon_can_record_singular_event (fixture, unused);
 
-  /* FIXME: nothing can currently be asserted about whether the EmerDaemon tries
-  to send its metrics, but at least we can confirm that it read the enabled
-  property: */
-  g_assert_cmpint (mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov),
-                   >=, num_calls + 1);
+  gint num_calls_after =
+    mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
+
+  /*
+   * FIXME: Nothing can currently be asserted about whether the EmerDaemon tries
+   * to send its metrics, but at least we can confirm that it read the enabled
+   * property.
+   */
+  g_assert_cmpint (num_calls_after, >=, num_calls_before + 1);
 }
 
 static void
 test_daemon_does_not_record_aggregate_event_if_not_allowed (Fixture      *fixture,
                                                             gconstpointer unused)
 {
-  gint num_calls =
+  gint num_calls_before =
     mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
   test_daemon_can_record_aggregate_events (fixture, unused);
 
+  gint num_calls_after =
+    mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
+
   /* FIXME: See note above. */
-  g_assert_cmpint (mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov),
-                   >=, num_calls + 1);
+  g_assert_cmpint (num_calls_after, >=, num_calls_before + 1);
 }
 
 static void
 test_daemon_does_not_record_event_sequence_if_not_allowed (Fixture      *fixture,
                                                            gconstpointer unused)
 {
-  gint num_calls =
+  gint num_calls_before =
     mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
   test_daemon_can_record_event_sequence (fixture, unused);
 
+  gint num_calls_after =
+    mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
+
   /* FIXME: See note above. */
-  g_assert_cmpint (mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov),
-                   >=, num_calls + 1);
+  g_assert_cmpint (num_calls_after, >=, num_calls_before + 1);
 }
 
 static void
@@ -402,17 +418,18 @@ static void
 test_daemon_flushes_to_persistent_cache_once_on_shutdown (Fixture      *fixture,
                                                           gconstpointer unused)
 {
-  gint num_calls =
+  gint num_calls_before =
     mock_persistent_cache_get_store_metrics_called (fixture->mock_persistent_cache);
 
   emit_shutdown_signal (TRUE);
 
-  /* Wait for EmerDaemon to handle the signal. */
+  // Wait for EmerDaemon to handle the signal.
   while (g_main_context_pending (NULL))
     g_main_context_iteration (NULL, TRUE);
 
-  g_assert_cmpint (mock_persistent_cache_get_store_metrics_called (fixture->mock_persistent_cache),
-                   ==, num_calls + 1);
+  gint num_calls_after =
+    mock_persistent_cache_get_store_metrics_called (fixture->mock_persistent_cache);
+  g_assert_cmpint (num_calls_after, ==, num_calls_before + 1);
 }
 
 static void
@@ -423,6 +440,7 @@ test_daemon_reinhibits_shutdown_on_shutdown_cancel (Fixture      *fixture,
 
   emit_shutdown_signal (TRUE);
 
+  // Wait for EmerDaemon to handle the signal.
   while (g_main_context_pending (NULL))
     g_main_context_iteration (NULL, TRUE);
 

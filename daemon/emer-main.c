@@ -90,8 +90,10 @@ on_set_enabled (EmerEventRecorderServer *server,
   return TRUE;
 }
 
-/* This handler is run in a separate thread, so all operations can be
-synchronous. */
+/*
+ * This handler is run in a separate thread, so all operations can be
+ * synchronous.
+ */
 static gboolean
 on_authorize_method_check (GDBusInterfaceSkeleton *interface,
                            GDBusMethodInvocation  *invocation,
@@ -103,8 +105,8 @@ on_authorize_method_check (GDBusInterfaceSkeleton *interface,
     return TRUE;
 
   GError *error = NULL;
-  PolkitAuthority *authority = polkit_authority_get_sync (NULL /*GCancellable*/,
-                                                          &error);
+  PolkitAuthority *authority =
+    polkit_authority_get_sync (NULL /*GCancellable*/, &error);
   if (authority == NULL)
     {
       g_critical ("Could not get PolicyKit authority: %s", error->message);
@@ -140,7 +142,8 @@ on_authorize_method_check (GDBusInterfaceSkeleton *interface,
       g_dbus_method_invocation_return_error (invocation,
                                              G_DBUS_ERROR,
                                              G_DBUS_ERROR_AUTH_FAILED,
-                                             "Disabling metrics is only allowed from system settings");
+                                             "Disabling metrics is only "
+                                             "allowed from system settings");
     }
 
   g_object_unref (result);
@@ -154,9 +157,11 @@ quit_main_loop (GMainLoop *main_loop)
   return G_SOURCE_REMOVE;
 }
 
-/* Called when a reference to the system bus is acquired. This is where you are
-supposed to export your well-known name, confusingly not in name_acquired; that
-is too late. */
+/*
+ * Called when a reference to the system bus is acquired. This is where you are
+ * supposed to export your well-known name, confusingly not in name_acquired;
+ * that is too late.
+ */
 static void
 on_bus_acquired (GDBusConnection *system_bus,
                  const gchar     *name,
@@ -190,15 +195,19 @@ on_bus_acquired (GDBusConnection *system_bus,
     }
 }
 
-/* This is called if ownership of the well-known name is lost. Since this
-service doesn't own and un-own the name during its lifetime, this is only called
-if there is an error acquiring it in the first place. */
+/*
+ * This is called if ownership of the well-known name is lost. Since this
+ * service doesn't own and un-own the name during its lifetime, this is only
+ * called if there is an error acquiring it in the first place.
+ */
 static void
 on_name_lost (GDBusConnection *system_bus,
               const gchar     *name)
 {
-  /* This handler is called with a NULL connection if the bus could not be
-  acquired. */
+  /*
+   * This handler is called with a NULL connection if the bus could not be
+   * acquired.
+   */
   if (system_bus == NULL)
     {
       g_error ("Could not get connection to system bus.");
@@ -214,18 +223,18 @@ main (int                argc,
 
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
 
-  /* Shut down on any of these signals */
-  g_unix_signal_add (SIGHUP, (GSourceFunc)quit_main_loop, main_loop);
-  g_unix_signal_add (SIGINT, (GSourceFunc)quit_main_loop, main_loop);
-  g_unix_signal_add (SIGTERM, (GSourceFunc)quit_main_loop, main_loop);
-  g_unix_signal_add (SIGUSR1, (GSourceFunc)quit_main_loop, main_loop);
-  g_unix_signal_add (SIGUSR2, (GSourceFunc)quit_main_loop, main_loop);
+  // Shut down on any of these signals.
+  g_unix_signal_add (SIGHUP, (GSourceFunc) quit_main_loop, main_loop);
+  g_unix_signal_add (SIGINT, (GSourceFunc) quit_main_loop, main_loop);
+  g_unix_signal_add (SIGTERM, (GSourceFunc) quit_main_loop, main_loop);
+  g_unix_signal_add (SIGUSR1, (GSourceFunc) quit_main_loop, main_loop);
+  g_unix_signal_add (SIGUSR2, (GSourceFunc) quit_main_loop, main_loop);
 
   guint name_id = g_bus_own_name (G_BUS_TYPE_SYSTEM, "com.endlessm.Metrics",
                                   G_BUS_NAME_OWNER_FLAGS_NONE,
-                                  (GBusAcquiredCallback)on_bus_acquired,
-                                  NULL, /* name_acquired_callback */
-                                  (GBusNameLostCallback)on_name_lost,
+                                  (GBusAcquiredCallback) on_bus_acquired,
+                                  NULL /* name_acquired_callback */,
+                                  (GBusNameLostCallback) on_name_lost,
                                   daemon, NULL /* user data free func */);
 
   g_main_loop_run (main_loop);
@@ -235,5 +244,5 @@ main (int                argc,
 
   g_object_unref (daemon);
 
-  return 0;
+  return EXIT_SUCCESS;
 }

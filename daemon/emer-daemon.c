@@ -93,7 +93,8 @@ typedef struct _NetworkCallbackData
   gint attempt_num;
 } NetworkCallbackData;
 
-typedef struct _EmerDaemonPrivate {
+typedef struct _EmerDaemonPrivate
+{
   gint shutdown_inhibitor;
   GDBusProxy *login_manager_proxy;
   guint network_send_interval;
@@ -256,8 +257,10 @@ backoff (GRand *rand,
   g_usleep (randomized_backoff_usec);
 }
 
-/* Returned object is owned by calling code. Free with soup_uri_free() when
-done. */
+/*
+ * Returned object is owned by calling code. Free with soup_uri_free() when
+ * done.
+ */
 static SoupURI *
 get_https_request_uri (EmerDaemon   *self,
                        const guchar *data,
@@ -560,8 +563,10 @@ drain_persistent_cache (EmerDaemonPrivate *priv,
   GVariant **list_of_aggregates;
   GVariant **list_of_sequences;
 
-  /* TODO: This value is currently unused by the persistent cache, but should be
-     updated to a sensible value when the PC starts using it. */
+  /*
+   * TODO: This value is currently unused by the persistent cache, but should be
+   * updated to a sensible value when the PC starts using it.
+   */
   gint maximum_bytes_to_drain = 92160;
   if (!emer_persistent_cache_drain_metrics (priv->persistent_cache,
                                             &list_of_singulars,
@@ -834,7 +839,7 @@ add_upload_events_timeout (EmerDaemon  *self,
 
   guint network_send_interval;
 
-  if (priv->network_send_interval != 0)
+  if (priv->network_send_interval != 0u)
     network_send_interval = priv->network_send_interval;
   else if (g_strcmp0 (environment, "production") == 0)
     network_send_interval = PRODUCTION_NETWORK_SEND_INTERVAL;
@@ -967,9 +972,9 @@ on_permissions_changed (EmerPermissionsProvider *permissions_provider,
 }
 
 /*
- * The following functions are private setters for the properties of
- * EmerDaemon. These properties are write-only, construct-only, so these only
- * need to be internal.
+ * The following functions are private setters for the properties of EmerDaemon.
+ * These properties are write-only, construct-only, so these only need to be
+ * internal.
  */
 
 static void

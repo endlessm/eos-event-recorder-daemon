@@ -951,6 +951,66 @@ handle_login_manager_signal (GDBusProxy *dbus_proxy,
     }
 }
 
+static void
+register_with_login_manager (EmerDaemon *self)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  g_signal_connect (priv->login_manager_proxy, "g-signal",
+                    G_CALLBACK (handle_login_manager_signal), self);
+  inhibit_shutdown (self);
+}
+
+static gboolean
+has_owner (GDBusProxy *dbus_proxy)
+{
+  gchar *name_owner =
+    g_dbus_proxy_get_name_owner (dbus_proxy);
+  if (name_owner != NULL)
+    g_free (name_owner);
+
+  return name_owner != NULL;
+}
+
+static void
+handle_login_manager_name_owner_set (GDBusProxy *dbus_proxy,
+                                     GParamSpec *pspec,
+                                     EmerDaemon *self)
+{
+  if (has_owner (dbus_proxy))
+    register_with_login_manager (self);
+}
+
+static void
+connect_to_login_manager (EmerDaemon *self)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  GError *error = NULL;
+  priv->login_manager_proxy =
+    g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
+                                   G_DBUS_PROXY_FLAGS_DO_NOT_AUTO_START,
+                                   NULL /* GDBusInterfaceInfo */,
+                                   "org.freedesktop.login1",
+                                   "/org/freedesktop/login1",
+                                   "org.freedesktop.login1.Manager",
+                                   NULL /* GCancellable */,
+                                   &error);
+  if (priv->login_manager_proxy == NULL)
+    {
+      g_warning ("Error creating login manager D-Bus proxy: %s.",
+                 error->message);
+      g_error_free (error);
+      return;
+    }
+
+  if (has_owner (priv->login_manager_proxy))
+    register_with_login_manager (self);
+  else
+    g_signal_connect (priv->login_manager_proxy, "notify::g-name-owner",
+                      G_CALLBACK (handle_login_manager_name_owner_set), self);
+}
+
 static gchar *
 get_user_agent (void)
 {
@@ -1327,28 +1387,7 @@ emer_daemon_init (EmerDaemon *self)
   // We are not currently holding a shutdown inhibitor.
   priv->shutdown_inhibitor = -1;
 
-  GError *error = NULL;
-  priv->login_manager_proxy =
-    g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
-                                   G_DBUS_PROXY_FLAGS_NONE,
-                                   NULL /* GDBusInterfaceInfo */,
-                                   "org.freedesktop.login1",
-                                   "/org/freedesktop/login1",
-                                   "org.freedesktop.login1.Manager",
-                                   NULL /* GCancellable */, &error);
-  if (priv->login_manager_proxy == NULL)
-    {
-      g_warning ("Error creating login manager D-Bus proxy: %s.",
-                 error->message);
-      g_error_free (error);
-    }
-  else
-    {
-      g_assert (g_signal_connect (priv->login_manager_proxy, "g-signal",
-                                  G_CALLBACK (handle_login_manager_signal),
-                                  self) > 0);
-      inhibit_shutdown (self);
-    }
+  connect_to_login_manager (self);
 
   priv->ping_socket = NULL;
   priv->proxy_server_uri = NULL;

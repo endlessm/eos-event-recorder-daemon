@@ -43,11 +43,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         """Start the event recorder on the mock system bus."""
 
         # Put polkitd and logind mocks onto the mock system bus
-        (self.login_popen, self.login_obj) = self.spawn_server_template('logind',
-            parameters={'IdleSinceHint': 0})
-        # FIXME: Specifying IdleSinceHint is a workaround for a bug in
-        # python-dbusmock:
-        # https://bugs.launchpad.net/python-dbusmock/+bug/1348437
+        (self.login_popen, self.login_obj) = self.spawn_server_template('logind')
         (self.polkit_popen, self.polkit_obj) = self.spawn_server_template('polkitd')
 
         self.daemon = subprocess.Popen('./eos-metrics-event-recorder')

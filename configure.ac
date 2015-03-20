@@ -1,6 +1,22 @@
 dnl Process this file with autoconf to produce configure
 
-# Copyright 2013-2014 Endless Mobile, Inc.
+dnl Copyright 2013, 2014, 2015 Endless Mobile, Inc.
+
+dnl This file is part of eos-event-recorder-daemon.
+dnl
+dnl eos-event-recorder-daemon is free software: you can redistribute it and/or
+dnl modify it under the terms of the GNU General Public License as published by
+dnl the Free Software Foundation, either version 2 of the License, or (at your
+dnl option) any later version.
+dnl
+dnl eos-event-recorder-daemon is distributed in the hope that it will be
+dnl useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+dnl MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+dnl Public License for more details.
+dnl
+dnl You should have received a copy of the GNU General Public License
+dnl along with eos-event-recorder-daemon.  If not, see
+dnl <http://www.gnu.org/licenses/>.
 
 dnl ------------
 dnl configure.ac

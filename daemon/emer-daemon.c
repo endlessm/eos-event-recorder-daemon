@@ -1,6 +1,23 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2014 Endless Mobile, Inc. */
+/* Copyright 2014, 2015 Endless Mobile, Inc. */
+
+/* This file is part of eos-event-recorder-daemon.
+ *
+ * eos-event-recorder-daemon is free software: you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * eos-event-recorder-daemon is distributed in the hope that it will be
+ * useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with eos-event-recorder-daemon.  If not, see
+ * <http://www.gnu.org/licenses/>.
+ */
 
 /* For CLOCK_BOOTTIME */
 #if !defined(_POSIX_C_SOURCE) || _POSIX_C_SOURCE < 200112L
@@ -31,12 +48,6 @@
  */
 #define CLIENT_VERSION_NUMBER "2"
 
-/* The URI of the metrics production proxy server. Is kept in a #define to
-prevent testing code from sending metrics to the production server. It ends
-with the current client version number of the network protocol. */
-#define PRODUCTION_SERVER_URI \
- "https://production.metrics.endlessm.com/" CLIENT_VERSION_NUMBER "/"
-
 /*
  * The minimum number of seconds to wait before attempting the first retry of a
  * network request that failed with a non-fatal error.
@@ -56,18 +67,18 @@ with the current client version number of the network protocol. */
  * For QA, the "dev" environment delay is much shorter.
  */
 #define DEV_NETWORK_SEND_INTERVAL (60u * 15u) // Fifteen minutes
-#define DEFAULT_NETWORK_SEND_INTERVAL (60u * 60u) // One hour
+#define PRODUCTION_NETWORK_SEND_INTERVAL (60u * 60u) // One hour
 
 /*
- * The default maximum length for each event buffer. Set based on the assumption
- * that events average 100 bytes each. The desired maximum capacity of all three
- * event buffers combined is 10 kB. Thus,
- * (10,240 bytes) / (100 bytes * 3 buffers) ~= 34 bytes / buffer.
+ * This is the default maximum length for each event buffer. It is set based on
+ * the assumption that events average 100 bytes each. The desired maximum
+ * capacity of all three event buffers combined is 100 kB. Thus,
+ * (10,2400 bytes) / ((100 bytes / event) * 3 buffers) ~= 341 events / buffer.
  *
- * TODO: Set these limits to use the actual size of the metrics to
- * determine the limit, not the estimated size.
+ * TODO: Use the actual size of the events to determine the limit, not the
+ * estimated size.
  */
-#define DEFAULT_METRICS_PER_BUFFER_MAX 34
+#define DEFAULT_METRICS_PER_BUFFER_MAX 341
 
 #define WHAT "shutdown"
 #define WHO "EndlessOS Event Recorder Daemon"
@@ -85,16 +96,16 @@ typedef struct _NetworkCallbackData
 typedef struct _EmerDaemonPrivate {
   gint shutdown_inhibitor;
   GDBusProxy *login_manager_proxy;
+  guint network_send_interval;
+  GSocketConnectable *ping_socket;
+  gchar *proxy_server_uri;
+  SoupSession *http_session;
 
   /* Private storage for public properties */
 
   GRand *rand;
 
-  guint network_send_interval_seconds;
   guint upload_events_timeout_source_id;
-
-  SoupSession *http_session;
-  gchar *proxy_server_uri;
 
   EmerMachineIdProvider *machine_id_provider;
   EmerNetworkSendProvider *network_send_provider;
@@ -103,7 +114,6 @@ typedef struct _EmerDaemonPrivate {
   EmerPersistentCache *persistent_cache;
 
   GNetworkMonitor *network_monitor;
-  GSocketConnectable *ping_socket;
 
   gboolean recording_enabled;
 
@@ -132,7 +142,6 @@ enum
   PROP_0,
   PROP_RANDOM_NUMBER_GENERATOR,
   PROP_NETWORK_SEND_INTERVAL,
-  PROP_PROXY_SERVER_URI,
   PROP_MACHINE_ID_PROVIDER,
   PROP_NETWORK_SEND_PROVIDER,
   PROP_PERMISSIONS_PROVIDER,
@@ -144,6 +153,8 @@ enum
 };
 
 static GParamSpec *emer_daemon_props[NPROPS] = { NULL, };
+
+static gboolean check_and_upload_events (EmerDaemon *self);
 
 static void
 free_network_callback_data (NetworkCallbackData *callback_data)
@@ -421,7 +432,7 @@ handle_https_response (SoupSession         *https_session,
         get_https_request_uri (callback_data->daemon, serialized_request_body,
                                request_body_length);
       SoupMessage *new_https_message =
-        soup_message_new_from_uri ("PUT",  https_request_uri);
+        soup_message_new_from_uri ("PUT", https_request_uri);
       soup_uri_free (https_request_uri);
 
       soup_message_set_request (new_https_message, "application/octet-stream",
@@ -797,17 +808,70 @@ upload_events (GNetworkMonitor *source_object,
                               callback_data);
 }
 
+static void
+set_ping_socket (EmerDaemon *self)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  g_clear_object (&priv->ping_socket);
+  GError *error = NULL;
+  priv->ping_socket = g_network_address_parse_uri (priv->proxy_server_uri,
+                                                   443, // SSL default port
+                                                   &error);
+  if (priv->ping_socket == NULL)
+  {
+    g_error ("Invalid proxy server URI '%s' could not be parsed because: %s.",
+             priv->proxy_server_uri, error->message);
+    g_error_free (error);
+  }
+}
+
+static void
+add_upload_events_timeout (EmerDaemon  *self,
+                           const gchar *environment)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  guint network_send_interval;
+
+  if (priv->network_send_interval != 0)
+    network_send_interval = priv->network_send_interval;
+  else if (g_strcmp0 (environment, "production") == 0)
+    network_send_interval = PRODUCTION_NETWORK_SEND_INTERVAL;
+  else
+    network_send_interval = DEV_NETWORK_SEND_INTERVAL;
+
+  priv->upload_events_timeout_source_id =
+    g_timeout_add_seconds (network_send_interval,
+                           (GSourceFunc) check_and_upload_events,
+                           self);
+}
+
 static gboolean
 check_and_upload_events (EmerDaemon *self)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
+  gchar *environment =
+    emer_permissions_provider_get_environment (priv->permissions_provider);
+  g_clear_pointer (&priv->proxy_server_uri, g_free);
+  priv->proxy_server_uri = g_strconcat ("https://",
+                                        environment,
+                                        ".metrics.endlessm.com/",
+                                        CLIENT_VERSION_NUMBER,
+                                        "/",
+                                        NULL);
+
+  set_ping_socket (self);
+  add_upload_events_timeout (self, environment);
+
+  g_clear_pointer (&environment, g_free);
   g_network_monitor_can_reach_async (priv->network_monitor,
                                      priv->ping_socket,
                                      NULL,
                                      (GAsyncReadyCallback) upload_events,
                                      self);
-  return G_SOURCE_CONTINUE;
+  return G_SOURCE_REMOVE;
 }
 
 static void
@@ -921,18 +985,7 @@ set_network_send_interval (EmerDaemon *self,
                            guint       seconds)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  priv->network_send_interval_seconds = seconds;
-  priv->upload_events_timeout_source_id =
-    g_timeout_add_seconds (seconds, (GSourceFunc) check_and_upload_events,
-                           self);
-}
-
-static void
-set_proxy_server_uri (EmerDaemon  *self,
-                      const gchar *uri)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  priv->proxy_server_uri = g_strdup (uri);
+  priv->network_send_interval = seconds;
 }
 
 static void
@@ -972,6 +1025,8 @@ set_permissions_provider (EmerDaemon              *self,
 
   g_signal_connect (priv->permissions_provider, "notify::daemon-enabled",
                     G_CALLBACK (on_permissions_changed), self);
+  priv->recording_enabled =
+    emer_permissions_provider_get_daemon_enabled (priv->permissions_provider);
 }
 
 static void
@@ -1038,16 +1093,11 @@ emer_daemon_constructed (GObject *object)
   EmerDaemon *self = EMER_DAEMON (object);
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  priv->recording_enabled =
-    emer_permissions_provider_get_daemon_enabled (priv->permissions_provider);
+  gchar *environment =
+    emer_permissions_provider_get_environment (priv->permissions_provider);
+  add_upload_events_timeout (self, environment);
 
-  GError *error = NULL;
-  priv->ping_socket = g_network_address_parse_uri (priv->proxy_server_uri,
-                                                   443, // SSL default port
-                                                   &error);
-  if (priv->ping_socket == NULL)
-    g_error ("Invalid proxy server URI '%s' could not be parsed because: %s.",
-             priv->proxy_server_uri, error->message);
+  g_clear_pointer (&environment, g_free);
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->constructed (object);
 }
@@ -1068,10 +1118,6 @@ emer_daemon_set_property (GObject      *object,
 
     case PROP_NETWORK_SEND_INTERVAL:
       set_network_send_interval (self, g_value_get_uint (value));
-      break;
-
-    case PROP_PROXY_SERVER_URI:
-      set_proxy_server_uri (self, g_value_get_string (value));
       break;
 
     case PROP_MACHINE_ID_PROVIDER:
@@ -1118,14 +1164,15 @@ emer_daemon_finalize (GObject *object)
   flush_to_persistent_cache (self);
   release_shutdown_inhibitor (self);
   g_clear_object (&priv->login_manager_proxy);
+  g_clear_object (&priv->ping_socket);
+  g_free (priv->proxy_server_uri);
+  g_clear_object (&priv->http_session);
 
   g_rand_free (priv->rand);
-  g_free (priv->proxy_server_uri);
   g_clear_object (&priv->machine_id_provider);
   g_clear_object (&priv->network_send_provider);
   g_clear_object (&priv->permissions_provider);
   g_clear_object (&priv->persistent_cache);
-  g_clear_object (&priv->ping_socket);
   // Do not free the GNetworkMonitor.  It is transfer none.
 
   free_singular_buffer (priv->singular_buffer, priv->num_singulars_buffered);
@@ -1165,13 +1212,19 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                           G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                           G_PARAM_STATIC_STRINGS);
 
-  /* Blurb string is good enough default documentation for this */
-  emer_daemon_props[PROP_PROXY_SERVER_URI] =
-    g_param_spec_string ("proxy-server-uri", "Proxy server URI",
-                         "The URI to send metrics to",
-                         PRODUCTION_SERVER_URI,
-                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
-                         G_PARAM_STATIC_STRINGS);
+  /*
+   * EmerDaemon:network-send-interval:
+   *
+   * The frequency with which the client will attempt a network send request, in
+   * seconds.
+   */
+  emer_daemon_props[PROP_NETWORK_SEND_INTERVAL] =
+    g_param_spec_uint ("network-send-interval", "Network send interval",
+                       "Number of seconds between attempts to flush metrics to "
+                       "proxy server",
+                       0, G_MAXUINT, 0,
+                       G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
+                       G_PARAM_STATIC_STRINGS);
 
   /*
    * EmerDaemon:machine-id-provider:
@@ -1230,20 +1283,6 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                          EMER_TYPE_PERSISTENT_CACHE,
                          G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                          G_PARAM_STATIC_STRINGS);
-
-  /*
-   * EmerDaemon:network-send-interval:
-   *
-   * The frequency with which the client will attempt a network send request, in
-   * seconds.
-   */
-  emer_daemon_props[PROP_NETWORK_SEND_INTERVAL] =
-    g_param_spec_uint ("network-send-interval", "Network send interval",
-                       "Number of seconds between attempts to flush metrics to "
-                       "proxy server",
-                       0, G_MAXUINT, DEFAULT_NETWORK_SEND_INTERVAL,
-                       G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
-                       G_PARAM_STATIC_STRINGS);
 
   /* Blurb string is good enough default documentation for this */
   emer_daemon_props[PROP_SINGULAR_BUFFER_LENGTH] =
@@ -1306,6 +1345,9 @@ emer_daemon_init (EmerDaemon *self)
       inhibit_shutdown (self);
     }
 
+  priv->ping_socket = NULL;
+  priv->proxy_server_uri = NULL;
+
   gchar *user_agent = get_user_agent ();
 
   priv->http_session =
@@ -1321,30 +1363,15 @@ emer_daemon_init (EmerDaemon *self)
 
 /*
  * emer_daemon_new:
- * @environment: dev/test/production
  *
- * Creates a new EOS Metrics Daemon. If the environment given is dev, it will
- * shorten the network send interval to facilitate testing.
+ * Creates a new EOS Metrics Daemon.
  *
  * Returns: (transfer full): a new #EmerDaemon.
  */
 EmerDaemon *
-emer_daemon_new (const gchar *environment)
+emer_daemon_new (void)
 {
-  gchar *proxy_server_uri = g_strconcat ("https://", environment,
-                                         ".metrics.endlessm.com/",
-                                         CLIENT_VERSION_NUMBER, "/", NULL);
-
-  if (g_strcmp0 (environment, "dev") == 0)
-    return g_object_new (EMER_TYPE_DAEMON,
-                         "proxy-server-uri", proxy_server_uri,
-                         "network-send-interval", DEV_NETWORK_SEND_INTERVAL,
-                         NULL);
-
-  // This is a production or test environment. Use the default interval.
-  return g_object_new (EMER_TYPE_DAEMON,
-                       "proxy-server-uri", proxy_server_uri,
-                       NULL);
+  return g_object_new (EMER_TYPE_DAEMON, NULL);
 }
 
 /*
@@ -1353,7 +1380,6 @@ emer_daemon_new (const gchar *environment)
  *   exponential backoff, or %NULL to use the default
  * @network_send_interval: frequency with which the client will attempt a
  *   network send request
- * @proxy_server_uri: URI to use
  * @machine_id_provider: (allow-none): The #EmerMachineIdProvider to supply the
  *   machine ID, or %NULL to use the default
  * @network_send_provider: (allow-none): The #EmerNetworkSendProvider to supply
@@ -1369,14 +1395,11 @@ emer_daemon_new (const gchar *environment)
  * Testing function for creating a new EOS Metrics daemon.
  * You should only need to use this for unit testing.
  *
- * Never pass a production metrics proxy server URI for @proxy_server_uri!
- *
  * Returns: (transfer full): a new #EmerDaemon.
  */
 EmerDaemon *
 emer_daemon_new_full (GRand                   *rand,
                       guint                    network_send_interval,
-                      const gchar             *proxy_server_uri,
                       EmerMachineIdProvider   *machine_id_provider,
                       EmerNetworkSendProvider *network_send_provider,
                       EmerPermissionsProvider *permissions_provider,
@@ -1386,7 +1409,6 @@ emer_daemon_new_full (GRand                   *rand,
   return g_object_new (EMER_TYPE_DAEMON,
                        "random-number-generator", rand,
                        "network-send-interval", network_send_interval,
-                       "proxy-server-uri", proxy_server_uri,
                        "machine-id-provider", machine_id_provider,
                        "network-send-provider", network_send_provider,
                        "permissions-provider", permissions_provider,
@@ -1396,8 +1418,6 @@ emer_daemon_new_full (GRand                   *rand,
                        "sequence-buffer-length", buffer_length,
                        NULL);
 }
-
-
 
 void
 emer_daemon_record_singular_event (EmerDaemon *self,

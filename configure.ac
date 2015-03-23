@@ -1,6 +1,22 @@
 dnl Process this file with autoconf to produce configure
 
-# Copyright 2013-2014 Endless Mobile, Inc.
+dnl Copyright 2013, 2014, 2015 Endless Mobile, Inc.
+
+dnl This file is part of eos-event-recorder-daemon.
+dnl
+dnl eos-event-recorder-daemon is free software: you can redistribute it and/or
+dnl modify it under the terms of the GNU General Public License as published by
+dnl the Free Software Foundation, either version 2 of the License, or (at your
+dnl option) any later version.
+dnl
+dnl eos-event-recorder-daemon is distributed in the hope that it will be
+dnl useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+dnl MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+dnl Public License for more details.
+dnl
+dnl You should have received a copy of the GNU General Public License
+dnl along with eos-event-recorder-daemon.  If not, see
+dnl <http://www.gnu.org/licenses/>.
 
 dnl ------------
 dnl configure.ac
@@ -41,10 +57,17 @@ AC_CACHE_SAVE
 EOS_METRICS_REQUIREMENT="eosmetrics-0 >= 0.2"
 GIO_REQUIREMENT="gio-unix-2.0 >= 2.40"
 GOBJECT_REQUIREMENT="gobject-2.0"
+OSTREE_REQUIREMENT="ostree-1 <= 2013.6"
 POLKIT_REQUIREMENT="polkit-gobject-1"
 SOUP_REQUIREMENT="libsoup-2.4 >= 2.42"
 UUID_REQUIREMENT="uuid"
-EMER_REQUIRED_MODULES="$EOS_METRICS_REQUIREMENT $GIO_REQUIREMENT $GOBJECT_REQUIREMENT $POLKIT_REQUIREMENT $SOUP_REQUIREMENT $UUID_REQUIREMENT"
+EMER_REQUIRED_MODULES="$EOS_METRICS_REQUIREMENT \
+                       $GIO_REQUIREMENT \
+                       $GOBJECT_REQUIREMENT \
+                       $OSTREE_REQUIREMENT \
+                       $POLKIT_REQUIREMENT \
+                       $SOUP_REQUIREMENT \
+                       $UUID_REQUIREMENT"
 AC_SUBST(EMER_REQUIRED_MODULES)
 # This indicates a required dbus mocking interface for unit testing.
 AX_PYTHON_MODULE([dbusmock], [required])
@@ -126,6 +149,10 @@ AS_IF([test -f $EVENT_RECORDER_SERVER_XML],
 # Required libraries
 # ------------------
 PKG_CHECK_MODULES([EOS_EVENT_RECORDER_DAEMON], [$EMER_REQUIRED_MODULES])
+
+# Code coverage
+# -------------
+EOS_COVERAGE_REPORT([c])
 
 AC_CACHE_SAVE
 

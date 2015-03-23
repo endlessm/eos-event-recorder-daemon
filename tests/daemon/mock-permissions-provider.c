@@ -1,6 +1,23 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2014 Endless Mobile, Inc. */
+/* Copyright 2014, 2015 Endless Mobile, Inc. */
+
+/* This file is part of eos-event-recorder-daemon.
+ *
+ * eos-event-recorder-daemon is free software: you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * eos-event-recorder-daemon is distributed in the hope that it will be
+ * useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with eos-event-recorder-daemon.  If not, see
+ * <http://www.gnu.org/licenses/>.
+ */
 
 #include "emer-permissions-provider.h"
 #include "mock-permissions-provider.h"
@@ -40,7 +57,8 @@ emer_permissions_provider_new (void)
 }
 
 EmerPermissionsProvider *
-emer_permissions_provider_new_full (const char *config_file_path)
+emer_permissions_provider_new_full (const char *config_file_path,
+                                    const char *ostree_config_file_path)
 {
   return emer_permissions_provider_new ();
 }
@@ -67,6 +85,12 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
   /* This works for faking a property notification even though there isn't a
   property by that name in this mock object */
   g_signal_emit_by_name (self, "notify::daemon-enabled", NULL);
+}
+
+gchar *
+emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
+{
+  return g_strdup ("test");
 }
 
 /* API OF MOCK OBJECT */

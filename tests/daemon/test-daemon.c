@@ -1,6 +1,23 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2014 Endless Mobile, Inc. */
+/* Copyright 2014, 2015 Endless Mobile, Inc. */
+
+/* This file is part of eos-event-recorder-daemon.
+ *
+ * eos-event-recorder-daemon is free software: you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * eos-event-recorder-daemon is distributed in the hope that it will be
+ * useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with eos-event-recorder-daemon.  If not, see
+ * <http://www.gnu.org/licenses/>.
+ */
 
 #include "emer-daemon.h"
 #include "emer-boot-id-provider.h"
@@ -230,12 +247,11 @@ setup (Fixture      *fixture,
   fixture->mock_network_send_prov = emer_network_send_provider_new ();
   fixture->test_object =
     emer_daemon_new_full (g_rand_new_with_seed (18),
-                          5,  // Network Send Interval
-                          "http://localhost/", // uri,
+                          5, // Network Send Interval
                           id_prov, // MachineIdProvider
-                          fixture->mock_network_send_prov, // NetworkSendProvider
-                          fixture->mock_permissions_prov, // PermissionsProvider
-                          fixture->mock_persistent_cache, // PersistentCache
+                          fixture->mock_network_send_prov,
+                          fixture->mock_permissions_prov,
+                          fixture->mock_persistent_cache,
                           20); // Buffer length
   g_object_unref (id_prov);
 }
@@ -261,7 +277,7 @@ static void
 test_daemon_new_succeeds (Fixture      *fixture,
                           gconstpointer unused)
 {
-  EmerDaemon *daemon = emer_daemon_new ("test");
+  EmerDaemon *daemon = emer_daemon_new ();
   g_assert (daemon != NULL);
   g_object_unref (daemon);
 }

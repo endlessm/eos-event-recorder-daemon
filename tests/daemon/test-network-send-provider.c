@@ -1,4 +1,21 @@
-/* Copyright 2014 Endless Mobile, Inc. */
+/* Copyright 2014, 2015 Endless Mobile, Inc. */
+
+/* This file is part of eos-event-recorder-daemon.
+ *
+ * eos-event-recorder-daemon is free software: you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * eos-event-recorder-daemon is distributed in the hope that it will be
+ * useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with eos-event-recorder-daemon.  If not, see
+ * <http://www.gnu.org/licenses/>.
+ */
 
 #include "emer-network-send-provider.h"
 
@@ -54,6 +71,7 @@ setup (Fixture      *fixture,
 {
   GFileIOStream *stream;
   fixture->tmp_file = g_file_new_tmp (TESTING_FILE_PATH, &stream, NULL);
+  g_object_unref (stream);
   fixture->tmp_path = g_file_get_path (fixture->tmp_file);
 
   fixture->key_file = g_key_file_new ();

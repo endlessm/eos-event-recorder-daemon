@@ -1,6 +1,23 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2014 Endless Mobile, Inc. */
+/* Copyright 2014, 2015 Endless Mobile, Inc. */
+
+/* This file is part of eos-event-recorder-daemon.
+ *
+ * eos-event-recorder-daemon is free software: you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * eos-event-recorder-daemon is distributed in the hope that it will be
+ * useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+ * Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with eos-event-recorder-daemon.  If not, see
+ * <http://www.gnu.org/licenses/>.
+ */
 
 #include <glib.h>
 #include <glib-object.h>
@@ -193,45 +210,7 @@ int
 main (int                argc,
       const char * const argv[])
 {
-  EmerDaemon *daemon;
-
-  /* Read configuration file to determine metrics environment. */
-  GKeyFile *configuration_file = g_key_file_new ();
-  GError *error = NULL;
-
-  gchar *environment = NULL;
-  if (g_key_file_load_from_file (configuration_file, PERMISSIONS_FILE,
-                                 G_KEY_FILE_NONE, &error))
-    {
-      environment = g_key_file_get_value (configuration_file, "global",
-                                          "environment", NULL);
-      g_key_file_free (configuration_file);
-    }
-  else
-    {
-      g_warning ("Unable to load configuration file. Error: %s.",
-                 error->message);
-      g_clear_error (&error);
-    }
-  if (g_strcmp0 (environment, "dev") != 0 &&
-      g_strcmp0 (environment, "test") != 0 &&
-      g_strcmp0 (environment, "production") != 0)
-    {
-      g_warning ("Error: Metrics environment is set to: %s in %s. "
-                 "Valid metrics environments are: dev, test, production.",
-                 environment, PERMISSIONS_FILE);
-      g_clear_pointer (&environment, g_free);
-    }
-
-  if (environment == NULL)
-    {
-      g_warning ("Metrics environment was not present or was invalid. Assuming "
-                 "'test' environment.");
-      environment = g_strdup ("test");
-    }
-
-  daemon = emer_daemon_new (environment);
-  g_free (environment);
+  EmerDaemon *daemon = emer_daemon_new ();
 
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
 
@@ -251,7 +230,7 @@ main (int                argc,
 
   g_main_loop_run (main_loop);
 
-  g_bus_unown_name(name_id);
+  g_bus_unown_name (name_id);
   g_main_loop_unref (main_loop);
 
   g_object_unref (daemon);

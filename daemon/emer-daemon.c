@@ -70,15 +70,15 @@
 #define PRODUCTION_NETWORK_SEND_INTERVAL (60u * 60u) // One hour
 
 /*
- * The default maximum length for each event buffer. Set based on the assumption
- * that events average 100 bytes each. The desired maximum capacity of all three
- * event buffers combined is 10 kB. Thus,
- * (10,240 bytes) / (100 bytes * 3 buffers) ~= 34 bytes / buffer.
+ * This is the default maximum length for each event buffer. It is set based on
+ * the assumption that events average 100 bytes each. The desired maximum
+ * capacity of all three event buffers combined is 100 kB. Thus,
+ * (10,2400 bytes) / ((100 bytes / event) * 3 buffers) ~= 341 events / buffer.
  *
- * TODO: Set these limits to use the actual size of the metrics to
- * determine the limit, not the estimated size.
+ * TODO: Use the actual size of the events to determine the limit, not the
+ * estimated size.
  */
-#define DEFAULT_METRICS_PER_BUFFER_MAX 34
+#define DEFAULT_METRICS_PER_BUFFER_MAX 341
 
 #define WHAT "shutdown"
 #define WHO "EndlessOS Event Recorder Daemon"

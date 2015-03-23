@@ -1430,9 +1430,12 @@ emer_persistent_cache_constructed (GObject *object)
   EmerPersistentCache *self = EMER_PERSISTENT_CACHE (object);
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
+
   priv->boot_metafile_path = g_strconcat (priv->cache_directory,
                                           BOOT_OFFSET_METAFILE,
                                           NULL);
+
+  G_OBJECT_CLASS (emer_persistent_cache_parent_class)->constructed (object);
 }
 
 static void

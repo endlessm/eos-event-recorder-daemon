@@ -5,13 +5,16 @@ Build-Depends: autotools-dev,
                debhelper (>= 8.0.0),
                dh-systemd,
                eos-metrics-0-dev (>= 0.2),
+               eos-sdk-0-dev (>= 0.0.0),
                libglib2.0-dev (>= 2.38),
+               libostree-dev (<< 2013.7),
                libpolkit-gobject-1-dev,
                libsoup2.4-dev (>= 2.42),
                pkg-config,
                python-dbusmock,
                systemd,
                uuid-dev
+Build-Conflicts: libostree-dev (>= 2013.7)
 Standards-Version: 3.9.4
 Section: non-free/libs
 Homepage: http://www.endlessm.com

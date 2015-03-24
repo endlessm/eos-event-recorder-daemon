@@ -32,6 +32,7 @@
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <uuid/uuid.h>
+#include <stdio.h>
 #include <string.h>
 #include <signal.h>
 

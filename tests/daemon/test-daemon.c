@@ -32,6 +32,7 @@
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <uuid/uuid.h>
+#include <stdio.h>
 #include <string.h>
 #include <signal.h>
 
@@ -57,12 +58,10 @@ typedef struct
 
   /* Mock logind service */
   GSubprocess *logind_mock;
-  GDataInputStream *logind_stdout;
+  GByteArray *logind_line;
 
-  /* Only used during setup() */
-  guint watcher_id;
-  guint watcher_timeout_id;
-  GMainLoop *watcher_loop;
+  GMainLoop *main_loop;
+  guint timeout_id;
 } Fixture;
 
 // Helper methods first:
@@ -104,46 +103,13 @@ make_event_values_gvariant (void)
 }
 
 static void
-on_logind_name_appeared (GDBusConnection *connection,
-                         const gchar     *name,
-                         const gchar     *owner,
-                         Fixture         *fixture)
-{
-  g_source_remove (fixture->watcher_timeout_id);
-  g_bus_unwatch_name (fixture->watcher_id);
-  g_main_loop_quit (fixture->watcher_loop);
-}
-
-static gboolean
-on_logind_name_timeout (Fixture *fixture)
-{
-  g_assert_not_reached ();
-}
-
-static void
-start_mock_logind_service_and_wait (Fixture *fixture)
+start_mock_logind_service (Fixture *fixture)
 {
   fixture->logind_mock = g_subprocess_new (G_SUBPROCESS_FLAGS_STDOUT_PIPE, NULL,
                                            "python", "-m", "dbusmock",
                                            "--system", "--template", "logind",
                                            NULL);
   g_assert_nonnull (fixture->logind_mock);
-  GInputStream *raw_stdout = g_subprocess_get_stdout_pipe (fixture->logind_mock);
-  fixture->logind_stdout = g_data_input_stream_new (raw_stdout);
-  /* raw_stdout is owned by the GSubprocess. */
-
-  fixture->watcher_id = g_bus_watch_name (G_BUS_TYPE_SYSTEM,
-                                          "org.freedesktop.login1",
-                                          G_BUS_NAME_WATCHER_FLAGS_NONE,
-                                          (GBusNameAppearedCallback) on_logind_name_appeared,
-                                          NULL,
-                                          fixture, NULL);
-  fixture->watcher_timeout_id =
-    g_timeout_add_seconds (5, (GSourceFunc) on_logind_name_timeout, NULL);
-  fixture->watcher_loop = g_main_loop_new (NULL, FALSE);
-  g_main_loop_run (fixture->watcher_loop);
-
-  g_main_loop_unref (fixture->watcher_loop);
 }
 
 static void
@@ -153,61 +119,169 @@ terminate_mock_logind_service_and_wait (Fixture *fixture)
 
   g_subprocess_send_signal (fixture->logind_mock, SIGTERM);
 
-  /* Make sure it was the SIGTERM that finished the process, and not something
-  else. */
+  /*
+   * Make sure it was the SIGTERM that finished the process, and not something
+   * else.
+   */
   g_assert_false (g_subprocess_wait_check (fixture->logind_mock, NULL, &error));
   g_assert_error (error, G_SPAWN_ERROR, G_SPAWN_ERROR_FAILED);
   g_assert_cmpstr (error->message, ==, "Child process killed by signal 15");
+
+  g_object_unref (fixture->logind_mock);
 }
 
-/* Parse the stdout stream of a mock DBus process and ensure that in the not-yet
-read part of the call log there is a call matching @method_name (and, if
-@arguments is given, containing the string @arguments in its arguments).
-@arguments may be %NULL if you are not interested in the latter behavior.
-
-Returns %TRUE if the call was found in the call log and @arguments matched, if
-given. The input stream is consumed up to the requested call, so if you are
-expecting more than one method call you must expect them in order or rewind the
-stream in between calls to expect_dbus_call().
-
-Returns %FALSE if the call was not found, or the call was found but @arguments
-was given and did not match. In that case the entire input stream is consumed.*/
-static gboolean
-expect_dbus_call (GDataInputStream *stream,
-                  const gchar      *method_name,
-                  const gchar      *arguments)
+static GPollableInputStream *
+get_pollable_input_stream (GSubprocess *subprocess)
 {
-  GError *error = NULL;
-  gchar *line;
-  while ((line = g_data_input_stream_read_line_utf8 (stream, NULL, NULL,
-                                                     &error)) != NULL)
+  GInputStream *input_stream = g_subprocess_get_stdout_pipe (subprocess);
+  GPollableInputStream *pollable_input_stream =
+    G_POLLABLE_INPUT_STREAM (input_stream);
+  g_assert (g_pollable_input_stream_can_poll (pollable_input_stream));
+  return pollable_input_stream;
+}
+
+/*
+ * Looks through the given @line of a mock DBus process' output for a call
+ * matching @method_name and containing the string @arguments in its arguments.
+ *
+ * Returns %TRUE if the call was found in @line and @arguments matched.
+ *
+ * Returns %FALSE if the call was not found in @line, or the call was found but
+ * @arguments was given and did not match.
+ */
+static gboolean
+contains_dbus_call (const gchar *line,
+                    const gchar *method_name,
+                    const gchar *arguments)
+{
+  gchar *method_called = NULL, *arguments_given = NULL;
+  if (sscanf (line, "%*f %ms %m[^\n]", &method_called, &arguments_given) != 2)
     {
-      g_assert_no_error (error);
-
-      gchar *method_called = NULL, *arguments_given = NULL;
-      if (sscanf (line, "%*f %ms %m[^\n]", &method_called, &arguments_given) != 2)
-        {
-          g_free (method_called);
-          g_free (line);
-          continue;
-        }
-      g_free (line);
-      if (strcmp (method_name, method_called) != 0)
-        {
-          g_free (method_called);
-          g_free (arguments_given);
-          continue;
-        }
       g_free (method_called);
-      if (arguments == NULL || strstr (arguments_given, arguments) != NULL)
+      return FALSE;
+    }
+
+  if (strcmp (method_name, method_called) != 0)
+    {
+      g_free (method_called);
+      g_free (arguments_given);
+      return FALSE;
+    }
+  g_free (method_called);
+
+  gchar *given_args_index = strstr (arguments_given, arguments);
+  g_free (arguments_given);
+  return given_args_index != NULL;
+}
+
+static void
+null_terminate (GByteArray *str)
+{
+  guint8 null_byte[] = {'\0'};
+  g_byte_array_append (str, null_byte, 1u);
+}
+
+/*
+ * Append 1 byte from the given stream to the given byte array without blocking.
+ * Returns TRUE if a character other than a newline was successfully appended.
+ * Returns FALSE if a byte can't be obtained from the given stream without
+ * blocking or a newline is read.
+ */
+static gboolean
+append_byte (GPollableInputStream *pollable_input_stream,
+             GByteArray           *line)
+{
+  guint8 buffer[1];
+  GError *error = NULL;
+  gssize num_bytes_read =
+    g_pollable_input_stream_read_nonblocking (pollable_input_stream,
+                                              buffer, 1,
+                                              NULL /* GCancellable */, &error);
+  switch (num_bytes_read)
+    {
+    case -1:
+      g_assert (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_WOULD_BLOCK));
+      g_error_free (error); // Fall through.
+    case 0:
+      return FALSE;
+    case 1:
+      g_byte_array_append (line, buffer, 1);
+      return buffer[0] != '\n';
+    default:
+      g_assert_not_reached ();
+    }
+}
+
+/*
+ * Append 1 line from the given stream to the given byte array without blocking.
+ * Returns TRUE if a full line was successfully appended. Returns FALSE if less
+ * than 1 line can be obtained from the given stream without blocking and
+ * appends whatever data was available for immediate consumption.
+ */
+static gboolean
+append_line (GPollableInputStream *pollable_input_stream,
+             GByteArray           *line)
+{
+  while (append_byte (pollable_input_stream, line)) {}
+  return line->data[line->len - 1] == '\n';
+}
+
+static gboolean
+on_output_received (GPollableInputStream *pollable_input_stream,
+                    Fixture              *fixture)
+{
+  while (TRUE)
+    {
+      if (!append_line (pollable_input_stream, fixture->logind_line))
+        return G_SOURCE_CONTINUE;
+
+      null_terminate (fixture->logind_line);
+      gboolean shutdown_inhibited =
+        contains_dbus_call (fixture->logind_line->data, "Inhibit",
+                            EXPECTED_INHIBIT_SHUTDOWN_ARGS);
+      if (shutdown_inhibited)
         {
-          g_free (arguments_given);
-          return TRUE;
+          g_source_remove (fixture->timeout_id);
+          g_main_loop_quit (fixture->main_loop);
+          return G_SOURCE_REMOVE;
         }
 
-      g_free (arguments_given);
+      g_byte_array_remove_range (fixture->logind_line, 0,
+                                 fixture->logind_line->len);
     }
-  return FALSE;
+
+  g_assert_not_reached ();
+}
+
+static gboolean
+timeout (gpointer unused)
+{
+  g_assert_not_reached ();
+}
+
+static void
+await_shutdown_inhibit (Fixture *fixture)
+{
+  GPollableInputStream *logind_pollable_stream =
+    get_pollable_input_stream (fixture->logind_mock);
+  GSource *stdout_source =
+    g_pollable_input_stream_create_source (logind_pollable_stream,
+                                           NULL /* GCancellable */);
+
+  fixture->main_loop = g_main_loop_new (NULL /* GMainContext */, FALSE);
+  fixture->logind_line = g_byte_array_new ();
+  g_source_set_callback (stdout_source, (GSourceFunc) on_output_received,
+                         fixture, NULL /* GDestroyNotify */);
+  g_source_attach (stdout_source, NULL /* GMainContext */);
+  g_source_unref (stdout_source);
+
+  fixture->timeout_id =
+    g_timeout_add_seconds (5, timeout, NULL /* user data */);
+
+  g_main_loop_run (fixture->main_loop);
+
+  g_main_loop_unref (fixture->main_loop);
+  g_byte_array_unref (fixture->logind_line);
 }
 
 static void
@@ -238,8 +312,6 @@ static void
 setup (Fixture      *fixture,
        gconstpointer unused)
 {
-  start_mock_logind_service_and_wait (fixture);
-
   EmerMachineIdProvider *id_prov =
     emer_machine_id_provider_new_full (MACHINE_ID_PATH);
   fixture->mock_permissions_prov = emer_permissions_provider_new ();
@@ -265,10 +337,6 @@ teardown (Fixture      *fixture,
   g_object_unref (fixture->mock_permissions_prov);
   g_object_unref (fixture->mock_persistent_cache);
   g_unlink (MACHINE_ID_PATH);
-
-  terminate_mock_logind_service_and_wait (fixture);
-  g_object_unref (fixture->logind_stdout);
-  g_object_unref (fixture->logind_mock);
 }
 
 // Unit Tests next:
@@ -347,92 +415,106 @@ static void
 test_daemon_does_not_record_singular_event_if_not_allowed (Fixture      *fixture,
                                                            gconstpointer unused)
 {
-  gint num_calls =
+  gint num_calls_before =
     mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
   test_daemon_can_record_singular_event (fixture, unused);
 
-  /* FIXME: nothing can currently be asserted about whether the EmerDaemon tries
-  to send its metrics, but at least we can confirm that it read the enabled
-  property: */
-  g_assert_cmpint (mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov),
-                   >=, num_calls + 1);
+  gint num_calls_after =
+    mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
+
+  /*
+   * FIXME: Nothing can currently be asserted about whether the EmerDaemon tries
+   * to send its metrics, but at least we can confirm that it read the enabled
+   * property.
+   */
+  g_assert_cmpint (num_calls_after, >=, num_calls_before + 1);
 }
 
 static void
 test_daemon_does_not_record_aggregate_event_if_not_allowed (Fixture      *fixture,
                                                             gconstpointer unused)
 {
-  gint num_calls =
+  gint num_calls_before =
     mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
   test_daemon_can_record_aggregate_events (fixture, unused);
 
+  gint num_calls_after =
+    mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
+
   /* FIXME: See note above. */
-  g_assert_cmpint (mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov),
-                   >=, num_calls + 1);
+  g_assert_cmpint (num_calls_after, >=, num_calls_before + 1);
 }
 
 static void
 test_daemon_does_not_record_event_sequence_if_not_allowed (Fixture      *fixture,
                                                            gconstpointer unused)
 {
-  gint num_calls =
+  gint num_calls_before =
     mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_prov, FALSE);
   test_daemon_can_record_event_sequence (fixture, unused);
 
+  gint num_calls_after =
+    mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov);
+
   /* FIXME: See note above. */
-  g_assert_cmpint (mock_permissions_provider_get_daemon_enabled_called (fixture->mock_permissions_prov),
-                   >=, num_calls + 1);
+  g_assert_cmpint (num_calls_after, >=, num_calls_before + 1);
 }
 
 static void
 test_daemon_inhibits_shutdown (Fixture      *fixture,
                                gconstpointer unused)
 {
-  g_assert (expect_dbus_call (fixture->logind_stdout, "Inhibit",
-                              EXPECTED_INHIBIT_SHUTDOWN_ARGS));
+  start_mock_logind_service (fixture);
+  await_shutdown_inhibit (fixture);
+  terminate_mock_logind_service_and_wait (fixture);
 }
 
 static void
 test_daemon_flushes_to_persistent_cache_once_on_shutdown (Fixture      *fixture,
                                                           gconstpointer unused)
 {
-  gint num_calls =
+  start_mock_logind_service (fixture);
+
+  gint num_calls_before =
     mock_persistent_cache_get_store_metrics_called (fixture->mock_persistent_cache);
 
+  await_shutdown_inhibit (fixture);
   emit_shutdown_signal (TRUE);
 
-  /* Wait for EmerDaemon to handle the signal. */
+  // Wait for EmerDaemon to handle the signal.
   while (g_main_context_pending (NULL))
     g_main_context_iteration (NULL, TRUE);
 
-  g_assert_cmpint (mock_persistent_cache_get_store_metrics_called (fixture->mock_persistent_cache),
-                   ==, num_calls + 1);
+  gint num_calls_after =
+    mock_persistent_cache_get_store_metrics_called (fixture->mock_persistent_cache);
+  g_assert_cmpint (num_calls_after, ==, num_calls_before + 1);
+
+  terminate_mock_logind_service_and_wait (fixture);
 }
 
 static void
 test_daemon_reinhibits_shutdown_on_shutdown_cancel (Fixture      *fixture,
                                                     gconstpointer unused)
 {
-  expect_dbus_call (fixture->logind_stdout, "Inhibit", NULL);
+  start_mock_logind_service (fixture);
 
+  await_shutdown_inhibit (fixture);
   emit_shutdown_signal (TRUE);
 
+  // Wait for EmerDaemon to handle the signal.
   while (g_main_context_pending (NULL))
     g_main_context_iteration (NULL, TRUE);
 
   emit_shutdown_signal (FALSE);
+  await_shutdown_inhibit (fixture);
 
-  while (g_main_context_pending (NULL))
-    g_main_context_iteration (NULL, TRUE);
-
-  g_assert (expect_dbus_call (fixture->logind_stdout, "Inhibit",
-                              EXPECTED_INHIBIT_SHUTDOWN_ARGS));
+  terminate_mock_logind_service_and_wait (fixture);
 }
 
 int

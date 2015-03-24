@@ -41,7 +41,8 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerCacheVersionProvider, emer_cache_version_provide
 #define CACHE_VERSION_GROUP "cache_version_info"
 #define CACHE_VERSION_KEY   "version"
 
-enum {
+enum
+{
   PROP_0,
   PROP_PATH,
   NPROPS

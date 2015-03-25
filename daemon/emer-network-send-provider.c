@@ -39,7 +39,8 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerNetworkSendProvider, emer_network_send_provider,
 #define NETWORK_SEND_GROUP "network_send_data"
 #define NETWORK_SEND_KEY   "network_requests_sent"
 
-enum {
+enum
+{
   PROP_0,
   PROP_PATH,
   NPROPS

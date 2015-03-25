@@ -52,7 +52,8 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerBootIdProvider, emer_boot_id_provider, G_TYPE_OB
  */
 #define DEFAULT_BOOT_ID_FILEPATH "/proc/sys/kernel/random/boot_id"
 
-enum {
+enum
+{
   PROP_0,
   PROP_PATH,
   NPROPS

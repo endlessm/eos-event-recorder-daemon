@@ -56,7 +56,8 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerMachineIdProvider, emer_machine_id_provider, G_T
  */
 #define DEFAULT_MACHINE_ID_FILEPATH "/etc/machine-id"
 
-enum {
+enum
+{
   PROP_0,
   PROP_PATH,
   NPROPS

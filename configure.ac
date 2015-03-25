@@ -70,7 +70,7 @@ EMER_REQUIRED_MODULES="$EOS_METRICS_REQUIREMENT \
                        $UUID_REQUIREMENT"
 AC_SUBST(EMER_REQUIRED_MODULES)
 # This indicates a required dbus mocking interface for unit testing.
-AX_PYTHON_MODULE([dbusmock], [required])
+AX_PYTHON_MODULE_VERSION([dbusmock], 0.10)
 
 # Required build tools
 # --------------------

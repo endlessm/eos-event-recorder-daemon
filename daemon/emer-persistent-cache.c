@@ -2,7 +2,8 @@
 
 /* Copyright 2014, 2015 Endless Mobile, Inc. */
 
-/* This file is part of eos-event-recorder-daemon.
+/*
+ * This file is part of eos-event-recorder-daemon.
  *
  * eos-event-recorder-daemon is free software: you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as published by
@@ -471,8 +472,10 @@ compute_boot_offset (EmerPersistentCache *self,
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  /* The amount of time elapsed between the origin boot and the boot with
-     the stored ID. */
+  /*
+   * The amount of time elapsed between the origin boot and the boot with the
+   * stored ID.
+   */
   gint64 stored_offset = g_key_file_get_int64 (priv->boot_offset_key_file,
                                                CACHE_TIMING_GROUP_NAME,
                                                CACHE_BOOT_OFFSET_KEY,
@@ -507,27 +510,37 @@ compute_boot_offset (EmerPersistentCache *self,
       return FALSE;
     }
 
-  /* The amount of time elapsed between the origin boot and the boot with the
-     currently stored ID. */
+  /*
+   * The amount of time elapsed between the origin boot and the boot with the
+   * currently stored ID.
+   */
   gint64 previous_offset = stored_offset;
 
-  /* The amount of time elapsed between the origin boot and the time at which
-     the stored file was written. */
+  /*
+   * The amount of time elapsed between the origin boot and the time at which
+   * the stored file was written.
+   */
   gint64 time_between_origin_boot_and_write =
     previous_offset + stored_relative_time;
 
-  /* Our best estimate of the actual amount of time elapsed between the most
-     recent write to the store file and the current time. */
+  /*
+   * Our best estimate of the actual amount of time elapsed between the most
+   * recent write to the store file and the current time.
+   */
   gint64 approximate_time_since_last_write =
     absolute_time - stored_absolute_time;
 
-  /* Our best estimate of the amount of time elapsed between the origin boot
-     and the current time. */
+  /*
+   * Our best estimate of the amount of time elapsed between the origin boot
+   * and the current time.
+   */
   gint64 time_since_origin_boot =
     time_between_origin_boot_and_write + approximate_time_since_last_write;
 
-  /* Our best estimate of the amount of time elapsed between the origin boot and
-     the current boot. This is the new boot offset. */
+  /*
+   * Our best estimate of the amount of time elapsed between the origin boot and
+   * the current boot. This is the new boot offset.
+   */
   *boot_offset = time_since_origin_boot - relative_time;
 
   return TRUE;
@@ -703,8 +716,10 @@ emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
 
   G_LOCK (update_boot_offset);
 
-  // When always_update_timestamps is FALSE, the timestamps won't be written
-  // unless the boot offset in the metadata file is being overwritten.
+  /*
+   * When always_update_timestamps is FALSE, the timestamps won't be written
+   * unless the boot offset in the metadata file is being overwritten.
+   */
   if (!update_boot_offset (self, always_update_timestamps))
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,

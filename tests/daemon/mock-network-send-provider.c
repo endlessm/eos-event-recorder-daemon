@@ -2,7 +2,8 @@
 
 /* Copyright 2014, 2015 Endless Mobile, Inc. */
 
-/* This file is part of eos-event-recorder-daemon.
+/*
+ * This file is part of eos-event-recorder-daemon.
  *
  * eos-event-recorder-daemon is free software: you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as published by

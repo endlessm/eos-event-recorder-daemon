@@ -1,6 +1,7 @@
 /* Copyright 2014, 2015 Endless Mobile, Inc. */
 
-/* This file is part of eos-event-recorder-daemon.
+/*
+ * This file is part of eos-event-recorder-daemon.
  *
  * eos-event-recorder-daemon is free software: you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as published by
@@ -1456,8 +1457,10 @@ test_persistent_cache_wipes_metrics_when_boot_offset_corrupted (gboolean     *un
   g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING, "Could not find a "
                          "valid boot offset in the metadata file. Error: *.");
 
-  // This call should detect corruption and wipe the cache of all previous
-  // events. However, this new aggregate event should be stored.
+  /*
+   * This call should detect corruption and wipe the cache of all previous
+   * events. However, this new aggregate event should be stored.
+   */
   store_single_aggregate_event (cache2, &capacity);
 
   g_test_assert_expected_messages ();
@@ -1682,14 +1685,18 @@ test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
   g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) &&
             emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
 
-  // This value should never be read because the persistent cache should read
-  // from its cached value next call.
+  /*
+   * This value should never be read because the persistent cache should read
+   * from its cached value next call.
+   */
   set_boot_offset_in_metadata_file (FAKE_BOOT_OFFSET);
 
   gint64 second_offset;
 
-  // This call should read the offset from its cached value, not the new one
-  // from disk.
+  /*
+   * This call should read the offset from its cached value, not the new one
+   * from disk.
+   */
   g_assert (emer_persistent_cache_get_boot_time_offset (cache, &second_offset,
                                                         &error, TRUE));
   g_assert_no_error (error);
@@ -1753,8 +1760,10 @@ test_persistent_cache_get_offset_can_build_boot_metadata_file (gboolean     *unu
 {
   EmerPersistentCache *cache = make_testing_cache ();
 
-  /* Don't write a default boot offset file, we want to create a new one via
-     production code. */
+  /*
+   * Don't write a default boot offset file, we want to create a new one via
+   * production code.
+   */
 
   gint64 offset;
   GError *error = NULL;

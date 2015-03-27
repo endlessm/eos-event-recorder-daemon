@@ -224,11 +224,8 @@ static gboolean
 on_output_received (GPollableInputStream *pollable_input_stream,
                     Fixture              *fixture)
 {
-  while (TRUE)
+  while (append_line (pollable_input_stream, fixture->logind_line))
     {
-      if (!append_line (pollable_input_stream, fixture->logind_line))
-        return G_SOURCE_CONTINUE;
-
       gboolean shutdown_inhibited =
         contains_dbus_call (fixture->logind_line->str, "Inhibit",
                             EXPECTED_INHIBIT_SHUTDOWN_ARGS);
@@ -242,7 +239,7 @@ on_output_received (GPollableInputStream *pollable_input_stream,
       g_string_truncate (fixture->logind_line, 0);
     }
 
-  g_assert_not_reached ();
+  return G_SOURCE_CONTINUE;
 }
 
 static gboolean

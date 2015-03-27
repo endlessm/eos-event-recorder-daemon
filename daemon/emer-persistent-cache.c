@@ -240,8 +240,8 @@ get_cache_file (EmerPersistentCache *self,
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
-  gchar *path;
-  path = g_strconcat (priv->cache_directory, CACHE_PREFIX, path_ending, NULL);
+  gchar *path =
+    g_strconcat (priv->cache_directory, CACHE_PREFIX, path_ending, NULL);
   GFile *file = g_file_new_for_path (path);
   g_free (path);
   return file;
@@ -1322,8 +1322,8 @@ load_cache_size (EmerPersistentCache *self,
 
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
-  priv->cache_size = singular_disk_used + aggregate_disk_used +
-                     sequence_disk_used;
+  priv->cache_size =
+    singular_disk_used + aggregate_disk_used + sequence_disk_used;
   update_capacity (self, FALSE);
   return TRUE;
 }

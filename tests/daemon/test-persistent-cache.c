@@ -54,9 +54,7 @@
 // TODO: Replace this with a reasonable value once it is used.
 #define MAX_BYTES_TO_READ 0
 
-#define NANOSECONDS_PER_MILLISECOND 1000000
-
-#define ACCEPTABLE_OFFSET_VARIANCE (500 /* Milliseconds */ * NANOSECONDS_PER_MILLISECOND)
+#define ACCEPTABLE_OFFSET_VARIANCE 500000000 // 500 milliseconds
 
 #define DEFAULT_BOOT_OFFSET_KEY_FILE_DATA \
   "[time]\n" \
@@ -220,14 +218,14 @@ write_default_boot_offset_key_file_to_disk (void)
  * Overwrites the metadata file's boot id with the given boot id.
  */
 static void
-set_boot_id_in_metadata_file (gchar *new_boot_id)
+set_boot_id_in_metadata_file (gchar *boot_id)
 {
   GKeyFile *key_file = load_testing_key_file ();
 
   g_key_file_set_string (key_file,
                          CACHE_TIMING_GROUP_NAME,
                          CACHE_LAST_BOOT_ID_KEY,
-                         new_boot_id);
+                         boot_id);
 
   g_assert (g_key_file_save_to_file (key_file,
                                      TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE,
@@ -274,7 +272,7 @@ read_offset (void)
  * Also ensures the reset value is 0.
  */
 static gboolean
-read_whether_boot_offset_is_reset_value (void)
+boot_offset_was_reset (void)
 {
   GKeyFile *key_file = load_testing_key_file ();
   GError *error = NULL;
@@ -1508,7 +1506,7 @@ test_persistent_cache_resets_boot_metadata_file_when_boot_offset_corrupted (gboo
   g_test_assert_expected_messages ();
   g_assert_no_error (error);
 
-  g_assert (read_whether_boot_offset_is_reset_value ());
+  g_assert (boot_offset_was_reset ());
 
   g_object_unref (cache);
 }
@@ -1538,7 +1536,7 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
   g_assert (emer_persistent_cache_get_boot_time_offset (cache, &unused_offset,
                                                         &error, TRUE));
   g_assert_no_error (error);
-  g_assert (read_whether_boot_offset_is_reset_value ());
+  g_assert (boot_offset_was_reset ());
 
   gint64 absolute_time, relative_time;
   g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) &&
@@ -1557,8 +1555,8 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
   g_assert (boot_timestamp_is_valid (relative_time, absolute_time));
   gint64 second_offset = read_offset ();
 
-  g_assert_false (read_whether_boot_offset_is_reset_value ());
   // This should not have simply reset the metadata file again.
+  g_assert_false (boot_offset_was_reset ());
 
   g_object_unref (cache2);
   EmerPersistentCache *cache3 = make_testing_cache ();
@@ -1590,7 +1588,7 @@ test_persistent_cache_computes_reasonable_offset (gboolean     *unused,
   store_single_singular_event (cache, &capacity);
 
   gint64 first_offset = read_offset ();
-  g_assert (read_whether_boot_offset_is_reset_value ());
+  g_assert (boot_offset_was_reset ());
 
   gint64 absolute_time, relative_time;
   g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) &&
@@ -1610,7 +1608,7 @@ test_persistent_cache_computes_reasonable_offset (gboolean     *unused,
   g_assert (second_offset >= first_offset - ACCEPTABLE_OFFSET_VARIANCE);
 
   // This should not have simply reset the metadata file again.
-  g_assert (!read_whether_boot_offset_is_reset_value ());
+  g_assert (!boot_offset_was_reset ());
 
   g_object_unref (cache2);
 }
@@ -1636,6 +1634,7 @@ test_persistent_cache_builds_boot_metadata_file (gboolean     *unused,
   g_assert_no_error (error);
 
   gint64 first_offset = read_offset ();
+
   gint64 absolute_time, relative_time;
   g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) &&
             emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
@@ -1649,7 +1648,7 @@ test_persistent_cache_builds_boot_metadata_file (gboolean     *unused,
 
   // The offset should not have changed.
   g_assert (first_offset == second_offset);
-  g_assert (read_whether_boot_offset_is_reset_value ());
+  g_assert (boot_offset_was_reset ());
 
   g_object_unref (cache);
 }
@@ -1721,8 +1720,8 @@ test_persistent_cache_get_offset_wont_update_timestamps_if_it_isnt_supposed_to (
   g_assert (emer_persistent_cache_get_boot_time_offset (cache, &unused_offset,
                                                         &error, TRUE));
   g_assert_no_error (error);
-  gint64 rel_time = read_relative_time ();
-  gint64 abs_time = read_absolute_time ();
+  gint64 relative_time = read_relative_time ();
+  gint64 absolute_time = read_absolute_time ();
 
   // Make a little time pass.
   g_usleep (75000); // 0.075 seconds
@@ -1733,8 +1732,8 @@ test_persistent_cache_get_offset_wont_update_timestamps_if_it_isnt_supposed_to (
   g_assert_no_error (error);
 
    // These timestamps should not have changed.
-   g_assert (rel_time == read_relative_time ());
-   g_assert (abs_time == read_absolute_time ());
+   g_assert (relative_time == read_relative_time ());
+   g_assert (absolute_time == read_absolute_time ());
    g_object_unref (cache);
 }
 
@@ -1765,7 +1764,7 @@ test_persistent_cache_get_offset_can_build_boot_metadata_file (gboolean     *unu
   g_assert_no_error (error);
 
   // The previous request should have reset the metadata file.
-  g_assert (read_whether_boot_offset_is_reset_value ());
+  g_assert (boot_offset_was_reset ());
 
   g_object_unref (cache);
 }

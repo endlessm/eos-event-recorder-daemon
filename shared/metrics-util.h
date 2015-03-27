@@ -2,7 +2,8 @@
 
 /* Copyright 2014, 2015 Endless Mobile, Inc. */
 
-/* This file is part of eos-event-recorder-daemon.
+/*
+ * This file is part of eos-event-recorder-daemon.
  *
  * eos-event-recorder-daemon is free software: you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as published by
@@ -33,8 +34,10 @@
 #include <gio/gio.h>
 #include <uuid/uuid.h>
 
-/* The number of elements in a uuid_t. uuid_t is assumed to be a fixed-length
-array of guchar. */
+/*
+ * The number of elements in a uuid_t. uuid_t is assumed to be a fixed-length
+ * array of guchar.
+ */
 #define UUID_LENGTH (sizeof (uuid_t) / sizeof (guchar))
 
 G_BEGIN_DECLS

@@ -2,7 +2,8 @@
 
 /* Copyright 2014, 2015 Endless Mobile, Inc. */
 
-/* This file is part of eos-event-recorder-daemon.
+/*
+ * This file is part of eos-event-recorder-daemon.
  *
  * eos-event-recorder-daemon is free software: you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as published by
@@ -32,7 +33,7 @@ typedef struct EmerNetworkSendProviderPrivate
 G_DEFINE_TYPE_WITH_PRIVATE (EmerNetworkSendProvider, emer_network_send_provider, G_TYPE_OBJECT)
 
 /*
- * The filepath to the meta file containing the network send metadata.
+ * The filepath to the metadata file containing the network send metadata.
  */
 #define DEFAULT_NETWORK_SEND_FILE_PATH PERSISTENT_CACHE_DIR "network_send_file"
 
@@ -144,7 +145,7 @@ emer_network_send_provider_init (EmerNetworkSendProvider *self)
  * emer_network_send_provider_new:
  *
  * Constructs the provider used to obtain and store data regarding "network
- * send" meta-data via the default filepath.
+ * send" metadata via the default filepath.
  *
  * Returns: (transfer full): A new #EmerNetworkSendProvider.
  * Free with g_object_unref().
@@ -161,7 +162,7 @@ emer_network_send_provider_new (void)
  * #EmerNetworkSendProvider:path.
  *
  * Constructs the provider used to obtain and store data regarding "network
- * send" meta-data via a given filepath.
+ * send" metadata via a given filepath.
  *
  * Returns: (transfer full): A new #EmerNetworkSendProvider.
  * Free with g_object_unref().
@@ -217,7 +218,7 @@ read_network_send_data (EmerNetworkSendProvider *self)
 
 handle_failed_read:
   g_warning ("Failed to read from network send file. Resetting data. "
-             "Error: %s", error->message);
+             "Error: %s.", error->message);
   g_error_free (error);
   reset_network_send_data (self);
   return FALSE;
@@ -251,8 +252,8 @@ emer_network_send_provider_get_send_number (EmerNetworkSendProvider *self,
  * emer_network_send_provider_increment_send_number:
  * @self: the network send provider.
  *
- * Increments the network send number and creates a new meta_file if
- * one doesn't exist.
+ * Increments the network send number and creates a new metadata file if one
+ * doesn't already exist.
  *
  * Returns: %TRUE on success, and %FALSE on failure.
  */

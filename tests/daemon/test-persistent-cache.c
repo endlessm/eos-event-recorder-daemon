@@ -1,6 +1,7 @@
 /* Copyright 2014, 2015 Endless Mobile, Inc. */
 
-/* This file is part of eos-event-recorder-daemon.
+/*
+ * This file is part of eos-event-recorder-daemon.
  *
  * eos-event-recorder-daemon is free software: you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as published by
@@ -53,9 +54,7 @@
 // TODO: Replace this with a reasonable value once it is used.
 #define MAX_BYTES_TO_READ 0
 
-#define NANOSECONDS_PER_MILLISECOND 1000000
-
-#define ACCEPTABLE_OFFSET_VARIANCE (500 /* Milliseconds */ * NANOSECONDS_PER_MILLISECOND)
+#define ACCEPTABLE_OFFSET_VARIANCE 500000000 // 500 milliseconds
 
 #define DEFAULT_BOOT_OFFSET_KEY_FILE_DATA \
   "[time]\n" \
@@ -126,7 +125,7 @@ teardown (gboolean     *unused,
   g_unlink (TEST_DIRECTORY CACHE_PREFIX INDIVIDUAL_SUFFIX);
   g_unlink (TEST_DIRECTORY CACHE_PREFIX AGGREGATE_SUFFIX);
   g_unlink (TEST_DIRECTORY CACHE_PREFIX SEQUENCE_SUFFIX);
-  g_unlink (TEST_DIRECTORY BOOT_OFFSET_METAFILE);
+  g_unlink (TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE);
   g_unlink (TEST_DIRECTORY TEST_CACHE_VERSION_FILE);
   g_unlink (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
   g_rmdir (TEST_DIRECTORY);
@@ -162,25 +161,26 @@ make_testing_cache (void)
 }
 
 /*
- * Returns a new GKeyFile associated with the boot timing metafile.
+ * Returns a new GKeyFile associated with the boot timing metadata file.
  * Keyfile should be unref'd via g_key_file_unref().
  */
 static GKeyFile *
 load_testing_key_file (void)
 {
   GKeyFile *key_file = g_key_file_new ();
-  gchar *full_path = g_strconcat (TEST_DIRECTORY, BOOT_OFFSET_METAFILE, NULL);
+  gchar *full_path =
+    g_strconcat (TEST_DIRECTORY, BOOT_OFFSET_METADATA_FILE, NULL);
   g_assert (g_key_file_load_from_file (key_file, full_path, G_KEY_FILE_NONE,
                                        NULL));
   return key_file;
 }
 
 /*
- * Will overwrite the contents of the boot id metafile's boot offset with a
+ * Will overwrite the contents of the boot id metadata file's boot offset with a
  * given new_offset.
  */
 static void
-set_boot_offset_in_metafile (gint64 new_offset)
+set_boot_offset_in_metadata_file (gint64 new_offset)
 {
   GKeyFile *key_file = load_testing_key_file ();
 
@@ -190,16 +190,16 @@ set_boot_offset_in_metafile (gint64 new_offset)
                         new_offset);
 
   g_assert (g_key_file_save_to_file (key_file,
-                                     TEST_DIRECTORY BOOT_OFFSET_METAFILE,
+                                     TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE,
                                      NULL));
   g_key_file_unref (key_file);
 }
 
 /*
- * Will populate the boot metafile with data similar to the default that will be
- * written when the cache and boot metafile are reset to defaults. Must be
- * called AFTER the testing directory exists (after a Persistent Cache instance
- * has been new'd constructed.)
+ * Populates the boot metadata file with data similar to the defaults that will
+ * be written when it's reset.
+ * Must be called AFTER the testing directory exists (after a persistent cache
+ * instance has been constructed).
  */
 static void
 write_default_boot_offset_key_file_to_disk (void)
@@ -210,32 +210,31 @@ write_default_boot_offset_key_file_to_disk (void)
                                        -1, G_KEY_FILE_NONE, NULL));
 
   g_assert (g_key_file_save_to_file (key_file,
-                                     TEST_DIRECTORY BOOT_OFFSET_METAFILE,
+                                     TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE,
                                      NULL));
 }
 
 /*
- * Will overwrite the contents of the boot id metafile's boot id with a
- * given new_boot_id.
+ * Overwrites the metadata file's boot id with the given boot id.
  */
 static void
-set_boot_id_in_metafile (gchar *new_boot_id)
+set_boot_id_in_metadata_file (gchar *boot_id)
 {
   GKeyFile *key_file = load_testing_key_file ();
 
   g_key_file_set_string (key_file,
                          CACHE_TIMING_GROUP_NAME,
                          CACHE_LAST_BOOT_ID_KEY,
-                         new_boot_id);
+                         boot_id);
 
   g_assert (g_key_file_save_to_file (key_file,
-                                     TEST_DIRECTORY BOOT_OFFSET_METAFILE,
+                                     TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE,
                                      NULL));
   g_key_file_unref (key_file);
 }
 
 /*
- * Removes the offset key/value pair from the boot metafile to simulate
+ * Removes the offset key/value pair from the boot metadata file to simulate
  * corruption and writes that change to disk.
  */
 static void
@@ -246,13 +245,13 @@ remove_offset (void)
                                    CACHE_BOOT_OFFSET_KEY, NULL));
 
   g_assert (g_key_file_save_to_file (key_file,
-                                     TEST_DIRECTORY BOOT_OFFSET_METAFILE,
+                                     TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE,
                                      NULL));
   g_key_file_unref (key_file);
 }
 
 /*
- * Gets the stored offset from disk (metafile.)
+ * Gets the stored offset from the metadata file.
  */
 static gint64
 read_offset (void)
@@ -269,11 +268,11 @@ read_offset (void)
 }
 
 /*
- * Gets the stored metafile was reset flag from disk (metafile.)
+ * Gets the metadata file was reset flag from the metadata file.
  * Also ensures the reset value is 0.
  */
 static gboolean
-read_whether_boot_offset_is_reset_value (void)
+boot_offset_was_reset (void)
 {
   GKeyFile *key_file = load_testing_key_file ();
   GError *error = NULL;
@@ -287,7 +286,7 @@ read_whether_boot_offset_is_reset_value (void)
 }
 
 /*
- * Gets the stored relative time from disk (metafile.)
+ * Gets the stored relative time from the metadata file.
  */
 static gint64
 read_relative_time (void)
@@ -304,7 +303,7 @@ read_relative_time (void)
 }
 
 /*
- * Gets the stored absolute time from disk (metafile.)
+ * Gets the stored absolute time from the metadata file.
  */
 static gint64
 read_absolute_time (void)
@@ -321,10 +320,9 @@ read_absolute_time (void)
 }
 
 /*
- * Will perform a disk lookup of the metafile to see if the stored timestamps
- * are greater than or equal to the previous timestamps (given as parameters)
- * and less than or equal to timestamps generated by subsequently generated
- * timestamps.
+ * Reads the timestamps in the metadata file and returns TRUE if they are
+ * greater than or equal to the given timestamps and less than or equal to
+ * subsequently generated timestamps. Returns FALSE otherwise.
  */
 static gboolean
 boot_timestamp_is_valid (gint64 previous_relative_time,
@@ -1426,10 +1424,10 @@ test_persistent_cache_purges_when_out_of_date_succeeds (gboolean     *unused,
 }
 
 /*
- * Test creates an default boot metafile. A single metric is added. Then it
- * corrupts the metafile by removing the offset from it. Finally, a store call
- * is made again to detect the corruption and purge the old metrics, but store
- * the metrics sent by the latest *_store_metrics() call.
+ * Creates a default boot metadata file and stores a single event. Then corrupts
+ * the metadata file by removing the offset from it. Finally, stores another
+ * event, prompting the persistent cache to detect the corruption and purge the
+ * existing event but not the one being stored.
  */
 static void
 test_persistent_cache_wipes_metrics_when_boot_offset_corrupted (gboolean     *unused,
@@ -1444,10 +1442,10 @@ test_persistent_cache_wipes_metrics_when_boot_offset_corrupted (gboolean     *un
   // Insert a metric.
   store_single_singular_event (cache, &capacity);
 
-  // Reset cached metadata.
+  // Clear in-memory boot offset cache.
   g_object_unref (cache);
 
-  // Corrupt metafile.
+  // Corrupt metadata file.
   remove_offset ();
 
   EmerPersistentCache *cache2 = make_testing_cache ();
@@ -1455,8 +1453,10 @@ test_persistent_cache_wipes_metrics_when_boot_offset_corrupted (gboolean     *un
   g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING, "Could not find a "
                          "valid boot offset in the metadata file. Error: *.");
 
-  // This call should detect corruption and wipe the cache of all previous
-  // events. However, this new aggregate event should be stored.
+  /*
+   * This call should detect corruption and wipe the persistent cache of all
+   * previous events. However, this new aggregate event should be stored.
+   */
   store_single_aggregate_event (cache2, &capacity);
 
   g_test_assert_expected_messages ();
@@ -1479,19 +1479,19 @@ test_persistent_cache_wipes_metrics_when_boot_offset_corrupted (gboolean     *un
 }
 
 /*
- * Test creates an default boot metafile. Then it corrupts the metafile by
- * removing the offset from it. Finally, a request for the offset is made to
- * detect the corruption and reset the metafile.
+ * Creates a default boot metadata file. Then corrupts the metadata file by
+ * removing the offset from it. Finally, requests the boot offset, prompting the
+ * persistent cache to detect the corruption and reset the metadata file.
  */
 static void
-test_persistent_cache_resets_boot_metafile_when_boot_offset_corrupted (gboolean     *unused,
-                                                                       gconstpointer dontuseme)
+test_persistent_cache_resets_boot_metadata_file_when_boot_offset_corrupted (gboolean     *unused,
+                                                                            gconstpointer dontuseme)
 {
   EmerPersistentCache *cache = make_testing_cache ();
 
   write_default_boot_offset_key_file_to_disk ();
 
-  // Corrupt metafile.
+  // Corrupt metadata file.
   remove_offset ();
 
   gint64 unused_offset;
@@ -1499,31 +1499,31 @@ test_persistent_cache_resets_boot_metafile_when_boot_offset_corrupted (gboolean 
   g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING, "Could not find a "
                          "valid boot offset in the metadata file. Error: *.");
 
-  // This call should detect corruption and reset the metafile.
+  // This call should detect corruption and reset the metadata file.
   g_assert (emer_persistent_cache_get_boot_time_offset (cache, &unused_offset,
                                                         &error, TRUE));
 
   g_test_assert_expected_messages ();
   g_assert_no_error (error);
 
-  g_assert (read_whether_boot_offset_is_reset_value ());
+  g_assert (boot_offset_was_reset ());
 
   g_object_unref (cache);
 }
 
 /*
- * Test triggers the computation of a new boot offset by asking for the new boot
- * offset with no preexisting boot metafile, which triggers a reset to offset 0
- * and the saved boot id to the current boot id on the system. The persistent
- * cache is then unref'd and made anew. This causes the cached values to be
- * lost. The metafile must then be mutated to simulate a new boot. Then another
- * request for the boot offset is needed to get the cache to compute a new
- * offset. Then we need to unref this and create it AGAIN to remove the cached
- * values. Finally, one more request should write new timestamps but shouldn't
- * have a different offset as it should not be computed again in this case.
+ * Tests that releasing and recreating the persistent cache within the same boot
+ * doesn't change the boot offset.
  *
- * Thus, if you restart the cache with a preexisting cache from a previous boot,
- * then the relative time offsets will be the same.
+ * Triggers the computation of a new boot offset by asking for the new boot
+ * offset with no preexisting boot metadata file, which triggers a reset to
+ * offset 0 and the current boot id. Then unrefs the persistent cache and makes
+ * it anew, clearing its in-memory cache. Then mutates the metadata file to
+ * simulate a new boot. Then requests the boot offset again to prompt the
+ * persistent cache to compute a new offset. Then unrefs and recreates the
+ * persistent cache again to clear its in-memory cache. Finally, requests the
+ * boot offset, prompting the persistent cache to write new timestamps without
+ * recomputing the boot offset.
  */
 static void
 test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean     *unused,
@@ -1536,14 +1536,14 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
   g_assert (emer_persistent_cache_get_boot_time_offset (cache, &unused_offset,
                                                         &error, TRUE));
   g_assert_no_error (error);
-  g_assert (read_whether_boot_offset_is_reset_value ());
+  g_assert (boot_offset_was_reset ());
 
   gint64 absolute_time, relative_time;
   g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) &&
             emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
 
   g_object_unref (cache);
-  set_boot_id_in_metafile (FAKE_BOOT_ID);
+  set_boot_id_in_metadata_file (FAKE_BOOT_ID);
 
   EmerPersistentCache *cache2 = make_testing_cache ();
 
@@ -1555,8 +1555,8 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
   g_assert (boot_timestamp_is_valid (relative_time, absolute_time));
   gint64 second_offset = read_offset ();
 
-  // This should not have simply reset the metafile again.
-  g_assert_false (read_whether_boot_offset_is_reset_value ());
+  // This should not have simply reset the metadata file again.
+  g_assert_false (boot_offset_was_reset ());
 
   g_object_unref (cache2);
   EmerPersistentCache *cache3 = make_testing_cache ();
@@ -1572,15 +1572,12 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
 }
 
 /*
- * Test triggers the computation of a new boot offset by storing metrics with no
- * preexisting boot metafile, which triggers a reset to offset 0. The persistent
- * cache is then unref'd and made anew. This causes the cached value to be lost.
- * Then the test mutates the boot id stored from the previous metrics storing
- * call which will make the persistent cache believe this is a different boot
- * than before.
- *
- * The validity of the two offsets can really only be approximated by a
- * #define'd acceptable variance.
+ * Triggers the computation of a new boot offset by storing events with no
+ * preexisting boot metadata file, which resets the offset to 0. Then unrefs the
+ * persistent cache and makes it anew, clearing its in-memory cache. Then
+ * mutates the metadata file to simulate a new boot without modifying the
+ * timestamps, prompting the persistent cache to compute a new boot offset that
+ * should be approximately 0.
  */
 static void
 test_persistent_cache_computes_reasonable_offset (gboolean     *unused,
@@ -1591,7 +1588,7 @@ test_persistent_cache_computes_reasonable_offset (gboolean     *unused,
   store_single_singular_event (cache, &capacity);
 
   gint64 first_offset = read_offset ();
-  g_assert (read_whether_boot_offset_is_reset_value ());
+  g_assert (boot_offset_was_reset ());
 
   gint64 absolute_time, relative_time;
   g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) &&
@@ -1600,8 +1597,8 @@ test_persistent_cache_computes_reasonable_offset (gboolean     *unused,
   g_object_unref (cache);
   EmerPersistentCache *cache2 = make_testing_cache ();
 
-  // Mutate boot id externally because we cannot actually reboot in a test case.
-  set_boot_id_in_metafile (FAKE_BOOT_ID);
+  // Mutate boot id directly because we cannot actually reboot in a test case.
+  set_boot_id_in_metadata_file (FAKE_BOOT_ID);
 
   store_single_aggregate_event (cache2, &capacity);
 
@@ -1610,27 +1607,23 @@ test_persistent_cache_computes_reasonable_offset (gboolean     *unused,
   g_assert (second_offset <= first_offset + ACCEPTABLE_OFFSET_VARIANCE);
   g_assert (second_offset >= first_offset - ACCEPTABLE_OFFSET_VARIANCE);
 
-  // This should not have simply reset the metafile again.
-  g_assert (!read_whether_boot_offset_is_reset_value ());
+  // This should not have simply reset the metadata file again.
+  g_assert (!boot_offset_was_reset ());
 
   g_object_unref (cache2);
 }
 
 /*
- * This test is ensuring that we can build a metafile from nothing
- * should one not be found.
+ * Ensures that the persistent cache creates a new metadata file should one not
+ * be found.
  *
- * Will test if the cached offset loading doesn't crash or produce unexpected
- * values by making several requests for the boot offset without initializing
- * the metafile or cleaning it up between requests.
- *
- * This test does no special mutation of the metafile in the test case beyond
- * what the production code would normally do. Thus the offset will always be
- * reset to, and then cached to, 0.
+ * Performs no special mutation of the metadata file beyond what the production
+ * code would normally do. Thus, the offset should always be reset to, and then
+ * cached in memory to, 0.
  */
 static void
-test_persistent_cache_builds_boot_metafile (gboolean     *unused,
-                                            gconstpointer dontuseme)
+test_persistent_cache_builds_boot_metadata_file (gboolean     *unused,
+                                                 gconstpointer dontuseme)
 {
   EmerPersistentCache *cache = make_testing_cache ();
 
@@ -1641,6 +1634,7 @@ test_persistent_cache_builds_boot_metafile (gboolean     *unused,
   g_assert_no_error (error);
 
   gint64 first_offset = read_offset ();
+
   gint64 absolute_time, relative_time;
   g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) &&
             emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
@@ -1654,14 +1648,14 @@ test_persistent_cache_builds_boot_metafile (gboolean     *unused,
 
   // The offset should not have changed.
   g_assert (first_offset == second_offset);
-  g_assert (read_whether_boot_offset_is_reset_value ());
+  g_assert (boot_offset_was_reset ());
 
   g_object_unref (cache);
 }
 
 /*
- * Tests if the cached value is read when present, by changing what is on disk
- * to a different value in between calls to the same cache.
+ * Tests that the in-memory cache is used when present by changing the boot
+ * offset on disk between calls to the same instance of a persistent cache.
  */
 static void
 test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
@@ -1680,14 +1674,18 @@ test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
   g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) &&
             emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
 
-  // This value should never be read because the persistent cache should read
-  // from its cached value next call.
-  set_boot_offset_in_metafile (FAKE_BOOT_OFFSET);
+  /*
+   * This value should never be read because the persistent cache should read
+   * from its in-memory cache instead.
+   */
+  set_boot_offset_in_metadata_file (FAKE_BOOT_OFFSET);
 
   gint64 second_offset;
 
-  // This call should read the offset from its cached value, not the new one
-  // from disk.
+  /*
+   * This call should read the offset from its in-memory cache, not the new one
+   * on disk.
+   */
   g_assert (emer_persistent_cache_get_boot_time_offset (cache, &second_offset,
                                                         &error, TRUE));
   g_assert_no_error (error);
@@ -1700,13 +1698,13 @@ test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
 }
 
 /*
- * This test ensures the request for the boot time offset won't cause a write to
- * metafile if the 'always_update_timestamps' boolean is set to FALSE. This
- * should always be the case unless the boot offset and/or the boot id needs to
- * be changed. To ensure it doesn't need to be changed, we make a request with
- * the boolen set to TRUE first which corrects the default metafile before we
- * make the call we really want to test -- the one with the boolean set to
- * FALSE.
+ * Ensures that a request for the boot time offset doesn't cause a write to the
+ * metadata file if the 'always_update_timestamps' parameter is set to FALSE.
+ * If the boot offset and/or the boot id needs to be changed, the timestamps
+ * are updated regardless of the value of the parameter. To ensure neither of
+ * these need to be changed, we make a request with the parameter set to TRUE
+ * first, which corrects the default metadata file before we make the call we
+ * really want to test, the one with the parameter set to FALSE.
  */
 static void
 test_persistent_cache_get_offset_wont_update_timestamps_if_it_isnt_supposed_to (gboolean     *unused,
@@ -1718,52 +1716,55 @@ test_persistent_cache_get_offset_wont_update_timestamps_if_it_isnt_supposed_to (
   gint64 unused_offset;
   GError *error = NULL;
 
-  // Update to reasonable values.
+  // Update metadata file to reasonable values.
   g_assert (emer_persistent_cache_get_boot_time_offset (cache, &unused_offset,
                                                         &error, TRUE));
   g_assert_no_error (error);
-  gint64 rel_time = read_relative_time ();
-  gint64 abs_time = read_absolute_time ();
+  gint64 relative_time = read_relative_time ();
+  gint64 absolute_time = read_absolute_time ();
 
-  // Let's make a little time pass.
+  // Make a little time pass.
   g_usleep (75000); // 0.075 seconds
 
-  // This call shouldn't update the metafile.
+  // This call shouldn't update the metadata file.
   g_assert (emer_persistent_cache_get_boot_time_offset (cache, &unused_offset,
                                                         &error, FALSE));
   g_assert_no_error (error);
 
    // These timestamps should not have changed.
-   g_assert (rel_time == read_relative_time ());
-   g_assert (abs_time == read_absolute_time ());
+   g_assert (relative_time == read_relative_time ());
+   g_assert (absolute_time == read_absolute_time ());
    g_object_unref (cache);
 }
 
 /*
- * This test ensures the get_boot_time_offset call will reset the metafile if
- * it needs to.  That is, when the metafile doesn't exist, is corrupted, or
- * the boot id doesn't match the system boot id. In this case, it is sufficient
- * to check that it creates a new metafile when one isn't found.
+ * Ensures that the get_boot_time_offset call will reset the metadata file if
+ * one isn't found.
  */
 static void
-test_persistent_cache_get_offset_can_build_boot_metafile (gboolean     *unused,
-                                                          gconstpointer dontuseme)
+test_persistent_cache_get_offset_can_build_boot_metadata_file (gboolean     *unused,
+                                                               gconstpointer dontuseme)
 {
   EmerPersistentCache *cache = make_testing_cache ();
 
-  /* Don't write a default boot offset file, we want to create a new one via
-     production code. */
+  /*
+   * Don't write a default boot offset file. We want to create a new one via
+   * production code.
+   */
 
   gint64 offset;
   GError *error = NULL;
 
-  // This call should create the metafile even though the boolean is FALSE.
+  /*
+   * This call should create the metadata file even though the
+   * always_update_timestamps parameter is FALSE.
+   */
   g_assert (emer_persistent_cache_get_boot_time_offset (cache, &offset,
                                                         &error, FALSE));
   g_assert_no_error (error);
 
-  // The previous request should have reset the metafile.
-  g_assert (read_whether_boot_offset_is_reset_value ());
+  // The previous request should have reset the metadata file.
+  g_assert (boot_offset_was_reset ());
 
   g_object_unref (cache);
 }
@@ -1772,8 +1773,8 @@ test_persistent_cache_get_offset_can_build_boot_metafile (gboolean     *unused,
 
 /*
  * We include this test because we are relying on this function returning zero
- * when an empty metrics file is read to indicate we don't need to overwrite an
- * empty file. This will preserve some lifetime on our users' storage.
+ * when an empty file is read to indicate we don't need to overwrite an empty
+ * file. This will preserve some lifetime on our users' storage.
  */
 static void
 test_g_file_measure_disk_usage_returns_zero_on_empty_file (gboolean     *unused,
@@ -1838,22 +1839,22 @@ main (int                argc,
                        test_persistent_cache_drain_empty_succeeds);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/purges-when-out-of-date-succeeds",
                        test_persistent_cache_purges_when_out_of_date_succeeds);
-  ADD_CACHE_TEST_FUNC ("/persistent-cache/builds-boot-metafile",
-                       test_persistent_cache_builds_boot_metafile);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/builds-boot-metadata-file",
+                       test_persistent_cache_builds_boot_metadata_file);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/computes-reasonable-offset",
                        test_persistent_cache_computes_reasonable_offset);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/does-not-compute-offset-when-boot-id-is-same",
                        test_persistent_cache_does_not_compute_offset_when_boot_id_is_same);
-  ADD_CACHE_TEST_FUNC ("/persistent-cache/resets-boot-metafile-when-boot-offset-corrupted",
-                       test_persistent_cache_resets_boot_metafile_when_boot_offset_corrupted);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/resets-boot-metadata-file-when-boot-offset-corrupted",
+                       test_persistent_cache_resets_boot_metadata_file_when_boot_offset_corrupted);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/wipes-metrics-when-boot-offset-corrupted",
                        test_persistent_cache_wipes_metrics_when_boot_offset_corrupted);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/reads-cached-boot-offset",
                        test_persistent_cache_reads_cached_boot_offset);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/get-offset-wont-update-timestamps-if-it-isnt-supposed-to",
                        test_persistent_cache_get_offset_wont_update_timestamps_if_it_isnt_supposed_to);
-  ADD_CACHE_TEST_FUNC ("/persistent-cache/get-offset-can-build-boot-metafile",
-                       test_persistent_cache_get_offset_can_build_boot_metafile);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/get-offset-can-build-boot-metadata-file",
+                       test_persistent_cache_get_offset_can_build_boot_metadata_file);
   ADD_CACHE_TEST_FUNC ("/g-file/measure-disk-usage-returns-zero-on-empty-file",
                        test_g_file_measure_disk_usage_returns_zero_on_empty_file);
 #undef ADD_CACHE_TEST_FUNC

@@ -2,7 +2,8 @@
 
 /* Copyright 2014, 2015 Endless Mobile, Inc. */
 
-/* This file is part of eos-event-recorder-daemon.
+/*
+ * This file is part of eos-event-recorder-daemon.
  *
  * eos-event-recorder-daemon is free software: you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as published by
@@ -52,10 +53,12 @@ G_BEGIN_DECLS
                                                                          EmerPersistentCacheClass))
 
 /*
- * The name of the meta-file containing the relative time, absolute time, and
- * boot id meta-data.
+ * The name of the metadata file containing the relative time, absolute time,
+ * and boot id metadata.
  */
-#define BOOT_OFFSET_METAFILE "boot_offset_metafile"
+// FIXME: Rename to boot_offset_metadata since a metafile is something
+// completely unrelated.
+#define BOOT_OFFSET_METADATA_FILE "boot_offset_metafile"
 
 /*
  * The prefix for all metrics cache files.

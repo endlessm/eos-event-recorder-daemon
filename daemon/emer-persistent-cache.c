@@ -1479,6 +1479,8 @@ static void
 emer_persistent_cache_finalize (GObject *object)
 {
   EmerPersistentCache *self = EMER_PERSISTENT_CACHE (object);
+  update_boot_offset (self, TRUE);
+
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 

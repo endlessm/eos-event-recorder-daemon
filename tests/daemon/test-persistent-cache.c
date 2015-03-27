@@ -1444,11 +1444,12 @@ test_persistent_cache_wipes_metrics_when_boot_offset_corrupted (gboolean     *un
   // Insert a metric.
   store_single_singular_event (cache, &capacity);
 
+  // Reset cached metadata.
+  g_object_unref (cache);
+
   // Corrupt metafile.
   remove_offset ();
 
-  // Reset cached metadata.
-  g_object_unref (cache);
   EmerPersistentCache *cache2 = make_testing_cache ();
 
   g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING, "Could not find a "

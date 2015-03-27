@@ -571,16 +571,17 @@ update_boot_offset (EmerPersistentCache *self,
 
   if (priv->boot_offset_initialized)
     {
-      gboolean write_success = TRUE;
       if (always_update_timestamps)
-        write_success = save_timing_metadata (self, &relative_time,
-                                              &absolute_time, NULL, NULL, NULL,
-                                              &error);
-      if (!write_success)
         {
-          g_warning ("Failed to update relative and absolute time on metadata "
-                     "file. Error: %s.", error->message);
-          g_error_free (error);
+          gboolean write_success =
+            save_timing_metadata (self, &relative_time, &absolute_time,
+                                  NULL, NULL, NULL, &error);
+          if (!write_success)
+            {
+              g_warning ("Failed to update relative and absolute time on "
+                         "metadata file. Error: %s.", error->message);
+              g_error_free (error);
+            }
         }
 
       return TRUE;
@@ -627,17 +628,18 @@ update_boot_offset (EmerPersistentCache *self,
 
   if (uuid_compare (saved_boot_id, system_boot_id) == 0)
     {
-      gboolean write_success = TRUE;
       if (always_update_timestamps)
-        write_success = save_timing_metadata (self, &relative_time,
-                                              &absolute_time, NULL, NULL, NULL,
-                                              &error);
-
-      if (!write_success)
         {
-          g_warning ("Failed to update relative and absolute time on metadata "
-                     "file. Error: %s.", error->message);
-          g_error_free (error);
+          gboolean write_success =
+            save_timing_metadata (self, &relative_time, &absolute_time,
+                                  NULL, NULL, NULL, &error);
+
+          if (!write_success)
+            {
+              g_warning ("Failed to update relative and absolute time on "
+                         "metadata file. Error: %s.", error->message);
+              g_error_free (error);
+            }
         }
 
       return TRUE;

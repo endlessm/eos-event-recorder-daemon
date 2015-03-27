@@ -226,7 +226,7 @@ emer_cache_version_provider_get_version (EmerCacheVersionProvider *self,
 
 /*
  * Updates the cache version number and creates a new metadata file if
- * one doesn't exist. Returns %TRUE on success, and %FALSE on failure.
+ * one doesn't already exist. Returns %TRUE on success and %FALSE on failure.
  */
 gboolean
 emer_cache_version_provider_set_version (EmerCacheVersionProvider *self,

@@ -473,8 +473,8 @@ compute_boot_offset (EmerPersistentCache *self,
     emer_persistent_cache_get_instance_private (self);
 
   /*
-   * The amount of time elapsed between the origin boot and the boot with the
-   * stored ID.
+   * This is the amount of time elapsed between the origin boot and the boot
+   * with the stored ID.
    */
   gint64 stored_offset = g_key_file_get_int64 (priv->boot_offset_key_file,
                                                CACHE_TIMING_GROUP_NAME,
@@ -511,35 +511,35 @@ compute_boot_offset (EmerPersistentCache *self,
     }
 
   /*
-   * The amount of time elapsed between the origin boot and the boot with the
-   * currently stored ID.
+   * This is the amount of time elapsed between the origin boot and the boot
+   * with the currently stored ID.
    */
   gint64 previous_offset = stored_offset;
 
   /*
-   * The amount of time elapsed between the origin boot and the time at which
-   * the stored file was written.
+   * This is the amount of time elapsed between the origin boot and the time at
+   * which the stored file was written.
    */
   gint64 time_between_origin_boot_and_write =
     previous_offset + stored_relative_time;
 
   /*
-   * Our best estimate of the actual amount of time elapsed between the most
-   * recent write to the store file and the current time.
+   * This is our best estimate of the actual amount of time elapsed between the
+   * most recent write to the store file and the current time.
    */
   gint64 approximate_time_since_last_write =
     absolute_time - stored_absolute_time;
 
   /*
-   * Our best estimate of the amount of time elapsed between the origin boot
-   * and the current time.
+   * This is our best estimate of the amount of time elapsed between the origin
+   * boot and the current time.
    */
   gint64 time_since_origin_boot =
     time_between_origin_boot_and_write + approximate_time_since_last_write;
 
   /*
-   * Our best estimate of the amount of time elapsed between the origin boot and
-   * the current boot. This is the new boot offset.
+   * This is our best estimate of the amount of time elapsed between the origin
+   * boot and the current boot. This is the new boot offset.
    */
   *boot_offset = time_since_origin_boot - relative_time;
 
@@ -557,7 +557,7 @@ compute_boot_offset (EmerPersistentCache *self,
  * considered a failure if it is unable to do so. Returns TRUE on success and
  * caches the boot offset and boot id in the EmerPersistentCache.
  *
- * The net effect of the entire system is that pretty much the only way to trick
+ * The net effect of the entire system is that the most plausible way to trick
  * it is to adjust the system clock and yank the power cord before the next
  * network send occurs (an hourly event).
  *
@@ -591,7 +591,7 @@ update_boot_offset (EmerPersistentCache *self,
                                   NULL, NULL, NULL, &error);
           if (!write_success)
             {
-              g_warning ("Failed to update relative and absolute time on "
+              g_warning ("Failed to update relative and absolute time in "
                          "metadata file. Error: %s.", error->message);
               g_error_free (error);
             }
@@ -649,7 +649,7 @@ update_boot_offset (EmerPersistentCache *self,
 
           if (!write_success)
             {
-              g_warning ("Failed to update relative and absolute time on "
+              g_warning ("Failed to update relative and absolute time in "
                          "metadata file. Error: %s.", error->message);
               g_error_free (error);
             }

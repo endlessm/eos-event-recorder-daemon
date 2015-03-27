@@ -34,10 +34,10 @@ AC_INIT([EOS Event Recorder Daemon], [0.0.0],
     [], [eos-event-recorder-daemon], [http://endlessm.com])
 # Verify that the source directory can be found
 AC_CONFIG_SRCDIR([daemon/emer-daemon.h])
-# Initialize Automake: enable all warnings and do not insist on GNU standards
+# Initialize Automake: enable all warnings and do not insist on GNU standards.
 # no-portability suppresses warnings about syntax specific to GNU make
 # parallel-tests specifies that we use the new parallel-running test harness.
-# Unlike serial-tests, this option is accepted by Automake 1.11
+# Unlike serial-tests, this option is accepted by Automake 1.11.
 # tar-ustar is required because there may be files whose entire paths exceed
 # 99 characters.
 AM_INIT_AUTOMAKE([-Wall -Wno-portability foreign 1.11 parallel-tests

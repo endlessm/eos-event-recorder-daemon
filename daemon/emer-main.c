@@ -109,7 +109,7 @@ on_authorize_method_check (GDBusInterfaceSkeleton *interface,
     polkit_authority_get_sync (NULL /*GCancellable*/, &error);
   if (authority == NULL)
     {
-      g_critical ("Could not get PolicyKit authority: %s", error->message);
+      g_critical ("Could not get PolicyKit authority: %s.", error->message);
       g_dbus_method_invocation_return_gerror (invocation, error);
       g_error_free (error);
       return FALSE;
@@ -130,7 +130,8 @@ on_authorize_method_check (GDBusInterfaceSkeleton *interface,
   g_object_unref (subject);
   if (result == NULL)
     {
-      g_critical ("Could not get PolicyKit authorization result: %s", error->message);
+      g_critical ("Could not get PolicyKit authorization result: %s.",
+                  error->message);
       g_dbus_method_invocation_return_gerror (invocation, error);
       g_error_free (error);
       return FALSE;
@@ -190,7 +191,7 @@ on_bus_acquired (GDBusConnection *system_bus,
                                          "/com/endlessm/Metrics",
                                          &error))
     {
-      g_error ("Could not export metrics interface on system bus: %s",
+      g_error ("Could not export metrics interface on system bus: %s.",
                error->message);
     }
 }

@@ -217,7 +217,7 @@ read_network_send_data (EmerNetworkSendProvider *self)
 
 handle_failed_read:
   g_warning ("Failed to read from network send file. Resetting data. "
-             "Error: %s", error->message);
+             "Error: %s.", error->message);
   g_error_free (error);
   reset_network_send_data (self);
   return FALSE;

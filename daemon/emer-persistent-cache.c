@@ -173,7 +173,7 @@ get_saved_boot_id (EmerPersistentCache *self,
                                   G_KEY_FILE_NONE,
                                   error))
     {
-      g_prefix_error (error, "Failed to open KeyFile at: %s .",
+      g_prefix_error (error, "Failed to open KeyFile at: %s.",
                       priv->boot_metadata_file_path);
       return FALSE;
     }
@@ -184,7 +184,7 @@ get_saved_boot_id (EmerPersistentCache *self,
                                                error);
   if (id_as_string == NULL)
     {
-      g_prefix_error (error, "Failed to read boot_id from %s .",
+      g_prefix_error (error, "Failed to read boot_id from %s.",
                       priv->boot_metadata_file_path);
       return FALSE;
     }
@@ -370,7 +370,7 @@ save_timing_metadata (EmerPersistentCache *self,
   if (!g_key_file_save_to_file (priv->boot_offset_key_file,
                                 priv->boot_metadata_file_path, out_error))
     {
-      g_prefix_error (out_error, "Failed to write to metadata file: %s .",
+      g_prefix_error (out_error, "Failed to write to metadata file: %s.",
                       priv->boot_metadata_file_path);
       return FALSE;
     }
@@ -409,7 +409,7 @@ reset_boot_offset_metadata_file (EmerPersistentCache *self,
   g_object_unref (metadata_file);
   if (unused_stream == NULL)
     {
-      g_critical ("Failed to create new metadata file at %s . Error: %s.",
+      g_critical ("Failed to create new metadata file at %s. Error: %s.",
                   priv->boot_metadata_file_path, error->message);
       g_error_free (error);
       return FALSE;
@@ -426,7 +426,7 @@ reset_boot_offset_metadata_file (EmerPersistentCache *self,
   uuid_t system_boot_id;
   if (!get_system_boot_id (self, system_boot_id, &error))
     {
-      g_critical ("Failed to reset boot metadata. Error: %s", error->message);
+      g_critical ("Failed to reset boot metadata. Error: %s.", error->message);
       g_error_free (error);
       return FALSE;
     }
@@ -442,7 +442,7 @@ reset_boot_offset_metadata_file (EmerPersistentCache *self,
 
   if (!write_success)
     {
-      g_critical ("Failed to reset boot timing metadata. Error: %s",
+      g_critical ("Failed to reset boot timing metadata. Error: %s.",
                    error->message);
       return FALSE;
     }
@@ -479,7 +479,7 @@ compute_boot_offset (EmerPersistentCache *self,
                                                &error);
   if (error != NULL)
     {
-      g_critical ("Failed to read relative offset from metadata file %s . "
+      g_critical ("Failed to read relative offset from metadata file %s. "
                   "Error: %s.", priv->boot_metadata_file_path, error->message);
       g_error_free (error);
       return FALSE;
@@ -490,7 +490,7 @@ compute_boot_offset (EmerPersistentCache *self,
                           CACHE_RELATIVE_TIME_KEY, &error);
   if (error != NULL)
     {
-      g_critical ("Failed to read relative time from metadata file %s . "
+      g_critical ("Failed to read relative time from metadata file %s. "
                   "Error: %s.", priv->boot_metadata_file_path, error->message);
       g_error_free (error);
       return FALSE;
@@ -501,7 +501,7 @@ compute_boot_offset (EmerPersistentCache *self,
                           CACHE_ABSOLUTE_TIME_KEY, &error);
   if (error != NULL)
     {
-      g_critical ("Failed to read absolute time from metadata file %s . "
+      g_critical ("Failed to read absolute time from metadata file %s. "
                   "Error: %s.", priv->boot_metadata_file_path, error->message);
       g_error_free (error);
       return FALSE;
@@ -596,7 +596,7 @@ update_boot_offset (EmerPersistentCache *self,
                             G_KEY_FILE_ERROR_NOT_FOUND) &&
           !g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
         {
-          g_warning ("Got an unexpected error trying to load %s . Error: %s.",
+          g_warning ("Got an unexpected error trying to load %s. Error: %s.",
                      priv->boot_metadata_file_path, error->message);
         }
       g_error_free (error);
@@ -620,7 +620,7 @@ update_boot_offset (EmerPersistentCache *self,
   if (!get_saved_boot_id (self, saved_boot_id, &error) ||
       !get_system_boot_id (self, system_boot_id, &error))
     {
-      g_critical ("Failed to access boot ids for comparison. Error: %s",
+      g_critical ("Failed to access boot ids for comparison. Error: %s.",
                   error->message);
       g_error_free (error);
       return FALSE;
@@ -764,7 +764,7 @@ drain_metrics_file (EmerPersistentCache *self,
         {
           gchar *fpath = g_file_get_path (file);
           g_critical ("Failed to read length of metric from input stream to "
-                      "drain metrics. File: %s . Error: %s.", fpath,
+                      "drain metrics. File: %s. Error: %s.", fpath,
                       error->message);
           g_free (fpath);
           g_error_free (error);
@@ -799,7 +799,7 @@ drain_metrics_file (EmerPersistentCache *self,
         {
           gchar *fpath = g_file_get_path (file);
           g_critical ("Failed to read metric from input stream to drain metrics."
-                      " File: %s . Error: %s.", fpath, error->message);
+                      " File: %s. Error: %s.", fpath, error->message);
           g_free (fpath);
           g_error_free (error);
           g_object_unref (stream);
@@ -1010,7 +1010,7 @@ write_variant_string_to_file (EmerPersistentCache *self,
   if (stream == NULL)
     {
       gchar *path = g_file_get_path (file);
-      g_critical ("Failed to open stream to cache file: %s . Error: %s.",
+      g_critical ("Failed to open stream to cache file: %s. Error: %s.",
                   path, error->message);
       g_free (path);
       g_error_free (error);
@@ -1026,7 +1026,7 @@ write_variant_string_to_file (EmerPersistentCache *self,
   if (!success)
     {
       gchar *path = g_file_get_path (file);
-      g_critical ("Failed to write to cache file: %s . Error: %s.",
+      g_critical ("Failed to write to cache file: %s. Error: %s.",
                   path, error->message);
       g_object_unref (stream);
       g_free (path);
@@ -1330,10 +1330,10 @@ apply_cache_versioning (EmerPersistentCache *self,
   if (g_mkdir_with_parents (priv->cache_directory, 02774) != 0)
     {
       const gchar *err_str = g_strerror (errno); // Don't free.
-      g_critical ("Failed to create directory: %s . Error: %s.",
+      g_critical ("Failed to create directory: %s. Error: %s.",
                   priv->cache_directory, err_str);
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
-                   "Failed to create directory: %s . Error: %s.",
+                   "Failed to create directory: %s. Error: %s.",
                    priv->cache_directory, err_str);
       return FALSE;
     }

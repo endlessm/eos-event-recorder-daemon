@@ -568,6 +568,24 @@ update_boot_offset (EmerPersistentCache *self,
     emer_persistent_cache_get_instance_private (self);
 
   GError *error = NULL;
+
+  if (priv->boot_offset_initialized)
+    {
+      gboolean write_success = TRUE;
+      if (always_update_timestamps)
+        write_success = save_timing_metadata (self, &relative_time,
+                                              &absolute_time, NULL, NULL, NULL,
+                                              &error);
+      if (!write_success)
+        {
+          g_warning ("Failed to update relative and absolute time on metafile. "
+                     "Error: %s.", error->message);
+          g_error_free (error);
+        }
+
+      return TRUE;
+    }
+
   if (!g_key_file_load_from_file (priv->boot_offset_key_file,
                                   priv->boot_metafile_path,
                                   G_KEY_FILE_NONE,
@@ -582,24 +600,6 @@ update_boot_offset (EmerPersistentCache *self,
         }
       g_error_free (error);
       return reset_boot_offset_metafile (self, &relative_time, &absolute_time);
-    }
-
-  if (priv->boot_offset_initialized)
-    {
-      gboolean write_success = TRUE;
-      if (always_update_timestamps)
-        write_success = save_timing_metadata (self, &relative_time,
-                                              &absolute_time, NULL, NULL, NULL,
-                                              &error);
-
-      if (!write_success)
-        {
-          g_warning ("Failed to update relative and absolute time on metafile. "
-                     "Error: %s.", error->message);
-          g_error_free (error);
-        }
-
-      return TRUE;
     }
 
   gint64 boot_offset = g_key_file_get_int64 (priv->boot_offset_key_file,

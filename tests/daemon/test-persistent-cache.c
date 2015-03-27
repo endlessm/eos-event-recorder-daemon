@@ -1451,9 +1451,14 @@ test_persistent_cache_wipes_metrics_when_boot_offset_corrupted (gboolean     *un
   g_object_unref (cache);
   EmerPersistentCache *cache2 = make_testing_cache ();
 
+  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING, "Could not find a "
+                         "valid boot offset in the metadata file. Error: *.");
+
   // This call should detect corruption and wipe the cache of all previous
   // events. However, this new aggregate event should be stored.
   store_single_aggregate_event (cache2, &capacity);
+
+  g_test_assert_expected_messages ();
 
   GVariant **singulars_drained, **aggregates_drained, **sequences_drained;
   emer_persistent_cache_drain_metrics (cache2, &singulars_drained,
@@ -1488,11 +1493,16 @@ test_persistent_cache_resets_boot_metafile_when_boot_offset_corrupted (gboolean 
   // Corrupt metafile.
   remove_offset ();
 
-  // This call should detect corruption and reset the metafile.
   gint64 unused_offset;
   GError *error = NULL;
+  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING, "Could not find a "
+                         "valid boot offset in the metadata file. Error: *.");
+
+  // This call should detect corruption and reset the metafile.
   g_assert (emer_persistent_cache_get_boot_time_offset (cache, &unused_offset,
                                                         &error, TRUE));
+
+  g_test_assert_expected_messages ();
   g_assert_no_error (error);
 
   g_assert (read_whether_boot_offset_is_reset_value ());

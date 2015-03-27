@@ -607,6 +607,8 @@ update_boot_offset (EmerPersistentCache *self,
                                              CACHE_BOOT_OFFSET_KEY, &error);
   if (error != NULL)
     {
+      g_warning ("Could not find a valid boot offset in the metadata file. "
+                 "Error: %s.", error->message);
       g_error_free (error);
       return reset_boot_offset_metafile (self, &relative_time, &absolute_time);
     }

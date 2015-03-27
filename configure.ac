@@ -40,7 +40,8 @@ AC_CONFIG_SRCDIR([daemon/emer-daemon.h])
 # Unlike serial-tests, this option is accepted by Automake 1.11
 # tar-ustar is required because there may be files whose entire paths exceed
 # 99 characters.
-AM_INIT_AUTOMAKE([-Wall -Wno-portability foreign 1.11 parallel-tests tar-ustar])
+AM_INIT_AUTOMAKE([-Wall -Wno-portability foreign 1.11 parallel-tests
+    subdir-objects tar-ustar])
 # Avoid spewing garbage over the terminal ('make V=1' to see the garbage)
 AM_SILENT_RULES([yes])
 # Keep Autotools macros local to this source tree

@@ -58,7 +58,7 @@ typedef struct
 
   /* Mock logind service */
   GSubprocess *logind_mock;
-  GByteArray *logind_line;
+  GString *logind_line;
 
   GMainLoop *main_loop;
   guint timeout_id;
@@ -174,13 +174,6 @@ contains_dbus_call (const gchar *line,
   return given_args_index != NULL;
 }
 
-static void
-null_terminate (GByteArray *str)
-{
-  guint8 null_byte[] = {'\0'};
-  g_byte_array_append (str, null_byte, 1u);
-}
-
 /*
  * Append 1 byte from the given stream to the given byte array without blocking.
  * Returns TRUE if a character other than a newline was successfully appended.
@@ -189,13 +182,12 @@ null_terminate (GByteArray *str)
  */
 static gboolean
 append_byte (GPollableInputStream *pollable_input_stream,
-             GByteArray           *line)
+             GString              *line)
 {
-  guint8 buffer[1];
+  guint8 byte;
   GError *error = NULL;
   gssize num_bytes_read =
-    g_pollable_input_stream_read_nonblocking (pollable_input_stream,
-                                              buffer, 1,
+    g_pollable_input_stream_read_nonblocking (pollable_input_stream, &byte, 1,
                                               NULL /* GCancellable */, &error);
   switch (num_bytes_read)
     {
@@ -205,8 +197,9 @@ append_byte (GPollableInputStream *pollable_input_stream,
     case 0:
       return FALSE;
     case 1:
-      g_byte_array_append (line, buffer, 1);
-      return buffer[0] != '\n';
+      g_assert (byte != '\0');
+      g_string_append_c (line, byte);
+      return byte != '\n';
     default:
       g_assert_not_reached ();
     }
@@ -220,10 +213,10 @@ append_byte (GPollableInputStream *pollable_input_stream,
  */
 static gboolean
 append_line (GPollableInputStream *pollable_input_stream,
-             GByteArray           *line)
+             GString              *line)
 {
   while (append_byte (pollable_input_stream, line)) {}
-  return line->data[line->len - 1] == '\n';
+  return line->str[line->len - 1] == '\n';
 }
 
 static gboolean
@@ -235,9 +228,8 @@ on_output_received (GPollableInputStream *pollable_input_stream,
       if (!append_line (pollable_input_stream, fixture->logind_line))
         return G_SOURCE_CONTINUE;
 
-      null_terminate (fixture->logind_line);
       gboolean shutdown_inhibited =
-        contains_dbus_call (fixture->logind_line->data, "Inhibit",
+        contains_dbus_call (fixture->logind_line->str, "Inhibit",
                             EXPECTED_INHIBIT_SHUTDOWN_ARGS);
       if (shutdown_inhibited)
         {
@@ -246,8 +238,7 @@ on_output_received (GPollableInputStream *pollable_input_stream,
           return G_SOURCE_REMOVE;
         }
 
-      g_byte_array_remove_range (fixture->logind_line, 0,
-                                 fixture->logind_line->len);
+      g_string_truncate (fixture->logind_line, 0);
     }
 
   g_assert_not_reached ();
@@ -269,7 +260,7 @@ await_shutdown_inhibit (Fixture *fixture)
                                            NULL /* GCancellable */);
 
   fixture->main_loop = g_main_loop_new (NULL /* GMainContext */, FALSE);
-  fixture->logind_line = g_byte_array_new ();
+  fixture->logind_line = g_string_new ("");
   g_source_set_callback (stdout_source, (GSourceFunc) on_output_received,
                          fixture, NULL /* GDestroyNotify */);
   g_source_attach (stdout_source, NULL /* GMainContext */);
@@ -281,7 +272,7 @@ await_shutdown_inhibit (Fixture *fixture)
   g_main_loop_run (fixture->main_loop);
 
   g_main_loop_unref (fixture->main_loop);
-  g_byte_array_unref (fixture->logind_line);
+  g_string_free (fixture->logind_line, TRUE);
 }
 
 static void

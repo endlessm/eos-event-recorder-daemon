@@ -72,7 +72,7 @@ typedef struct _EmerPersistentCachePrivate
   guint boot_offset_update_timeout_source_id;
 
   gchar *cache_directory;
-  gchar *boot_metafile_path;
+  gchar *boot_metadata_file_path;
 
   gint64 boot_offset;
   gboolean boot_offset_initialized;
@@ -149,10 +149,10 @@ static GParamSpec *emer_persistent_cache_props[NPROPS] = { NULL, };
 /*
  * Will read the boot id from a metadata file or cached value. This boot id will
  * not be as recent as the one stored in the system file if the system has been
- * rebooted since the last time we wrote to the metafile. If the metafile
- * doesn't exist, or another I/O error occurs, this will return FALSE and set
- * the error. Returns TRUE on success, and sets the boot_id out parameter to the
- * correct boot id.
+ * rebooted since the last time we wrote to the metadata file. If the metadata
+ * file doesn't exist, or another I/O error occurs, this will return FALSE and
+ * set the error. Returns TRUE on success, and sets the boot_id out parameter to
+ * the correct boot id.
  */
 static gboolean
 get_saved_boot_id (EmerPersistentCache *self,
@@ -169,12 +169,12 @@ get_saved_boot_id (EmerPersistentCache *self,
     }
 
   if (!g_key_file_load_from_file (priv->boot_offset_key_file,
-                                  priv->boot_metafile_path,
+                                  priv->boot_metadata_file_path,
                                   G_KEY_FILE_NONE,
                                   error))
     {
       g_prefix_error (error, "Failed to open KeyFile at: %s .",
-                      priv->boot_metafile_path);
+                      priv->boot_metadata_file_path);
       return FALSE;
     }
 
@@ -185,7 +185,7 @@ get_saved_boot_id (EmerPersistentCache *self,
   if (id_as_string == NULL)
     {
       g_prefix_error (error, "Failed to read boot_id from %s .",
-                      priv->boot_metafile_path);
+                      priv->boot_metadata_file_path);
       return FALSE;
     }
 
@@ -231,7 +231,7 @@ get_system_boot_id (EmerPersistentCache *self,
 
 /*
  * Creates and returns a newly allocated GFile * corresponding to the cache
- * file ending or metafile ending given to it as path_ending.
+ * file ending or metadata file ending given to it as path_ending.
  */
 static GFile *
 get_cache_file (EmerPersistentCache *self,
@@ -368,10 +368,10 @@ save_timing_metadata (EmerPersistentCache *self,
                             *was_reset_ptr);
 
   if (!g_key_file_save_to_file (priv->boot_offset_key_file,
-                                priv->boot_metafile_path, out_error))
+                                priv->boot_metadata_file_path, out_error))
     {
-      g_prefix_error (out_error, "Failed to write to metafile: %s .",
-                      priv->boot_metafile_path);
+      g_prefix_error (out_error, "Failed to write to metadata file: %s .",
+                      priv->boot_metadata_file_path);
       return FALSE;
     }
 
@@ -379,8 +379,8 @@ save_timing_metadata (EmerPersistentCache *self,
 }
 
 /*
- * Resets the boot timing metafile to default values, completely replacing any
- * previously existing boot timing metafile, if one even existed.
+ * Resets the boot timing metadata file to default values, completely replacing
+ * any previously existing boot timing metadata file, if one even existed.
  *
  * Initializes the cache's boot offset and boot id.
  *
@@ -389,28 +389,28 @@ save_timing_metadata (EmerPersistentCache *self,
  * Returns FALSE and writes nothing to disk on failure. Returns TRUE on success.
  */
 static gboolean
-reset_boot_offset_metafile (EmerPersistentCache *self,
-                            gint64              *relative_time_ptr,
-                            gint64              *absolute_time_ptr)
+reset_boot_offset_metadata_file (EmerPersistentCache *self,
+                                 gint64              *relative_time_ptr,
+                                 gint64              *absolute_time_ptr)
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
   priv->boot_offset_initialized = FALSE;
   priv->boot_id_initialized = FALSE;
 
-  GFile *meta_file = g_file_new_for_path (priv->boot_metafile_path);
+  GFile *metadata_file = g_file_new_for_path (priv->boot_metadata_file_path);
 
   // We only want to 'touch' the file; we don't need the stream.
   GError *error = NULL;
   GFileOutputStream *unused_stream =
-    g_file_replace (meta_file, NULL, FALSE,
+    g_file_replace (metadata_file, NULL, FALSE,
                     G_FILE_CREATE_REPLACE_DESTINATION,
                     NULL, &error);
-  g_object_unref (meta_file);
+  g_object_unref (metadata_file);
   if (unused_stream == NULL)
     {
-      g_critical ("Failed to create new meta file at %s . Error: %s.",
-                  priv->boot_metafile_path, error->message);
+      g_critical ("Failed to create new metadata file at %s . Error: %s.",
+                  priv->boot_metadata_file_path, error->message);
       g_error_free (error);
       return FALSE;
     }
@@ -458,8 +458,8 @@ reset_boot_offset_metafile (EmerPersistentCache *self,
  * Takes an already open GKeyFile and cached timestamps and computes the
  * new and correct boot offset, storing it in the out parameter.
  * Returns TRUE if this is done successfully, and returns FALSE if there is an
- * error loading the stored timestamps from the metafile, which are needed to
- * compute the correct boot offset.
+ * error loading the stored timestamps from the metadata file, which are needed
+ * to compute the correct boot offset.
  */
 static gboolean
 compute_boot_offset (EmerPersistentCache *self,
@@ -479,8 +479,8 @@ compute_boot_offset (EmerPersistentCache *self,
                                                &error);
   if (error != NULL)
     {
-      g_critical ("Failed to read relative offset from metafile %s . "
-                  "Error: %s.", priv->boot_metafile_path, error->message);
+      g_critical ("Failed to read relative offset from metadata file %s . "
+                  "Error: %s.", priv->boot_metadata_file_path, error->message);
       g_error_free (error);
       return FALSE;
     }
@@ -490,8 +490,8 @@ compute_boot_offset (EmerPersistentCache *self,
                           CACHE_RELATIVE_TIME_KEY, &error);
   if (error != NULL)
     {
-      g_critical ("Failed to read relative time from metafile %s . "
-                  "Error: %s.", priv->boot_metafile_path, error->message);
+      g_critical ("Failed to read relative time from metadata file %s . "
+                  "Error: %s.", priv->boot_metadata_file_path, error->message);
       g_error_free (error);
       return FALSE;
     }
@@ -501,8 +501,8 @@ compute_boot_offset (EmerPersistentCache *self,
                           CACHE_ABSOLUTE_TIME_KEY, &error);
   if (error != NULL)
     {
-      g_critical ("Failed to read absolute time from metafile %s . "
-                  "Error: %s.", priv->boot_metafile_path, error->message);
+      g_critical ("Failed to read absolute time from metadata file %s . "
+                  "Error: %s.", priv->boot_metadata_file_path, error->message);
       g_error_free (error);
       return FALSE;
     }
@@ -535,12 +535,12 @@ compute_boot_offset (EmerPersistentCache *self,
 
 /*
  * Will read and compute the boot offset from a boot offset file or will use a
- * cached value, if one is available. If the meta-data file doesn't exist, it
+ * cached value, if one is available. If the metadata file doesn't exist, it
  * will reset the cache metadata and purge the system. If an error occurs while
  * trying to read the boot id other than 'file not found', or if the timestamp
  * cannot be generated, this will return FALSE.
  *
- * Will attempt to update the timestamps in the metafile, but it is not
+ * Will attempt to update the timestamps in the metadata file, but it is not
  * considered a failure if it is unable to do so. Returns TRUE on success and
  * caches the boot offset and boot id in the EmerPersistentCache.
  *
@@ -578,8 +578,8 @@ update_boot_offset (EmerPersistentCache *self,
                                               &error);
       if (!write_success)
         {
-          g_warning ("Failed to update relative and absolute time on metafile. "
-                     "Error: %s.", error->message);
+          g_warning ("Failed to update relative and absolute time on metadata "
+                     "file. Error: %s.", error->message);
           g_error_free (error);
         }
 
@@ -587,7 +587,7 @@ update_boot_offset (EmerPersistentCache *self,
     }
 
   if (!g_key_file_load_from_file (priv->boot_offset_key_file,
-                                  priv->boot_metafile_path,
+                                  priv->boot_metadata_file_path,
                                   G_KEY_FILE_NONE,
                                   &error))
     {
@@ -596,10 +596,11 @@ update_boot_offset (EmerPersistentCache *self,
           !g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
         {
           g_warning ("Got an unexpected error trying to load %s . Error: %s.",
-                     priv->boot_metafile_path, error->message);
+                     priv->boot_metadata_file_path, error->message);
         }
       g_error_free (error);
-      return reset_boot_offset_metafile (self, &relative_time, &absolute_time);
+      return reset_boot_offset_metadata_file (self, &relative_time,
+                                              &absolute_time);
     }
 
   gint64 boot_offset = g_key_file_get_int64 (priv->boot_offset_key_file,
@@ -610,7 +611,8 @@ update_boot_offset (EmerPersistentCache *self,
       g_warning ("Could not find a valid boot offset in the metadata file. "
                  "Error: %s.", error->message);
       g_error_free (error);
-      return reset_boot_offset_metafile (self, &relative_time, &absolute_time);
+      return reset_boot_offset_metadata_file (self, &relative_time,
+                                              &absolute_time);
     }
 
   uuid_t saved_boot_id, system_boot_id;
@@ -633,8 +635,8 @@ update_boot_offset (EmerPersistentCache *self,
 
       if (!write_success)
         {
-          g_warning ("Failed to update relative and absolute time on metafile. "
-                     "Error: %s.", error->message);
+          g_warning ("Failed to update relative and absolute time on metadata "
+                     "file. Error: %s.", error->message);
           g_error_free (error);
         }
 
@@ -657,7 +659,8 @@ update_boot_offset (EmerPersistentCache *self,
       g_warning ("Failed to write computed boot offset. Resetting cache. "
                  "Error: %s.", error->message);
       g_error_free (error);
-      return reset_boot_offset_metafile (self, &relative_time, &absolute_time);
+      return reset_boot_offset_metadata_file (self, &relative_time,
+                                              &absolute_time);
     }
 
   priv->boot_offset = boot_offset;
@@ -683,7 +686,7 @@ update_boot_offset_source_func (EmerPersistentCache *self)
  * If the always_update_timestamps parameter is FALSE, this will not perform
  * writes to disk to update the timestamps during this operation unless the boot
  * id is out of date, or some corruption is detected which forces a rewrite of
- * the boot timing metafile.
+ * the boot timing metadata file.
  *
  * Will return TRUE on success. Will return FALSE on failure, will not set the
  * offset in the out parameter and will set the GError if error is not NULL.
@@ -1433,9 +1436,8 @@ emer_persistent_cache_constructed (GObject *object)
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  priv->boot_metafile_path = g_strconcat (priv->cache_directory,
-                                          BOOT_OFFSET_METAFILE,
-                                          NULL);
+  priv->boot_metadata_file_path =
+    g_strconcat (priv->cache_directory, BOOT_OFFSET_METADATA_FILE, NULL);
 
   G_OBJECT_CLASS (emer_persistent_cache_parent_class)->constructed (object);
 }
@@ -1488,7 +1490,7 @@ emer_persistent_cache_finalize (GObject *object)
 
   g_object_unref (priv->boot_id_provider);
   g_object_unref (priv->cache_version_provider);
-  g_free (priv->boot_metafile_path);
+  g_free (priv->boot_metadata_file_path);
   g_key_file_unref (priv->boot_offset_key_file);
   g_free (priv->cache_directory);
 
@@ -1541,7 +1543,7 @@ emer_persistent_cache_class_init (EmerPersistentCacheClass *klass)
   emer_persistent_cache_props[PROP_BOOT_OFFSET_UPDATE_INTERVAL] =
     g_param_spec_uint ("boot-offset-update-interval", "Boot offset update interval",
                        "The number of seconds between each automatic update"
-                       " of the boot offset metafile.",
+                       " of the boot offset metadata file.",
                        0, G_MAXUINT, DEFAULT_BOOT_TIMESTAMPS_UPDATE,
                        G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 

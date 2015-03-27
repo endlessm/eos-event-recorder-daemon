@@ -34,7 +34,8 @@ typedef struct EmerCacheVersionProviderPrivate
 G_DEFINE_TYPE_WITH_PRIVATE (EmerCacheVersionProvider, emer_cache_version_provider, G_TYPE_OBJECT)
 
 /*
- * The filepath to the meta file containing the local network protocol version.
+ * This is the filepath to the metadata file containing the local network
+ * protocol version.
  */
 #define DEFAULT_CACHE_VERSION_FILE_PATH PERSISTENT_CACHE_DIR "local_version_file"
 
@@ -223,7 +224,7 @@ emer_cache_version_provider_get_version (EmerCacheVersionProvider *self,
 }
 
 /*
- * Updates the cache version number and creates a new meta_file if
+ * Updates the cache version number and creates a new metadata file if
  * one doesn't exist. Returns %TRUE on success, and %FALSE on failure.
  */
 gboolean

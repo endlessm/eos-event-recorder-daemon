@@ -32,7 +32,7 @@ typedef struct EmerNetworkSendProviderPrivate
 G_DEFINE_TYPE_WITH_PRIVATE (EmerNetworkSendProvider, emer_network_send_provider, G_TYPE_OBJECT)
 
 /*
- * The filepath to the meta file containing the network send metadata.
+ * The filepath to the metadata file containing the network send metadata.
  */
 #define DEFAULT_NETWORK_SEND_FILE_PATH PERSISTENT_CACHE_DIR "network_send_file"
 
@@ -144,7 +144,7 @@ emer_network_send_provider_init (EmerNetworkSendProvider *self)
  * emer_network_send_provider_new:
  *
  * Constructs the provider used to obtain and store data regarding "network
- * send" meta-data via the default filepath.
+ * send" metadata via the default filepath.
  *
  * Returns: (transfer full): A new #EmerNetworkSendProvider.
  * Free with g_object_unref().
@@ -161,7 +161,7 @@ emer_network_send_provider_new (void)
  * #EmerNetworkSendProvider:path.
  *
  * Constructs the provider used to obtain and store data regarding "network
- * send" meta-data via a given filepath.
+ * send" metadata via a given filepath.
  *
  * Returns: (transfer full): A new #EmerNetworkSendProvider.
  * Free with g_object_unref().
@@ -251,8 +251,8 @@ emer_network_send_provider_get_send_number (EmerNetworkSendProvider *self,
  * emer_network_send_provider_increment_send_number:
  * @self: the network send provider.
  *
- * Increments the network send number and creates a new meta_file if
- * one doesn't exist.
+ * Increments the network send number and creates a new metadata file if one
+ * doesn't already exist.
  *
  * Returns: %TRUE on success, and %FALSE on failure.
  */

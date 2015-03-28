@@ -1,3 +1,31 @@
+# ==================================================================================
+#     http://www.gnu.org/software/autoconf-archive/ax_python_module_version.html
+# ==================================================================================
+#
+# SYNOPSIS
+#
+#   AX_PYTHON_MODULE_VERSION(modname, min_version)
+#
+# DESCRIPTION
+#
+#   Checks for Python module with at least the given version.
+#
+#   Triggers an error if module is absent or present but at a lower version.
+#
+# AUTHORS
+#
+#   Philip Chimento <philip@endlessm.com>
+#   Kurt von Laven <kurt@endlessm.com>
+#
+# LICENSE
+#
+#   Copyright (c) 2015 Endless Mobile, Inc.
+#
+#   Copying and distribution of this file, with or without modification, are
+#   permitted in any medium without royalty provided the copyright notice
+#   and this notice are preserved. This file is offered as-is, without any
+#   warranty.
+
 AC_DEFUN([AX_PYTHON_MODULE_VERSION], [
     AX_PYTHON_MODULE([$1], [required])
     AC_MSG_CHECKING([for version $2 or higher of $1])

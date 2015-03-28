@@ -2,7 +2,8 @@
 
 /* Copyright 2014, 2015 Endless Mobile, Inc. */
 
-/* This file is part of eos-event-recorder-daemon.
+/*
+ * This file is part of eos-event-recorder-daemon.
  *
  * eos-event-recorder-daemon is free software: you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as published by
@@ -34,7 +35,8 @@ typedef struct EmerCacheVersionProviderPrivate
 G_DEFINE_TYPE_WITH_PRIVATE (EmerCacheVersionProvider, emer_cache_version_provider, G_TYPE_OBJECT)
 
 /*
- * The filepath to the meta file containing the local network protocol version.
+ * This is the filepath to the metadata file containing the local network
+ * protocol version.
  */
 #define DEFAULT_CACHE_VERSION_FILE_PATH PERSISTENT_CACHE_DIR "local_version_file"
 
@@ -223,8 +225,8 @@ emer_cache_version_provider_get_version (EmerCacheVersionProvider *self,
 }
 
 /*
- * Updates the cache version number and creates a new meta_file if
- * one doesn't exist. Returns %TRUE on success, and %FALSE on failure.
+ * Updates the cache version number and creates a new metadata file if
+ * one doesn't already exist. Returns %TRUE on success and %FALSE on failure.
  */
 gboolean
 emer_cache_version_provider_set_version (EmerCacheVersionProvider *self,

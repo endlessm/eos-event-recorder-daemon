@@ -169,16 +169,6 @@ get_saved_boot_id (EmerPersistentCache *self,
       return TRUE;
     }
 
-  if (!g_key_file_load_from_file (priv->boot_offset_key_file,
-                                  priv->boot_metadata_file_path,
-                                  G_KEY_FILE_NONE,
-                                  error))
-    {
-      g_prefix_error (error, "Failed to open KeyFile at: %s.",
-                      priv->boot_metadata_file_path);
-      return FALSE;
-    }
-
   gchar *id_as_string = g_key_file_get_string (priv->boot_offset_key_file,
                                                CACHE_TIMING_GROUP_NAME,
                                                CACHE_LAST_BOOT_ID_KEY,

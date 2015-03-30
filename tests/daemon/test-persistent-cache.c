@@ -1736,6 +1736,77 @@ test_persistent_cache_get_offset_wont_update_timestamps_if_it_isnt_supposed_to (
 }
 
 /*
+ * Ensures that a request for the boot time offset updates the timestamps in the
+ * boot offset metadata file when the 'always_update_timestamps' parameter is
+ * TRUE. If the boot offset and/or the boot id needs to be changed, the
+ * timestamps are updated regardless of the value of the parameter. To ensure
+ * neither of these need to be changed, we make an initial request for the boot
+ * time offset that corrects the default metadata file before we make the call
+ * we really want to test.
+ */
+static void
+test_persistent_cache_get_offset_updates_timestamps_when_requested (gboolean     *unused,
+                                                                    gconstpointer dontuseme)
+{
+  EmerPersistentCache *cache = make_testing_cache ();
+  write_default_boot_offset_key_file_to_disk ();
+
+  GError *error = NULL;
+
+  // Update metadata file to reasonable values.
+  g_assert (emer_persistent_cache_get_boot_time_offset (cache, NULL, &error,
+                                                        FALSE));
+
+  g_assert_no_error (error);
+  gint64 relative_time = read_relative_time ();
+  gint64 absolute_time = read_absolute_time ();
+
+  // Make a little time pass.
+  g_usleep (75000); // 0.075 seconds
+
+  // This call should update the timestamps in the metadata file.
+  g_assert (emer_persistent_cache_get_boot_time_offset (cache, NULL, &error,
+                                                        TRUE));
+
+  g_assert_no_error (error);
+
+  // These timestamps should have increased.
+  g_assert_cmpint (relative_time, <, read_relative_time ());
+  g_assert_cmpint (absolute_time, <, read_absolute_time ());
+}
+
+/*
+ * Ensures that releasing the persistent cache prompts it to update the
+ * timestamps in the metadata file.
+ */
+static void
+test_persistent_cache_updates_timestamps_on_finalize (gboolean     *unused,
+                                                      gconstpointer dontuseme)
+{
+  EmerPersistentCache *cache = make_testing_cache ();
+  write_default_boot_offset_key_file_to_disk ();
+
+  GError *error = NULL;
+
+  // Update metadata file to reasonable values.
+  g_assert (emer_persistent_cache_get_boot_time_offset (cache, NULL, &error,
+                                                        TRUE));
+  g_assert_no_error (error);
+  gint64 relative_time = read_relative_time ();
+  gint64 absolute_time = read_absolute_time ();
+
+  // Make a little time pass.
+  g_usleep (75000); // 0.075 seconds
+
+  // This call should update the timestamps in the metadata file.
+  g_object_unref (cache);
+
+  // These timestamps should have increased.
+  g_assert_cmpint (relative_time, <, read_relative_time ());
+  g_assert_cmpint (absolute_time, <, read_absolute_time ());
+}
+
+/*
  * Ensures that the get_boot_time_offset call will reset the metadata file if
  * one isn't found.
  */
@@ -1850,6 +1921,10 @@ main (int                argc,
                        test_persistent_cache_reads_cached_boot_offset);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/get-offset-wont-update-timestamps-if-it-isnt-supposed-to",
                        test_persistent_cache_get_offset_wont_update_timestamps_if_it_isnt_supposed_to);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/get-offset-updates-timestamps-when-requested",
+                       test_persistent_cache_get_offset_updates_timestamps_when_requested);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/updates-timestamps-on-finalize",
+                       test_persistent_cache_updates_timestamps_on_finalize);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/get-offset-can-build-boot-metadata-file",
                        test_persistent_cache_get_offset_can_build_boot_metadata_file);
   ADD_CACHE_TEST_FUNC ("/g-file/measure-disk-usage-returns-zero-on-empty-file",

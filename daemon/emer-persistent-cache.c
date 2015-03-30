@@ -180,9 +180,11 @@ get_saved_boot_id (EmerPersistentCache *self,
       return FALSE;
     }
 
-  /* Strangely, with both the keyfile and the system file, a newline is appended
-     and retrieved when a uuid is changed to a string and stored on disk.
-     We chomp it off here because uuid_parse will fail otherwise. */
+  /*
+   * With both the keyfile and the system file, a newline is appended
+   * when a uuid is changed to a string and stored on disk.
+   * We chomp it off here because uuid_parse will fail otherwise.
+   */
   g_strchomp (id_as_string);
   if (uuid_parse (id_as_string, priv->saved_boot_id) != 0)
     {
@@ -598,10 +600,9 @@ update_boot_offset (EmerPersistentCache *self,
       if (!g_error_matches (error, G_KEY_FILE_ERROR,
                             G_KEY_FILE_ERROR_NOT_FOUND) &&
           !g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
-        {
-          g_warning ("Got an unexpected error trying to load %s. Error: %s.",
-                     priv->boot_metadata_file_path, error->message);
-        }
+        g_warning ("Got an unexpected error trying to load %s. Error: %s.",
+                   priv->boot_metadata_file_path, error->message);
+
       g_error_free (error);
       return reset_boot_offset_metadata_file (self, &relative_time,
                                               &absolute_time);

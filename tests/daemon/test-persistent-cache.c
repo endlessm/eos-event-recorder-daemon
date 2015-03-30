@@ -104,8 +104,8 @@ write_empty_metrics_file (gchar *suffix)
 
   GError *error = NULL;
   g_file_replace_contents (file, "", 0, NULL, FALSE,
-  	                       G_FILE_CREATE_REPLACE_DESTINATION, NULL, NULL,
-  	                       &error);
+                           G_FILE_CREATE_REPLACE_DESTINATION, NULL, NULL,
+                           &error);
   g_assert_no_error (error);
   g_object_unref (file);
 }
@@ -993,9 +993,8 @@ test_persistent_cache_store_one_singular_event_succeeds (gboolean     *unused,
 {
   EmerPersistentCache *cache = make_testing_cache ();
   capacity_t capacity;
-  gboolean success = store_single_singular_event (cache, &capacity);
+  g_assert (store_single_singular_event (cache, &capacity));
   g_object_unref (cache);
-  g_assert (success);
   g_assert_cmpint (capacity, ==, CAPACITY_LOW);
 }
 
@@ -1005,9 +1004,8 @@ test_persistent_cache_store_one_aggregate_event_succeeds (gboolean     *unused,
 {
   EmerPersistentCache *cache = make_testing_cache ();
   capacity_t capacity;
-  gboolean success = store_single_aggregate_event (cache, &capacity);
+  g_assert (store_single_aggregate_event (cache, &capacity));
   g_object_unref (cache);
-  g_assert (success);
   g_assert_cmpint (capacity, ==, CAPACITY_LOW);
 }
 
@@ -1017,9 +1015,8 @@ test_persistent_cache_store_one_sequence_event_succeeds (gboolean     *unused,
 {
   EmerPersistentCache *cache = make_testing_cache ();
   capacity_t capacity;
-  gboolean success = store_single_sequence_event (cache, &capacity);
+  g_assert (store_single_sequence_event (cache, &capacity));
   g_object_unref (cache);
-  g_assert (success);
   g_assert_cmpint (capacity, ==, CAPACITY_LOW);
 }
 
@@ -1729,10 +1726,10 @@ test_persistent_cache_get_offset_wont_update_timestamps_if_it_isnt_supposed_to (
                                                         FALSE));
   g_assert_no_error (error);
 
-   // These timestamps should not have changed.
-   g_assert_cmpint (relative_time, ==, read_relative_time ());
-   g_assert_cmpint (absolute_time, ==, read_absolute_time ());
-   g_object_unref (cache);
+  // These timestamps should not have changed.
+  g_assert_cmpint (relative_time, ==, read_relative_time ());
+  g_assert_cmpint (absolute_time, ==, read_absolute_time ());
+  g_object_unref (cache);
 }
 
 /*

@@ -169,16 +169,6 @@ get_saved_boot_id (EmerPersistentCache *self,
       return TRUE;
     }
 
-  if (!g_key_file_load_from_file (priv->boot_offset_key_file,
-                                  priv->boot_metadata_file_path,
-                                  G_KEY_FILE_NONE,
-                                  error))
-    {
-      g_prefix_error (error, "Failed to open KeyFile at: %s.",
-                      priv->boot_metadata_file_path);
-      return FALSE;
-    }
-
   gchar *id_as_string = g_key_file_get_string (priv->boot_offset_key_file,
                                                CACHE_TIMING_GROUP_NAME,
                                                CACHE_LAST_BOOT_ID_KEY,
@@ -190,9 +180,11 @@ get_saved_boot_id (EmerPersistentCache *self,
       return FALSE;
     }
 
-  /* Strangely, with both the keyfile and the system file, a newline is appended
-     and retrieved when a uuid is changed to a string and stored on disk.
-     We chomp it off here because uuid_parse will fail otherwise. */
+  /*
+   * With both the keyfile and the system file, a newline is appended
+   * when a uuid is changed to a string and stored on disk.
+   * We chomp it off here because uuid_parse will fail otherwise.
+   */
   g_strchomp (id_as_string);
   if (uuid_parse (id_as_string, priv->saved_boot_id) != 0)
     {
@@ -608,10 +600,9 @@ update_boot_offset (EmerPersistentCache *self,
       if (!g_error_matches (error, G_KEY_FILE_ERROR,
                             G_KEY_FILE_ERROR_NOT_FOUND) &&
           !g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
-        {
-          g_warning ("Got an unexpected error trying to load %s. Error: %s.",
-                     priv->boot_metadata_file_path, error->message);
-        }
+        g_warning ("Got an unexpected error trying to load %s. Error: %s.",
+                   priv->boot_metadata_file_path, error->message);
+
       g_error_free (error);
       return reset_boot_offset_metadata_file (self, &relative_time,
                                               &absolute_time);
@@ -698,13 +689,14 @@ update_boot_offset_source_func (EmerPersistentCache *self)
 
 /*
  * Gets the boot time offset and stores it in the out parameter offset.
- * If the always_update_timestamps parameter is FALSE, this will not perform
- * writes to disk to update the timestamps during this operation unless the boot
- * id is out of date, or some corruption is detected which forces a rewrite of
- * the boot timing metadata file.
+ * If the always_update_timestamps parameter is FALSE, does not write to disk
+ * solely to update the timestamps during this operation unless the boot id is
+ * out of date or some corruption is detected that prompts a total rewrite of
+ * the boot timing metadata file. Pass an offset of NULL if you don't care about
+ * its value.
  *
- * Will return TRUE on success. Will return FALSE on failure, will not set the
- * offset in the out parameter and will set the GError if error is not NULL.
+ * Returns TRUE on success. Returns FALSE on failure and sets the error unless
+ * it's NULL. Does not alter the offset out parameter on failure.
  */
 gboolean
 emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
@@ -732,7 +724,10 @@ emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
 
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
-  *offset = priv->boot_offset;
+
+  if (offset != NULL)
+    *offset = priv->boot_offset;
+
   return TRUE;
 }
 

@@ -29,7 +29,8 @@
 
 G_BEGIN_DECLS
 
-gint mock_persistent_cache_get_store_metrics_called (EmerPersistentCache *self);
+gint mock_persistent_cache_get_num_timestamp_updates (EmerPersistentCache *self);
+gint mock_persistent_cache_get_store_metrics_called  (EmerPersistentCache *self);
 
 G_END_DECLS
 

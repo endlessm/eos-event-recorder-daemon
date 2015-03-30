@@ -930,6 +930,21 @@ finally:
 }
 
 static void
+update_timestamps (EmerDaemon *self)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  GError *error = NULL;
+  if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
+                                                   NULL, &error, TRUE))
+    {
+      g_warning ("Persistent cache could not update timestamps: %s.",
+                 error->message);
+      g_error_free (error);
+    }
+}
+
+static void
 handle_login_manager_signal (GDBusProxy *dbus_proxy,
                              gchar      *sender_name,
                              gchar      *signal_name,
@@ -942,6 +957,7 @@ handle_login_manager_signal (GDBusProxy *dbus_proxy,
       g_variant_get_child (parameters, 0, "b", &shutting_down);
       if (shutting_down)
         {
+          update_timestamps (self);
           flush_to_persistent_cache (self);
           release_shutdown_inhibitor (self);
         }

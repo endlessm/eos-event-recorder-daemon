@@ -263,7 +263,7 @@ read_offset (void)
                                                CACHE_BOOT_OFFSET_KEY,
                                                &error);
   g_key_file_unref (key_file);
-  g_assert (error == NULL);
+  g_assert_no_error (error);
   return stored_offset;
 }
 
@@ -727,9 +727,9 @@ store_single_singular_event (EmerPersistentCache *cache,
                                          &num_sequences_stored,
                                          capacity);
 
-  g_assert (num_singulars_stored == 1);
-  g_assert (num_aggregates_stored == 0);
-  g_assert (num_sequences_stored == 0);
+  g_assert_cmpint (num_singulars_stored, ==, 1);
+  g_assert_cmpint (num_aggregates_stored, ==, 0);
+  g_assert_cmpint (num_sequences_stored, ==, 0);
 
   return success;
 }
@@ -762,9 +762,9 @@ store_single_aggregate_event (EmerPersistentCache *cache,
                                          &num_sequences_stored,
                                          capacity);
 
-  g_assert (num_singulars_stored == 0);
-  g_assert (num_aggregates_stored == 1);
-  g_assert (num_sequences_stored == 0);
+  g_assert_cmpint (num_singulars_stored, ==, 0);
+  g_assert_cmpint (num_aggregates_stored, ==, 1);
+  g_assert_cmpint (num_sequences_stored, ==, 0);
 
   return success;
 }
@@ -796,9 +796,9 @@ store_single_sequence_event (EmerPersistentCache *cache,
                                          &num_sequences_stored,
                                          capacity);
 
-  g_assert (num_singulars_stored == 0);
-  g_assert (num_aggregates_stored == 0);
-  g_assert (num_sequences_stored == 1);
+  g_assert_cmpint (num_singulars_stored, ==, 0);
+  g_assert_cmpint (num_aggregates_stored, ==, 0);
+  g_assert_cmpint (num_sequences_stored, ==, 1);
 
   return success;
 }
@@ -941,11 +941,11 @@ test_persistent_cache_new_succeeds (gboolean     *unused,
 {
   GError *error = NULL;
   EmerPersistentCache *cache = make_testing_cache ();
-  g_assert (cache != NULL);
+  g_assert_nonnull (cache);
   g_object_unref (cache);
   if (error != NULL)
     g_error_free (error);
-  g_assert (error == NULL);
+  g_assert_no_error (error);
 }
 
 /*
@@ -979,10 +979,10 @@ test_persistent_cache_store_sets_out_parameters (gboolean     *unused,
                                                  &capacity));
 
   // An empty cache should be in the LOW capacity state.
-  g_assert (capacity == CAPACITY_LOW);
-  g_assert (num_singulars_stored == 0);
-  g_assert (num_aggregates_stored == 0);
-  g_assert (num_sequences_stored == 0);
+  g_assert_cmpint (capacity, ==, CAPACITY_LOW);
+  g_assert_cmpint (num_singulars_stored, ==, 0);
+  g_assert_cmpint (num_aggregates_stored, ==, 0);
+  g_assert_cmpint (num_sequences_stored, ==, 0);
 
   g_object_unref (cache);
 }
@@ -996,7 +996,7 @@ test_persistent_cache_store_one_singular_event_succeeds (gboolean     *unused,
   gboolean success = store_single_singular_event (cache, &capacity);
   g_object_unref (cache);
   g_assert (success);
-  g_assert (capacity == CAPACITY_LOW);
+  g_assert_cmpint (capacity, ==, CAPACITY_LOW);
 }
 
 static void
@@ -1008,7 +1008,7 @@ test_persistent_cache_store_one_aggregate_event_succeeds (gboolean     *unused,
   gboolean success = store_single_aggregate_event (cache, &capacity);
   g_object_unref (cache);
   g_assert (success);
-  g_assert (capacity == CAPACITY_LOW);
+  g_assert_cmpint (capacity, ==, CAPACITY_LOW);
 }
 
 static void
@@ -1020,7 +1020,7 @@ test_persistent_cache_store_one_sequence_event_succeeds (gboolean     *unused,
   gboolean success = store_single_sequence_event (cache, &capacity);
   g_object_unref (cache);
   g_assert (success);
-  g_assert (capacity == CAPACITY_LOW);
+  g_assert_cmpint (capacity, ==, CAPACITY_LOW);
 }
 
 static void
@@ -1057,11 +1057,11 @@ test_persistent_cache_store_one_of_each_succeeds (gboolean     *unused,
 
   g_assert (success);
 
-  g_assert (num_singulars_stored == 1);
-  g_assert (num_aggregates_stored == 1);
-  g_assert (num_sequences_stored == 1);
+  g_assert_cmpint (num_singulars_stored, ==, 1);
+  g_assert_cmpint (num_aggregates_stored, ==, 1);
+  g_assert_cmpint (num_sequences_stored, ==, 1);
 
-  g_assert (capacity == CAPACITY_LOW);
+  g_assert_cmpint (capacity, ==, CAPACITY_LOW);
 }
 
 static void
@@ -1080,9 +1080,9 @@ test_persistent_cache_store_many_succeeds (gboolean     *unused,
   g_object_unref (cache);
   g_assert (success);
 
-  g_assert (num_singulars_stored == num_singulars_made);
-  g_assert (num_aggregates_stored == num_aggregates_made);
-  g_assert (num_sequences_stored == num_sequences_made);
+  g_assert_cmpint (num_singulars_stored, ==, num_singulars_made);
+  g_assert_cmpint (num_aggregates_stored, ==, num_aggregates_made);
+  g_assert_cmpint (num_sequences_stored, ==, num_sequences_made);
 }
 
 static void
@@ -1119,19 +1119,19 @@ test_persistent_cache_store_when_full_succeeds (gboolean     *unused,
 
       if (capacity == CAPACITY_MAX)
         {
-          g_assert (num_singulars_stored <= num_singulars_made);
-          g_assert (num_aggregates_stored <= num_aggregates_made);
-          g_assert (num_sequences_stored <= num_sequences_made);
+          g_assert_cmpint (num_singulars_stored, <=, num_singulars_made);
+          g_assert_cmpint (num_aggregates_stored, <=, num_aggregates_made);
+          g_assert_cmpint (num_sequences_stored, <=, num_sequences_made);
           break;
         }
 
-      g_assert (num_singulars_stored == num_singulars_made);
-      g_assert (num_aggregates_stored == num_aggregates_made);
-      g_assert (num_sequences_stored == num_sequences_made);
+      g_assert_cmpint (num_singulars_stored, ==, num_singulars_made);
+      g_assert_cmpint (num_aggregates_stored, ==, num_aggregates_made);
+      g_assert_cmpint (num_sequences_stored, ==, num_sequences_made);
     }
 
   g_object_unref (cache);
-  g_assert (capacity == CAPACITY_MAX);
+  g_assert_cmpint (capacity, ==, CAPACITY_MAX);
 }
 
 static void
@@ -1171,8 +1171,8 @@ test_persistent_cache_drain_one_singular_event_succeeds (gboolean     *unused,
   g_assert (success);
 
   assert_singulars_equal_variants (singulars_stored, 1, singulars_drained);
-  g_assert (c_array_len (aggregates_drained) == 0);
-  g_assert (c_array_len (sequences_drained) == 0);
+  g_assert_cmpint (c_array_len (aggregates_drained), ==, 0);
+  g_assert_cmpint (c_array_len (sequences_drained), ==, 0);
 
   trash_singular_event (singulars_stored);
 
@@ -1218,9 +1218,9 @@ test_persistent_cache_drain_one_aggregate_event_succeeds (gboolean     *unused,
 
   g_assert (success);
 
-  g_assert (c_array_len (singulars_drained) == 0);
+  g_assert_cmpint (c_array_len (singulars_drained), ==, 0);
   assert_aggregates_equal_variants (aggregates_stored, 1, aggregates_drained);
-  g_assert (c_array_len (sequences_drained) == 0);
+  g_assert_cmpint (c_array_len (sequences_drained), ==, 0);
 
   trash_aggregate_event (aggregates_stored);
 
@@ -1255,7 +1255,7 @@ test_persistent_cache_drain_one_sequence_event_succeeds (gboolean     *unused,
                                        &num_sequences_stored,
                                        &capacity);
 
-  g_assert (num_sequences_stored == 1);
+  g_assert_cmpint (num_sequences_stored, ==, 1);
 
   GVariant **singulars_drained, **aggregates_drained, **sequences_drained;
 
@@ -1268,8 +1268,8 @@ test_persistent_cache_drain_one_sequence_event_succeeds (gboolean     *unused,
 
   g_assert (success);
 
-  g_assert (c_array_len (singulars_drained) == 0);
-  g_assert (c_array_len (aggregates_drained) == 0);
+  g_assert_cmpint (c_array_len (singulars_drained), ==, 0);
+  g_assert_cmpint (c_array_len (aggregates_drained), ==, 0);
   assert_sequences_equal_variants (sequences_stored, 1, sequences_drained);
 
   trash_sequence_event (sequences_stored);
@@ -1360,9 +1360,9 @@ test_persistent_cache_drain_empty_succeeds (gboolean     *unused,
 
   g_assert (success);
 
-  g_assert (c_array_len (singulars_drained) == 0);
-  g_assert (c_array_len (aggregates_drained) == 0);
-  g_assert (c_array_len (sequences_drained) == 0);
+  g_assert_cmpint (c_array_len (singulars_drained), ==, 0);
+  g_assert_cmpint (c_array_len (aggregates_drained), ==, 0);
+  g_assert_cmpint (c_array_len (sequences_drained), ==, 0);
 
   free_variant_c_array (singulars_drained);
   free_variant_c_array (aggregates_drained);
@@ -1414,9 +1414,9 @@ test_persistent_cache_purges_when_out_of_date_succeeds (gboolean     *unused,
                                        MAX_BYTES_TO_READ);
   g_object_unref (cache2);
 
-  g_assert (c_array_len (singulars_drained) == 0);
-  g_assert (c_array_len (aggregates_drained) == 0);
-  g_assert (c_array_len (sequences_drained) == 0);
+  g_assert_cmpint (c_array_len (singulars_drained), ==, 0);
+  g_assert_cmpint (c_array_len (aggregates_drained), ==, 0);
+  g_assert_cmpint (c_array_len (sequences_drained), ==, 0);
 
   free_variant_c_array (singulars_drained);
   free_variant_c_array (aggregates_drained);
@@ -1467,9 +1467,9 @@ test_persistent_cache_wipes_metrics_when_boot_offset_corrupted (gboolean     *un
                                        MAX_BYTES_TO_READ);
 
   // Only an aggregate event should remain.
-  g_assert (c_array_len (singulars_drained) == 0);
-  g_assert (c_array_len (aggregates_drained) == 1);
-  g_assert (c_array_len (sequences_drained) == 0);
+  g_assert_cmpint (c_array_len (singulars_drained), ==, 0);
+  g_assert_cmpint (c_array_len (aggregates_drained), ==, 1);
+  g_assert_cmpint (c_array_len (sequences_drained), ==, 0);
 
   free_variant_c_array (singulars_drained);
   free_variant_c_array (aggregates_drained);
@@ -1564,7 +1564,7 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
   g_assert_no_error (error);
 
   gint64 third_offset = read_offset ();
-  g_assert (third_offset == second_offset);
+  g_assert_cmpint (third_offset, ==, second_offset);
 
   g_object_unref (cache3);
 }
@@ -1602,8 +1602,10 @@ test_persistent_cache_computes_reasonable_offset (gboolean     *unused,
 
   g_assert (boot_timestamp_is_valid (relative_time, absolute_time));
   gint64 second_offset = read_offset ();
-  g_assert (second_offset <= first_offset + ACCEPTABLE_OFFSET_VARIANCE);
-  g_assert (second_offset >= first_offset - ACCEPTABLE_OFFSET_VARIANCE);
+  gint64 max_second_offset = first_offset + ACCEPTABLE_OFFSET_VARIANCE;
+  gint64 min_second_offset = first_offset - ACCEPTABLE_OFFSET_VARIANCE;
+  g_assert_cmpint (second_offset, <=, max_second_offset);
+  g_assert_cmpint (second_offset, >=, min_second_offset);
 
   // This should not have simply reset the metadata file again.
   g_assert (!boot_offset_was_reset ());
@@ -1644,7 +1646,7 @@ test_persistent_cache_builds_boot_metadata_file (gboolean     *unused,
   gint64 second_offset = read_offset();
 
   // The offset should not have changed.
-  g_assert (first_offset == second_offset);
+  g_assert_cmpint (first_offset, ==, second_offset);
   g_assert (boot_offset_was_reset ());
 
   g_object_unref (cache);
@@ -1689,7 +1691,7 @@ test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
 
   g_assert (boot_timestamp_is_valid (relative_time, absolute_time));
 
-  g_assert (first_offset == second_offset);
+  g_assert_cmpint (first_offset, ==, second_offset);
 
   g_object_unref (cache);
 }
@@ -1728,8 +1730,8 @@ test_persistent_cache_get_offset_wont_update_timestamps_if_it_isnt_supposed_to (
   g_assert_no_error (error);
 
    // These timestamps should not have changed.
-   g_assert (relative_time == read_relative_time ());
-   g_assert (absolute_time == read_absolute_time ());
+   g_assert_cmpint (relative_time, ==, read_relative_time ());
+   g_assert_cmpint (absolute_time, ==, read_absolute_time ());
    g_object_unref (cache);
 }
 
@@ -1789,7 +1791,7 @@ test_g_file_measure_disk_usage_returns_zero_on_empty_file (gboolean     *unused,
                                        NULL, NULL, NULL, &disk_usage, NULL,
                                        NULL, &error));
   g_assert_no_error (error);
-  g_assert (disk_usage == 0);
+  g_assert_cmpint (disk_usage, ==, 0);
 
   g_object_unref (file);
   g_unlink (path);

@@ -25,6 +25,7 @@
 
 typedef struct _EmerPersistentCachePrivate
 {
+  gint num_timestamp_updates;
   gint store_metrics_called;
 } EmerPersistentCachePrivate;
 
@@ -66,6 +67,13 @@ emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
                                             GError             **error,
                                             gboolean             always_update_timestamps)
 {
+  if (always_update_timestamps)
+    {
+      EmerPersistentCachePrivate *priv =
+        emer_persistent_cache_get_instance_private (self);
+      priv->num_timestamp_updates++;
+    }
+
   return TRUE;
 }
 
@@ -106,6 +114,15 @@ emer_persistent_cache_store_metrics (EmerPersistentCache *self,
 }
 
 /* API OF MOCK OBJECT */
+
+gint
+mock_persistent_cache_get_num_timestamp_updates (EmerPersistentCache *self)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  return priv->num_timestamp_updates;
+}
 
 /* Return number of calls to emer_persistent_cache_store_metrics() */
 gint

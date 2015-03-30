@@ -12,14 +12,9 @@
 #
 #   Triggers an error if module is absent or present but at a lower version.
 #
-# AUTHORS
-#
-#   Philip Chimento <philip@endlessm.com>
-#   Kurt von Laven <kurt@endlessm.com>
-#
 # LICENSE
 #
-#   Copyright (c) 2015 Endless Mobile, Inc.
+#   Copyright (c) 2015 Endless Mobile, Inc.; contributed by Philip Chimento <philip@endlessm.com> and Kurt von Laven <kurt@endlessm.com>
 #
 #   Copying and distribution of this file, with or without modification, are
 #   permitted in any medium without royalty provided the copyright notice

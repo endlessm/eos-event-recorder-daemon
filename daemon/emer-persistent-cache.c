@@ -698,13 +698,14 @@ update_boot_offset_source_func (EmerPersistentCache *self)
 
 /*
  * Gets the boot time offset and stores it in the out parameter offset.
- * If the always_update_timestamps parameter is FALSE, this will not perform
- * writes to disk to update the timestamps during this operation unless the boot
- * id is out of date, or some corruption is detected which forces a rewrite of
- * the boot timing metadata file.
+ * If the always_update_timestamps parameter is FALSE, does not write to disk
+ * solely to update the timestamps during this operation unless the boot id is
+ * out of date or some corruption is detected that prompts a total rewrite of
+ * the boot timing metadata file. Pass an offset of NULL if you don't care about
+ * its value.
  *
- * Will return TRUE on success. Will return FALSE on failure, will not set the
- * offset in the out parameter and will set the GError if error is not NULL.
+ * Returns TRUE on success. Returns FALSE on failure and sets the error unless
+ * it's NULL. Does not alter the offset out parameter on failure.
  */
 gboolean
 emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
@@ -732,7 +733,10 @@ emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
 
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
-  *offset = priv->boot_offset;
+
+  if (offset != NULL)
+    *offset = priv->boot_offset;
+
   return TRUE;
 }
 

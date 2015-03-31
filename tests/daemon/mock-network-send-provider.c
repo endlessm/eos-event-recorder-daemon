@@ -57,23 +57,20 @@ emer_network_send_provider_new_full (const char *path)
   return emer_network_send_provider_new ();
 }
 
-gboolean
-emer_network_send_provider_get_send_number (EmerNetworkSendProvider *self,
-                                            gint                    *send_number)
+gint
+emer_network_send_provider_get_send_number (EmerNetworkSendProvider *self)
 {
   EmerNetworkSendProviderPrivate *priv =
     emer_network_send_provider_get_instance_private (self);
 
-  *send_number = priv->send_number;
-  return TRUE;
+  return priv->send_number;
 }
 
-gboolean
+void
 emer_network_send_provider_increment_send_number (EmerNetworkSendProvider *self)
 {
   EmerNetworkSendProviderPrivate *priv =
     emer_network_send_provider_get_instance_private (self);
 
   priv->send_number++;
-  return TRUE;
 }

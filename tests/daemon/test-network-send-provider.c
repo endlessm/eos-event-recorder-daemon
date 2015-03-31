@@ -104,9 +104,8 @@ static void
 test_network_send_provider_can_get_send_number (Fixture      *fixture,
                                                 gconstpointer unused)
 {
-  gint send_number;
-  g_assert (emer_network_send_provider_get_send_number (fixture->network_send_provider,
-                                                        &send_number));
+  gint send_number =
+    emer_network_send_provider_get_send_number (fixture->network_send_provider);
   g_assert_cmpint (send_number, ==, STARTING_SEND_NUMBER);
 }
 
@@ -115,18 +114,16 @@ test_network_send_provider_caches_send_number (Fixture      *fixture,
                                                gconstpointer unused)
 {
   // First read should cache the value.
-  gint first_send_number;
-  g_assert (emer_network_send_provider_get_send_number (fixture->network_send_provider,
-                                                        &first_send_number));
+  gint first_send_number =
+    emer_network_send_provider_get_send_number (fixture->network_send_provider);
 
   g_assert_cmpint (first_send_number, ==, STARTING_SEND_NUMBER);
 
   // This key_file should now be ignored by the provider.
   write_testing_keyfile (fixture, OTHER_KEY_FILE);
 
-  gint second_send_number;
-  g_assert (emer_network_send_provider_get_send_number (fixture->network_send_provider,
-                                                        &second_send_number));
+  gint second_send_number =
+    emer_network_send_provider_get_send_number (fixture->network_send_provider);
 
   // Should not have changed.
   g_assert_cmpint (second_send_number, ==, STARTING_SEND_NUMBER);
@@ -136,11 +133,10 @@ static void
 test_network_send_provider_can_increment_send_number (Fixture      *fixture,
                                                       gconstpointer unused)
 {
-  g_assert (emer_network_send_provider_increment_send_number (fixture->network_send_provider));
+  emer_network_send_provider_increment_send_number (fixture->network_send_provider);
 
-  gint incremented_send_number;
-  g_assert (emer_network_send_provider_get_send_number (fixture->network_send_provider,
-                                                        &incremented_send_number));
+  gint incremented_send_number =
+    emer_network_send_provider_get_send_number (fixture->network_send_provider);
   g_assert_cmpint (incremented_send_number, ==, STARTING_SEND_NUMBER + 1);
 }
 
@@ -154,24 +150,20 @@ test_network_send_provider_resets_when_corrupted (Fixture      *fixture,
                          "*Failed to read from network send file. "
                          "Resetting data.*");
 
-  // Value will never be mutated by the failing function.
-  gint starting_invalid_send_number = -1;
-  gint invalid_send_number = starting_invalid_send_number;
-
-  // Reading from an invalid file should reset the key file and throw a warning.
-  g_assert_false (emer_network_send_provider_get_send_number (fixture->network_send_provider,
-                                                              &invalid_send_number));
+  // Reading from an invalid file should reset the key file and log a warning.
+  gint first_send_number =
+    emer_network_send_provider_get_send_number (fixture->network_send_provider);
 
   g_test_assert_expected_messages ();
-  g_assert_cmpint (invalid_send_number, ==, starting_invalid_send_number);
+  g_assert_cmpint (first_send_number, ==, RESET_SEND_NUMBER);
 
-  /* Setting this to a non-0 value to prevent a false positive. The reset values
-     are 0, so this will avoid that. */
-  gint reset_send_number = -1;
-
-  g_assert (emer_network_send_provider_get_send_number (fixture->network_send_provider,
-                                                        &reset_send_number));
-  g_assert_cmpint (reset_send_number, ==, RESET_SEND_NUMBER);
+  /*
+   * This time the key file should already exist and no warning should be
+   * logged.
+   */
+  gint second_send_number =
+    emer_network_send_provider_get_send_number (fixture->network_send_provider);
+  g_assert_cmpint (second_send_number, ==, RESET_SEND_NUMBER);
 }
 
 int

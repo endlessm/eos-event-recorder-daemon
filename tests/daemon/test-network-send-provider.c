@@ -118,6 +118,7 @@ test_network_send_provider_caches_send_number (Fixture      *fixture,
   gint first_send_number;
   g_assert (emer_network_send_provider_get_send_number (fixture->network_send_provider,
                                                         &first_send_number));
+
   g_assert_cmpint (first_send_number, ==, STARTING_SEND_NUMBER);
 
   // This key_file should now be ignored by the provider.

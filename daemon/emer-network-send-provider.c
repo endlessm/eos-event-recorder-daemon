@@ -198,6 +198,7 @@ read_network_send_data (EmerNetworkSendProvider *self)
 {
   EmerNetworkSendProviderPrivate *priv =
     emer_network_send_provider_get_instance_private (self);
+
   if (priv->data_cached)
     return TRUE;
 

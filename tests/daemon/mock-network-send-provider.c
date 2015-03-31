@@ -63,6 +63,7 @@ emer_network_send_provider_get_send_number (EmerNetworkSendProvider *self,
 {
   EmerNetworkSendProviderPrivate *priv =
     emer_network_send_provider_get_instance_private (self);
+
   *send_number = priv->send_number;
   return TRUE;
 }
@@ -72,6 +73,7 @@ emer_network_send_provider_increment_send_number (EmerNetworkSendProvider *self)
 {
   EmerNetworkSendProviderPrivate *priv =
     emer_network_send_provider_get_instance_private (self);
+
   priv->send_number++;
   return TRUE;
 }

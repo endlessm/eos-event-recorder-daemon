@@ -21,6 +21,8 @@
 #   and this notice are preserved. This file is offered as-is, without any
 #   warranty.
 
+#serial 1
+
 AC_DEFUN([AX_PYTHON_MODULE_VERSION], [
     AX_PYTHON_MODULE([$1], [required])
     AC_MSG_CHECKING([for version $2 or higher of $1])

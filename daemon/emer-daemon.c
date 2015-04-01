@@ -1242,7 +1242,9 @@ emer_daemon_finalize (GObject *object)
   g_source_remove (priv->upload_events_timeout_source_id);
 
   flush_to_persistent_cache (self);
+  g_clear_object (&priv->persistent_cache);
   release_shutdown_inhibitor (self);
+
   g_clear_object (&priv->login_manager_proxy);
   g_clear_object (&priv->ping_socket);
   g_free (priv->proxy_server_uri);
@@ -1252,7 +1254,6 @@ emer_daemon_finalize (GObject *object)
   g_clear_object (&priv->machine_id_provider);
   g_clear_object (&priv->network_send_provider);
   g_clear_object (&priv->permissions_provider);
-  g_clear_object (&priv->persistent_cache);
   // Do not free the GNetworkMonitor.  It is transfer none.
 
   free_singular_buffer (priv->singular_buffer, priv->num_singulars_buffered);

@@ -613,10 +613,8 @@ create_request_body (EmerDaemon *self)
   GVariantBuilder machine_id_builder;
   get_uuid_builder (machine_id, &machine_id_builder);
 
-  gint send_number;
-  if (!emer_network_send_provider_get_send_number (priv->network_send_provider,
-                                                   &send_number))
-    return NULL;
+  gint send_number =
+    emer_network_send_provider_get_send_number (priv->network_send_provider);
   emer_network_send_provider_increment_send_number (priv->network_send_provider);
 
   GVariantBuilder singulars_builder;

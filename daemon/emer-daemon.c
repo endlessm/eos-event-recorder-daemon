@@ -955,8 +955,8 @@ handle_login_manager_signal (GDBusProxy *dbus_proxy,
       g_variant_get_child (parameters, 0, "b", &shutting_down);
       if (shutting_down)
         {
-          update_timestamps (self);
           flush_to_persistent_cache (self);
+          update_timestamps (self);
           release_shutdown_inhibitor (self);
         }
       else

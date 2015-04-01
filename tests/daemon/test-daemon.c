@@ -465,8 +465,31 @@ test_daemon_inhibits_shutdown (Fixture      *fixture,
 }
 
 static void
-test_daemon_flushes_to_persistent_cache_once_on_shutdown (Fixture      *fixture,
-                                                          gconstpointer unused)
+test_daemon_updates_timestamps_on_shutdown (Fixture      *fixture,
+                                            gconstpointer unused)
+{
+  start_mock_logind_service (fixture);
+
+  gint num_timestamp_updates_before =
+    mock_persistent_cache_get_num_timestamp_updates (fixture->mock_persistent_cache);
+
+  await_shutdown_inhibit (fixture);
+  emit_shutdown_signal (TRUE);
+
+  // Wait for EmerDaemon to handle the signal.
+  while (g_main_context_pending (NULL))
+    g_main_context_iteration (NULL, TRUE);
+
+  gint num_timestamp_updates_after =
+    mock_persistent_cache_get_num_timestamp_updates (fixture->mock_persistent_cache);
+  g_assert_cmpint (num_timestamp_updates_after, ==, num_timestamp_updates_before + 1);
+
+  terminate_mock_logind_service_and_wait (fixture);
+}
+
+static void
+test_daemon_flushes_to_persistent_cache_on_shutdown (Fixture      *fixture,
+                                                     gconstpointer unused)
 {
   start_mock_logind_service (fixture);
 
@@ -516,8 +539,7 @@ main (int                argc,
   g_test_add ((path), Fixture, NULL, setup, (test_func), teardown)
 
   ADD_DAEMON_TEST ("/daemon/new-succeeds", test_daemon_new_succeeds);
-  ADD_DAEMON_TEST ("/daemon/new-full-succeeds",
-                   test_daemon_new_full_succeeds);
+  ADD_DAEMON_TEST ("/daemon/new-full-succeeds", test_daemon_new_full_succeeds);
   ADD_DAEMON_TEST ("/daemon/can-record-singular-event",
                    test_daemon_can_record_singular_event);
   ADD_DAEMON_TEST ("/daemon/can-record-aggregate-events",
@@ -531,8 +553,10 @@ main (int                argc,
   ADD_DAEMON_TEST ("/daemon/does-not-record-event-sequence-if-not-allowed",
                    test_daemon_does_not_record_event_sequence_if_not_allowed);
   ADD_DAEMON_TEST ("/daemon/inhibits-shutdown", test_daemon_inhibits_shutdown);
-  ADD_DAEMON_TEST ("/daemon/flushes-to-persistent-cache-once-on-shutdown",
-                   test_daemon_flushes_to_persistent_cache_once_on_shutdown);
+  ADD_DAEMON_TEST ("/daemon/updates-timestamps-on-shutdown",
+                   test_daemon_updates_timestamps_on_shutdown);
+  ADD_DAEMON_TEST ("/daemon/flushes-to-persistent-cache-on-shutdown",
+                   test_daemon_flushes_to_persistent_cache_on_shutdown);
   ADD_DAEMON_TEST ("/daemon/reinhibits-shutdown-on-shutdown-cancel",
                    test_daemon_reinhibits_shutdown_on_shutdown_cancel);
 

@@ -191,15 +191,19 @@ reset_network_send_data (EmerNetworkSendProvider *self)
                   error->message);
       g_error_free (error);
     }
+
+  priv->send_number = 0;
+  priv->data_cached = TRUE;
 }
 
-static gboolean
+static void
 read_network_send_data (EmerNetworkSendProvider *self)
 {
   EmerNetworkSendProviderPrivate *priv =
     emer_network_send_provider_get_instance_private (self);
+
   if (priv->data_cached)
-    return TRUE;
+    return;
 
   GError *error = NULL;
   if (!g_key_file_load_from_file (priv->key_file, priv->path, G_KEY_FILE_NONE,
@@ -214,38 +218,29 @@ read_network_send_data (EmerNetworkSendProvider *self)
     goto handle_failed_read;
 
   priv->data_cached = TRUE;
-  return TRUE;
+  return;
 
 handle_failed_read:
   g_warning ("Failed to read from network send file. Resetting data. "
              "Error: %s.", error->message);
   g_error_free (error);
   reset_network_send_data (self);
-  return FALSE;
 }
 
 /*
  * emer_network_send_provider_get_send_number:
  * @self: the network send provider.
- * @send_number: the address of the gint to store the send number in.
  *
- * Retrieves the network send number.
- *
- * Returns: a boolean indicating success or failure of retrieval.
- * If this returns %FALSE, 'send_number' will be unaltered.
+ * Returns the network send number.
  */
-gboolean
-emer_network_send_provider_get_send_number (EmerNetworkSendProvider *self,
-                                            gint                    *send_number)
+gint
+emer_network_send_provider_get_send_number (EmerNetworkSendProvider *self)
 {
   EmerNetworkSendProviderPrivate *priv =
     emer_network_send_provider_get_instance_private (self);
 
-  if (!read_network_send_data (self))
-    return FALSE;
-
-  *send_number = priv->send_number;
-  return TRUE;
+  read_network_send_data (self);
+  return priv->send_number;
 }
 
 /*
@@ -254,17 +249,14 @@ emer_network_send_provider_get_send_number (EmerNetworkSendProvider *self,
  *
  * Increments the network send number and creates a new metadata file if one
  * doesn't already exist.
- *
- * Returns: %TRUE on success, and %FALSE on failure.
  */
-gboolean
+void
 emer_network_send_provider_increment_send_number (EmerNetworkSendProvider *self)
 {
   EmerNetworkSendProviderPrivate *priv =
     emer_network_send_provider_get_instance_private (self);
 
-  if (!read_network_send_data (self))
-    return FALSE;
+  read_network_send_data (self);
 
   g_key_file_set_integer (priv->key_file, NETWORK_SEND_GROUP,
                           NETWORK_SEND_KEY, priv->send_number + 1);
@@ -274,9 +266,7 @@ emer_network_send_provider_increment_send_number (EmerNetworkSendProvider *self)
       g_critical ("Failed to write to network send file. Error: %s.",
                   error->message);
       g_error_free (error);
-      return FALSE;
     }
 
   priv->send_number++;
-  return TRUE;
 }

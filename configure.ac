@@ -35,7 +35,7 @@ AC_INIT([EOS Event Recorder Daemon], [0.0.0],
 # Verify that the source directory can be found
 AC_CONFIG_SRCDIR([daemon/emer-daemon.h])
 # Initialize Automake: enable all warnings and do not insist on GNU standards.
-# no-portability suppresses warnings about syntax specific to GNU make
+# no-portability suppresses warnings about syntax specific to GNU make.
 # parallel-tests specifies that we use the new parallel-running test harness.
 # Unlike serial-tests, this option is accepted by Automake 1.11.
 # subdir-objects ensures forward compatibility with Automake 2.0 and can be

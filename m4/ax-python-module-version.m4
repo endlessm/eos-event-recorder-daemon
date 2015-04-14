@@ -1,6 +1,6 @@
-# ==================================================================================
-#     http://www.gnu.org/software/autoconf-archive/ax_python_module_version.html
-# ==================================================================================
+# ============================================================================
+#  http://www.gnu.org/software/autoconf-archive/ax_python_module_version.html
+# ============================================================================
 #
 # SYNOPSIS
 #
@@ -12,24 +12,21 @@
 #
 #   Triggers an error if module is absent or present but at a lower version.
 #
-# AUTHORS
-#
-#   Philip Chimento <philip@endlessm.com>
-#   Kurt von Laven <kurt@endlessm.com>
-#
 # LICENSE
 #
-#   Copyright (c) 2015 Endless Mobile, Inc.
+#   Copyright (c) 2015 Endless Mobile, Inc.; contributed by Philip Chimento <philip@endlessm.com> and Kurt von Laven <kurt@endlessm.com>
 #
 #   Copying and distribution of this file, with or without modification, are
 #   permitted in any medium without royalty provided the copyright notice
 #   and this notice are preserved. This file is offered as-is, without any
 #   warranty.
 
+#serial 1
+
 AC_DEFUN([AX_PYTHON_MODULE_VERSION], [
     AX_PYTHON_MODULE([$1], [required])
     AC_MSG_CHECKING([for version $2 or higher of $1])
-    $PYTHON -c "import sys, $1; from distutils.version import StrictVersion; sys.exit(0 if StrictVersion($1.__version__) >= StrictVersion('$2') else 1)" 2> /dev/null
+    $PYTHON -c "import sys, $1; from distutils.version import StrictVersion; sys.exit(StrictVersion($1.__version__) < StrictVersion('$2'))" 2> /dev/null
     AS_IF([test $? -eq 0], [], [
         AC_MSG_RESULT([no])
         AC_MSG_ERROR([You need at least version $2 of the $1 Python module.])

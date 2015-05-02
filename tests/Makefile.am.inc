@@ -124,7 +124,7 @@ DBUSDAEMON_LOG_COMPILER = $(top_srcdir)/tests/launch-mock-dbus-tests.sh
 AM_DBUSDAEMON_LOG_FLAGS = -k --verbose
 LOG_COMPILER = gtester
 AM_LOG_FLAGS = -k --verbose
-PY_LOG_COMPILER = python
+PY_LOG_COMPILER = python3
 
 EXTRA_DIST += \
 	tests/test-opt-out-integration.py \

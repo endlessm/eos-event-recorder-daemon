@@ -152,7 +152,7 @@ AS_IF([test -f $EVENT_RECORDER_SERVER_XML],
 PKG_CHECK_MODULES([EOS_EVENT_RECORDER_DAEMON], [$EMER_REQUIRED_MODULES])
 
 # This indicates a required dbus mocking interface for unit testing.
-AX_PYTHON_MODULE_VERSION([dbusmock], 0.10)
+AX_PYTHON_MODULE_VERSION([dbusmock], 0.10, [python])
 
 # Code coverage
 # -------------

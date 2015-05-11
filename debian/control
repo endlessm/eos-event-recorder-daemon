@@ -11,7 +11,7 @@ Build-Depends: autotools-dev,
                libpolkit-gobject-1-dev,
                libsoup2.4-dev (>= 2.42),
                pkg-config,
-               python-dbusmock,
+               python3-dbusmock,
                systemd,
                uuid-dev
 Build-Conflicts: libostree-dev (>= 2013.7)

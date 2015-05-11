@@ -1612,13 +1612,12 @@ emer_persistent_cache_may_fail_init (GInitable    *self,
                                      GCancellable *cancellable,
                                      GError      **error)
 {
-  gboolean versioning_success = apply_cache_versioning (EMER_PERSISTENT_CACHE (self),
-                                                        cancellable,
-                                                        error);
-  if (!versioning_success)
+  EmerPersistentCache *persistent_cache = EMER_PERSISTENT_CACHE (self);
+
+  if (!apply_cache_versioning (persistent_cache, cancellable, error))
     return FALSE;
 
-  return load_cache_size (EMER_PERSISTENT_CACHE (self), cancellable, error);
+  return load_cache_size (persistent_cache, cancellable, error);
 }
 
 static void

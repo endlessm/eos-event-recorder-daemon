@@ -113,8 +113,7 @@ G_DEFINE_TYPE_WITH_CODE (EmerPersistentCache, emer_persistent_cache, G_TYPE_OBJE
 
 /*
  * The amount of time (in seconds) between every periodic update to the boot
- * offset file is made. This will primarily keep our relative timestamps more
- * accurate.
+ * offset file. This will primarily keep our relative timestamps more accurate.
  */
 #define DEFAULT_BOOT_TIMESTAMPS_UPDATE (60u * 60u)
 

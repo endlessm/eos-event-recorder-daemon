@@ -1242,15 +1242,6 @@ emer_persistent_cache_store_metrics (EmerPersistentCache  *self,
   *num_aggregates_stored = 0;
   *num_sequences_stored = 0;
 
-  G_LOCK (update_boot_offset);
-  if (!update_boot_offset (self, FALSE)) // Typically don't update timestamps.
-    {
-      g_critical ("Couldn't update the boot offset, dropping metrics.");
-      G_UNLOCK (update_boot_offset);
-      return FALSE;
-    }
-  G_UNLOCK (update_boot_offset);
-
   if (*capacity == CAPACITY_MAX)
     return TRUE;
 
@@ -1615,6 +1606,17 @@ emer_persistent_cache_may_fail_init (GInitable    *self,
 
   if (!apply_cache_versioning (persistent_cache, cancellable, error))
     return FALSE;
+
+  G_LOCK (update_boot_offset);
+  if (!update_boot_offset (persistent_cache, FALSE))
+    {
+      g_critical ("Couldn't update the boot offset upon initialization.");
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                   "Couldn't update the boot offset upon initialization.");
+      G_UNLOCK (update_boot_offset);
+      return FALSE;
+    }
+  G_UNLOCK (update_boot_offset);
 
   return load_cache_size (persistent_cache, cancellable, error);
 }

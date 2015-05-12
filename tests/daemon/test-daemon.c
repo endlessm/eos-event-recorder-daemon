@@ -107,7 +107,7 @@ static void
 start_mock_logind_service (Fixture *fixture)
 {
   fixture->logind_mock = g_subprocess_new (G_SUBPROCESS_FLAGS_STDOUT_PIPE, NULL,
-                                           "python", "-m", "dbusmock",
+                                           "python3", "-m", "dbusmock",
                                            "--system", "--template", "logind",
                                            NULL);
   g_assert_nonnull (fixture->logind_mock);

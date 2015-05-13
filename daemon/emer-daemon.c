@@ -770,6 +770,11 @@ upload_events (GNetworkMonitor *source_object,
   if (!priv->recording_enabled)
     return;
 
+  gboolean uploading_enabled =
+    emer_permissions_provider_get_uploading_enabled (priv->permissions_provider);
+  if (!uploading_enabled)
+    return;
+
   GError *error = NULL;
   if (!g_network_monitor_can_reach_finish (priv->network_monitor, res, &error))
     {

@@ -98,13 +98,13 @@ typedef struct {
 /* Callback for notify::daemon-enabled that records what it was called with and
 quits the main loop so the test can continue. */
 static void
-on_notify_daemon_enabled (GObject    *test_object,
-                          GParamSpec *pspec,
-                          Fixture    *fixture)
+on_notify_daemon_enabled (EmerPermissionsProvider *permissions_provider,
+                          GParamSpec              *pspec,
+                          Fixture                 *fixture)
 {
   if (!fixture->notify_daemon_called)
     fixture->notify_daemon_called_with =
-      emer_permissions_provider_get_daemon_enabled (EMER_PERMISSIONS_PROVIDER (test_object));
+      emer_permissions_provider_get_daemon_enabled (permissions_provider);
   fixture->notify_daemon_called = TRUE;
   g_main_loop_quit (fixture->main_loop);
 }

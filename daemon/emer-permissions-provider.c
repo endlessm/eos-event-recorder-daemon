@@ -98,7 +98,7 @@ write_config_file_sync (EmerPermissionsProvider *self)
   if (!g_key_file_save_to_file (priv->permissions, permissions_config_file_path,
       &error))
     {
-      g_critical ("Could not write to permissions config file '%s': %s.",
+      g_critical ("Could not write to permissions config file '%s'. Error: %s.",
                   permissions_config_file_path, error->message);
       g_clear_error (&error);
     }
@@ -126,7 +126,7 @@ read_config_file_sync (EmerPermissionsProvider *self)
       if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT) &&
           !g_error_matches (error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_NOT_FOUND))
         g_critical ("Permissions config file '%s' was invalid or could not be "
-                    "read. Loading fallback data. Message: %s.", path,
+                    "read. Loading fallback data. Error: %s.", path,
                     error->message);
       /* but if the config file was simply not there, fail silently and stick
       with the defaults */
@@ -268,7 +268,7 @@ read_environment (EmerPermissionsProvider *self)
   if (error != NULL)
     {
       g_critical ("Couldn't find key '%s:%s' in permissions config file. "
-                  "Returning default value. Message: %s.",
+                  "Returning default value. Error: %s.",
                   DAEMON_GLOBAL_GROUP_NAME, DAEMON_ENVIRONMENT_KEY_NAME,
                   error->message);
       g_error_free (error);
@@ -504,7 +504,7 @@ emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self)
   if (error != NULL)
     {
       g_critical ("Couldn't find key '%s:%s' in permissions config file. "
-                  "Returning default value. Message: %s.",
+                  "Returning default value. Error: %s.",
                   DAEMON_GLOBAL_GROUP_NAME, DAEMON_ENABLED_KEY_NAME,
                   error->message);
       g_error_free (error);

@@ -104,7 +104,7 @@ write_mock_system_boot_id_file (void)
 }
 
 static void
-write_default_cache_version_key_file_to_disk (void)
+write_default_cache_version_key_file (void)
 {
   GKeyFile *key_file = g_key_file_new ();
   g_assert (g_key_file_load_from_data (key_file,
@@ -161,7 +161,7 @@ setup (gboolean     *unused,
   g_mkdir (TEST_DIRECTORY, 0777); // All permissions are granted by 0777.
   write_cache_size_file ();
   write_mock_system_boot_id_file ();
-  write_default_cache_version_key_file_to_disk ();
+  write_default_cache_version_key_file ();
   write_empty_metrics_files ();
 }
 

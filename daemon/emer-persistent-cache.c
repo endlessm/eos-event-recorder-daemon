@@ -1421,7 +1421,7 @@ set_boot_id_provider (EmerPersistentCache *self,
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  if (priv->boot_id_provider == NULL)
+  if (boot_id_provider == NULL)
     priv->boot_id_provider = emer_boot_id_provider_new ();
   else
     priv->boot_id_provider = g_object_ref_sink (boot_id_provider);

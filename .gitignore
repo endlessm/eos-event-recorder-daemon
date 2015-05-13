@@ -1,6 +1,7 @@
 # Build products
 /eos-event-recorder-daemon-0.0.0
 /tests/daemon/test-boot-id-provider
+/tests/daemon/test-cache-size-provider
 /tests/daemon/test-cache-version-provider
 /tests/daemon/test-daemon.dbusdaemon
 /tests/daemon/test-machine-id-provider

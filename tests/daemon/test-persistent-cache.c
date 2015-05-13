@@ -30,6 +30,7 @@
 
 #define TEST_DIRECTORY "/tmp/metrics_testing/"
 
+#define TEST_CACHE_SIZE_FILE "cache_size_file"
 #define TEST_SYSTEM_BOOT_ID_FILE "system_boot_id_file"
 #define TEST_CACHE_VERSION_FILE "local_version_file"
 
@@ -39,7 +40,6 @@
 #define FAKE_BOOT_OFFSET 4000000000 // 4 seconds
 
 #define TEST_UPDATE_OFFSET_INTERVAL (60u * 60u) // 1 hour
-#define TEST_SIZE 1024000u
 
 /*
  * The expected size in bytes of the boot id file we want to mock, located at
@@ -64,11 +64,32 @@
   "relative_time=2516952859775\n" \
   "boot_id=299a89b4-72c2-455a-b2d3-13c1a7c8c11f\n"
 
+#define CACHE_SIZE_KEY_FILE_DATA \
+  "[persistent_cache_size]\n" \
+  "maximum=92160\n"
+
 #define DEFAULT_CACHE_VERSION_KEY_FILE_DATA \
   "[cache_version_info]\n" \
   "version=2\n"
 
 // ---- Helper functions come first ----
+
+static void
+write_cache_size_file (void)
+{
+  GKeyFile *key_file = g_key_file_new ();
+  GError *error = NULL;
+  g_key_file_load_from_data (key_file, CACHE_SIZE_KEY_FILE_DATA, -1,
+                             G_KEY_FILE_NONE, &error);
+  g_assert_no_error (error);
+
+  g_key_file_save_to_file (key_file, TEST_DIRECTORY TEST_CACHE_SIZE_FILE,
+                           &error);
+  g_assert_no_error (error);
+
+  g_key_file_unref (key_file);
+}
+
 
 static void
 write_mock_system_boot_id_file (void)
@@ -137,6 +158,7 @@ setup (gboolean     *unused,
 {
   teardown (unused, dontuseme);
   g_mkdir (TEST_DIRECTORY, 0777); // All permissions are granted by 0777.
+  write_cache_size_file ();
   write_mock_system_boot_id_file ();
   write_default_cache_version_key_file_to_disk ();
   write_empty_metrics_files ();
@@ -146,14 +168,19 @@ static EmerPersistentCache *
 make_testing_cache (void)
 {
   GError *error = NULL;
+  EmerCacheSizeProvider *cache_size_provider =
+    emer_cache_size_provider_new_full (TEST_DIRECTORY TEST_CACHE_SIZE_FILE);
   EmerBootIdProvider *boot_id_provider =
     emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
   EmerCacheVersionProvider *cache_version_provider =
     emer_cache_version_provider_new_full (TEST_DIRECTORY TEST_CACHE_VERSION_FILE);
   EmerPersistentCache *cache =
-    emer_persistent_cache_new_full (NULL, &error, TEST_DIRECTORY, TEST_SIZE,
-                                    boot_id_provider, cache_version_provider,
+    emer_persistent_cache_new_full (NULL, &error, TEST_DIRECTORY,
+                                    cache_size_provider, boot_id_provider,
+                                    cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL);
+
+  g_object_unref (cache_size_provider);
   g_object_unref (boot_id_provider);
   g_object_unref (cache_version_provider);
   g_assert_no_error (error);
@@ -1086,14 +1113,16 @@ static void
 test_persistent_cache_store_when_full_succeeds (gboolean     *unused,
                                                 gconstpointer dontuseme)
 {
-  guint64 space_in_bytes = 3000u;
+  EmerCacheSizeProvider *cache_size_provider =
+    emer_cache_size_provider_new_full (TEST_DIRECTORY TEST_CACHE_SIZE_FILE);
   EmerBootIdProvider *boot_id_provider =
     emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
   EmerCacheVersionProvider *cache_version_provider =
     emer_cache_version_provider_new_full (TEST_DIRECTORY TEST_CACHE_VERSION_FILE);
   EmerPersistentCache *cache =
-    emer_persistent_cache_new_full (NULL, NULL, TEST_DIRECTORY, space_in_bytes,
-                                    boot_id_provider, cache_version_provider,
+    emer_persistent_cache_new_full (NULL, NULL, TEST_DIRECTORY,
+                                    cache_size_provider, boot_id_provider,
+                                    cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL);
 
   g_object_unref (cache_version_provider);
@@ -1103,7 +1132,10 @@ test_persistent_cache_store_when_full_succeeds (gboolean     *unused,
 
   // Store a ton, until it is full.
   // TODO: Find a less hacky way of doing this.
-  gint iterations = space_in_bytes / 150;
+  guint64 max_cache_size =
+    emer_cache_size_provider_get_max_cache_size (cache_size_provider);
+  g_object_unref (cache_size_provider);
+  gint iterations = max_cache_size / 150;
   for (gint i = 0; i < iterations; i++)
     {
       gint num_singulars_made, num_aggregates_made, num_sequences_made;
@@ -1370,15 +1402,19 @@ static void
 test_persistent_cache_purges_when_out_of_date_succeeds (gboolean     *unused,
                                                         gconstpointer dontuseme)
 {
+  EmerCacheSizeProvider *cache_size_provider =
+    emer_cache_size_provider_new_full (TEST_DIRECTORY TEST_CACHE_SIZE_FILE);
   EmerBootIdProvider *boot_id_provider =
     emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
   EmerCacheVersionProvider *cache_version_provider =
     emer_cache_version_provider_new_full (TEST_DIRECTORY TEST_CACHE_VERSION_FILE);
   EmerPersistentCache *cache =
-    emer_persistent_cache_new_full (NULL, NULL, TEST_DIRECTORY, TEST_SIZE,
-                                    boot_id_provider, cache_version_provider,
+    emer_persistent_cache_new_full (NULL, NULL, TEST_DIRECTORY,
+                                    cache_size_provider, boot_id_provider,
+                                    cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL);
 
+  g_object_unref (cache_size_provider);
   g_object_unref (boot_id_provider);
 
   gint num_singulars_made, num_aggregates_made, num_sequences_made;

@@ -180,11 +180,11 @@ make_testing_cache (void)
                                     cache_size_provider, boot_id_provider,
                                     cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL);
+  g_assert_no_error (error);
 
   g_object_unref (cache_size_provider);
   g_object_unref (boot_id_provider);
   g_object_unref (cache_version_provider);
-  g_assert_no_error (error);
 
   return cache;
 }

@@ -134,10 +134,10 @@ read_config_file_sync (EmerPermissionsProvider *self)
       g_clear_error (&error);
     }
 
+  g_free (path);
+
   g_object_notify_by_pspec (G_OBJECT (self),
                             emer_permissions_provider_props[PROP_DAEMON_ENABLED]);
-
-  g_free (path);
 }
 
 /* Helper function to run write_config_file_sync() in another thread. */

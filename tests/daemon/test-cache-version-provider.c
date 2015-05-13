@@ -31,7 +31,6 @@
  "[cache_version_info]\n" \
  "version=40\n"
 
-#define SECOND_VERSION 42
 #define SECOND_KEY_FILE \
  "[cache_version_info]\n" \
  "version=42\n"

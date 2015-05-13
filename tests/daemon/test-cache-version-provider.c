@@ -65,6 +65,7 @@ setup (Fixture      *fixture,
 {
   GFileIOStream *stream;
   fixture->tmp_file = g_file_new_tmp (TESTING_FILE_PATH, &stream, NULL);
+  g_object_unref (stream);
   fixture->tmp_path = g_file_get_path (fixture->tmp_file);
 
   fixture->key_file = g_key_file_new ();

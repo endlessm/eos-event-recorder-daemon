@@ -436,6 +436,8 @@ make_persistent_cache (GFile *directory)
                                     BOOT_OFFSET_UPDATE_INTERVAL);
   g_free (directory_path_with_slash);
   g_object_unref (cache_size_provider);
+  g_object_unref (boot_id_provider);
+  g_object_unref (cache_version_provider);
 
   if (persistent_cache == NULL)
     g_error_free (error);

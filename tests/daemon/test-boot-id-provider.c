@@ -66,6 +66,7 @@ setup (struct Fixture *fixture,
 {
   GFileIOStream *stream;
   fixture->tmp_file = g_file_new_tmp (TESTING_FILE_PATH, &stream, NULL);
+  g_object_unref (stream);
   g_assert (fixture->tmp_file != NULL);
   write_testing_boot_id (fixture, FIRST_TESTING_ID);
   gchar *path = g_file_get_path (fixture->tmp_file);

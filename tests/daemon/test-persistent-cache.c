@@ -114,6 +114,7 @@ write_default_cache_version_key_file_to_disk (void)
   g_assert (g_key_file_save_to_file (key_file,
                                      TEST_DIRECTORY TEST_CACHE_VERSION_FILE,
                                      NULL));
+  g_key_file_unref (key_file);
 }
 
 static void

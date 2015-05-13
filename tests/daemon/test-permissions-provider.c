@@ -458,14 +458,14 @@ main (int                argc,
 #define ADD_PERMISSIONS_PROVIDER_TEST(path, file_contents, setup, test_func) \
   g_test_add ((path), Fixture, (file_contents), (setup), (test_func), teardown);
 
-  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/existing-permissions-config-file",
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/valid-file",
                                  PERMISSIONS_CONFIG_FILE_ENABLED_TEST,
                                  setup_with_config_file,
                                  test_permissions_provider_new);
-  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/absent-permissions-config-file",
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/absent-file",
                                  NULL, setup_with_config_file,
                                  test_permissions_provider_new);
-  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/invalid-permissions-config-file",
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/invalid-file",
                                  PERMISSIONS_CONFIG_FILE_INVALID,
                                  setup_invalid_file,
                                  test_permissions_provider_new_invalid_file);
@@ -477,7 +477,7 @@ main (int                argc,
                                  PERMISSIONS_CONFIG_FILE_DISABLED_TEST,
                                  setup_with_config_file,
                                  test_permissions_provider_get_daemon_enabled_false);
-  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/invalid-permissions-config-file",
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/invalid-file",
                                  PERMISSIONS_CONFIG_FILE_INVALID,
                                  setup_invalid_file,
                                  test_permissions_provider_get_daemon_enabled_fallback);

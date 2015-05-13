@@ -185,6 +185,7 @@ make_testing_cache (void)
   g_object_unref (boot_id_provider);
   g_object_unref (cache_version_provider);
   g_assert_no_error (error);
+
   return cache;
 }
 

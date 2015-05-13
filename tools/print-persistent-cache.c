@@ -422,6 +422,7 @@ make_persistent_cache (GFile *directory)
 
   EmerCacheSizeProvider *cache_size_provider = emer_cache_size_provider_new ();
   EmerBootIdProvider *boot_id_provider = emer_boot_id_provider_new ();
+
   gchar *cache_version_path =
     g_strconcat (directory_path_with_slash, CACHE_VERSION_FILENAME, NULL);
   EmerCacheVersionProvider *cache_version_provider =

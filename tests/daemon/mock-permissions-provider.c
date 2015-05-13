@@ -102,7 +102,7 @@ emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
 
 /* API OF MOCK OBJECT */
 
-/* Return number of calls to emer_permissions_provider_get_daemon_enabled() */
+/* Return number of calls to emer_permissions_provider_get_daemon_enabled(). */
 gint
 mock_permissions_provider_get_daemon_enabled_called (EmerPermissionsProvider *self)
 {

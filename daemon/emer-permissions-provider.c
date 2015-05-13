@@ -128,8 +128,8 @@ read_config_file_sync (EmerPermissionsProvider *self)
         g_critical ("Permissions config file '%s' was invalid or could not be "
                     "read. Loading fallback data. Error: %s.", path,
                     error->message);
-      /* but if the config file was simply not there, fail silently and stick
-      with the defaults */
+      /* If the config file was simply not there, fail silently and stick
+       * with the defaults. */
 
       g_clear_error (&error);
     }

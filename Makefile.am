@@ -50,20 +50,19 @@ BUILT_SOURCES =
 noinst_PROGRAMS =
 
 persistentcachedir=$(localstatedir)/cache/metrics/
-permissionsdir=$(sysconfdir)/metrics/
-permissions_file=$(permissionsdir)eos-metrics-permissions.conf
+configdir=$(sysconfdir)/metrics/
 
 # chown and chgrp are not allowed unless you are root or under some specific
 # other conditions that may not be met every time you run 'make'.
 install-data-hook:
-	$(MKDIR_P) --mode=g+s,ug+rwx,a+rx $(DESTDIR)$(persistentcachedir) $(DESTDIR)$(permissionsdir)
-	chmod --recursive g+s,ug+rwx,a+rx $(DESTDIR)$(persistentcachedir) $(DESTDIR)$(permissionsdir)
+	$(MKDIR_P) --mode=g+s,ug+rwx,a+rx $(DESTDIR)$(persistentcachedir) $(DESTDIR)$(configdir)
+	chmod --recursive g+s,ug+rwx,a+rx $(DESTDIR)$(persistentcachedir) $(DESTDIR)$(configdir)
 	@if id -u metrics 2> /dev/null; then \
-		if ! chown --recursive metrics:metrics $(DESTDIR)$(persistentcachedir) $(DESTDIR)$(permissionsdir); then \
+		if ! chown --recursive metrics:metrics $(DESTDIR)$(persistentcachedir) $(DESTDIR)$(configdir); then \
 			echo "*************************************"; \
 			echo "Make sure to recursively change the owner and"; \
 			echo "group of the $(persistentcachedir) and the" ; \
-			echo "$(permissionsdir) directories to 'metrics'."; \
+			echo "$(configdir) directories to 'metrics'."; \
 			echo "*************************************"; \
 		fi; \
 	else \
@@ -76,7 +75,7 @@ install-data-hook:
 	fi
 
 uninstall-hook:
-	rm -rf $(DESTDIR)$(persistentcachedir) $(DESTDIR)$(permissionsdir)
+	rm -rf $(DESTDIR)$(persistentcachedir) $(DESTDIR)$(configdir)
 
 # # # DATA # # #
 

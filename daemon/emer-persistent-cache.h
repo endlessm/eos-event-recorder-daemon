@@ -27,6 +27,7 @@
 #include <gio/gio.h>
 
 #include "daemon/emer-boot-id-provider.h"
+#include "daemon/emer-cache-size-provider.h"
 #include "daemon/emer-cache-version-provider.h"
 #include "shared/metrics-util.h"
 
@@ -148,7 +149,7 @@ gboolean             emer_persistent_cache_store_metrics       (EmerPersistentCa
 EmerPersistentCache *emer_persistent_cache_new_full            (GCancellable             *cancellable,
                                                                 GError                  **error,
                                                                 const gchar              *custom_directory,
-                                                                guint64                   custom_cache_size,
+                                                                EmerCacheSizeProvider    *cache_size_provider,
                                                                 EmerBootIdProvider       *boot_id_provider,
                                                                 EmerCacheVersionProvider *version_provider,
                                                                 guint                     boot_offset_update_interval);

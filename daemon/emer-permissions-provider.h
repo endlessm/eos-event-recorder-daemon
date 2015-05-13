@@ -62,19 +62,21 @@ struct _EmerPermissionsProviderClass
   GObjectClass parent_class;
 };
 
-GType                    emer_permissions_provider_get_type           (void) G_GNUC_CONST;
+GType                    emer_permissions_provider_get_type              (void) G_GNUC_CONST;
 
-EmerPermissionsProvider *emer_permissions_provider_new                (void);
+EmerPermissionsProvider *emer_permissions_provider_new                   (void);
 
-EmerPermissionsProvider *emer_permissions_provider_new_full           (const gchar             *config_file_path,
-                                                                       const gchar             *ostree_config_file_path);
+EmerPermissionsProvider *emer_permissions_provider_new_full              (const gchar             *config_file_path,
+                                                                          const gchar             *ostree_config_file_path);
 
-gboolean                 emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self);
+gboolean                 emer_permissions_provider_get_daemon_enabled    (EmerPermissionsProvider *self);
 
-void                     emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
-                                                                       gboolean                 enabled);
+void                     emer_permissions_provider_set_daemon_enabled    (EmerPermissionsProvider *self,
+                                                                          gboolean                 enabled);
 
-gchar                   *emer_permissions_provider_get_environment    (EmerPermissionsProvider *self);
+gboolean                 emer_permissions_provider_get_uploading_enabled (EmerPermissionsProvider *self);
+
+gchar                   *emer_permissions_provider_get_environment       (EmerPermissionsProvider *self);
 
 G_END_DECLS
 

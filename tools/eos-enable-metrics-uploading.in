@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-# Copyright 2014, 2015 Endless Mobile, Inc.
+# Copyright 2015 Endless Mobile, Inc.
 
 # This file is part of eos-event-recorder-daemon.
 #
@@ -23,10 +23,16 @@ if [ ! -f @permissions_file@ ]; then
     exit 1
 fi
 
-ENVIRONMENT="$1"
-if [ "$ENVIRONMENT" == "dev" ] || [ "$ENVIRONMENT" == "test" ] || [ "$ENVIRONMENT" == "production" ]; then
-    sed --in-place="s/\(environment *= *\).*/\1"$ENVIRONMENT"/" @permissions_file@
-else
-    echo "Invalid environment "$ENVIRONMENT" passed in as parameter." >&2
-    exit 2
-fi
+case "$1" in
+    -e|--enable)
+         UPLOADING_ENABLED=true
+         ;;
+    -d|--disable)
+         UPLOADING_ENABLED=false
+         ;;
+    *)
+        echo "Invalid flag "$1"; expected --enable or --disable." >&2
+        exit 2
+esac
+
+sed --in-place="s/\(uploading_enabled *= *\).*/\1"$UPLOADING_ENABLED"/" @permissions_file@

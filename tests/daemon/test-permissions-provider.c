@@ -38,24 +38,34 @@
 #define PERMISSIONS_CONFIG_FILE_ENABLED_TEST \
   "[global]\n" \
   "enabled=true\n" \
+  "uploading_enabled=true\n" \
   "environment=test"
 #define PERMISSIONS_CONFIG_FILE_DISABLED_TEST \
   "[global]\n" \
   "enabled=false\n" \
+  "uploading_enabled=true\n" \
   "environment=test"
-#define PERMISSIONS_CONFIG_FILE_INVALID_ENVIRONMENT \
+#define PERMISSIONS_CONFIG_FILE_UPLOADING_DISABLED_TEST \
+  "[global]\n" \
+  "enabled=true\n" \
+  "uploading_enabled=false\n" \
+  "environment=test"
+#define PERMISSIONS_CONFIG_FILE_INVALID \
   "lavubeu;f'w943ty[jdn;fbl\n"
 #define PERMISSIONS_CONFIG_FILE_ENABLED_DEV \
   "[global]\n" \
   "enabled=true\n" \
+  "uploading_enabled=true\n" \
   "environment=dev"
 #define PERMISSIONS_CONFIG_FILE_ENABLED_PRODUCTION \
   "[global]\n" \
   "enabled=true\n" \
+  "uploading_enabled=true\n" \
   "environment=production"
 #define PERMISSIONS_CONFIG_FILE_ENABLED_INVALID_ENVIRONMENT \
   "[global]\n" \
   "enabled=true\n" \
+  "uploading_enabled=true\n" \
   "environment=invalid"
 #define OSTREE_CONFIG_FILE_STAGING_URL \
   "[core]\n" \
@@ -88,13 +98,13 @@ typedef struct {
 /* Callback for notify::daemon-enabled that records what it was called with and
 quits the main loop so the test can continue. */
 static void
-on_notify_daemon_enabled (GObject    *test_object,
-                          GParamSpec *pspec,
-                          Fixture    *fixture)
+on_notify_daemon_enabled (EmerPermissionsProvider *permissions_provider,
+                          GParamSpec              *pspec,
+                          Fixture                 *fixture)
 {
   if (!fixture->notify_daemon_called)
     fixture->notify_daemon_called_with =
-      emer_permissions_provider_get_daemon_enabled (EMER_PERMISSIONS_PROVIDER (test_object));
+      emer_permissions_provider_get_daemon_enabled (permissions_provider);
   fixture->notify_daemon_called = TRUE;
   g_main_loop_quit (fixture->main_loop);
 }
@@ -118,16 +128,16 @@ write_config_file (GFileIOStream *stream,
 
   if (contents != NULL)
     {
-      g_assert (g_output_stream_write_all (ostream, contents,
-                                           strlen (contents),
-                                           NULL /* bytes written */,
-                                           NULL, NULL));
+      gboolean write_succeeded =
+        g_output_stream_write_all (ostream, contents, strlen (contents),
+                                   NULL /* bytes written */, NULL, NULL);
+      g_assert_true (write_succeeded);
       g_object_unref (stream);
     }
   else
     {
       g_object_unref (stream);
-      g_assert (g_file_delete (config_file, NULL, NULL));
+      g_assert_true (g_file_delete (config_file, NULL, NULL));
     }
 
   return g_file_get_path (config_file);
@@ -277,21 +287,55 @@ static void
 test_permissions_provider_get_daemon_enabled (Fixture      *fixture,
                                               gconstpointer unused)
 {
-  g_assert (emer_permissions_provider_get_daemon_enabled (fixture->test_object));
+  gboolean daemon_enabled =
+    emer_permissions_provider_get_daemon_enabled (fixture->test_object);
+  g_assert_true (daemon_enabled);
 }
 
 static void
 test_permissions_provider_get_daemon_enabled_false (Fixture      *fixture,
                                                     gconstpointer unused)
 {
-  g_assert_false (emer_permissions_provider_get_daemon_enabled (fixture->test_object));
+  gboolean daemon_enabled =
+    emer_permissions_provider_get_daemon_enabled (fixture->test_object);
+  g_assert_false (daemon_enabled);
 }
 
 static void
 test_permissions_provider_get_daemon_enabled_fallback (Fixture      *fixture,
                                                        gconstpointer unused)
 {
-  g_assert_false (emer_permissions_provider_get_daemon_enabled (fixture->test_object));
+  gboolean daemon_enabled =
+    emer_permissions_provider_get_daemon_enabled (fixture->test_object);
+  g_assert_false (daemon_enabled);
+  g_test_assert_expected_messages ();
+}
+
+static void
+test_permissions_provider_get_uploading_enabled (Fixture      *fixture,
+                                                 gconstpointer unused)
+{
+  gboolean uploading_enabled =
+    emer_permissions_provider_get_uploading_enabled (fixture->test_object);
+  g_assert_true (uploading_enabled);
+}
+
+static void
+test_permissions_provider_get_uploading_enabled_false (Fixture      *fixture,
+                                                       gconstpointer unused)
+{
+  gboolean uploading_enabled =
+    emer_permissions_provider_get_uploading_enabled (fixture->test_object);
+  g_assert_false (uploading_enabled);
+}
+
+static void
+test_permissions_provider_get_uploading_enabled_fallback (Fixture      *fixture,
+                                                          gconstpointer unused)
+{
+  gboolean uploading_enabled =
+    emer_permissions_provider_get_uploading_enabled (fixture->test_object);
+  g_assert_true (uploading_enabled);
   g_test_assert_expected_messages ();
 }
 
@@ -351,7 +395,7 @@ test_permissions_provider_set_daemon_enabled (Fixture      *fixture,
 {
   g_idle_add ((GSourceFunc) set_daemon_enabled_false_idle, fixture);
   g_main_loop_run (fixture->main_loop);
-  g_assert (fixture->notify_daemon_called);
+  g_assert_true (fixture->notify_daemon_called);
   g_assert_false (fixture->notify_daemon_called_with);
 }
 
@@ -373,9 +417,11 @@ test_permissions_provider_set_daemon_enabled_updates_config_file (Fixture      *
                                                                   gconstpointer unused)
 {
   gchar *contents;
-  g_assert (g_file_load_contents (fixture->permissions_config_file, NULL,
-                                  &contents, NULL, NULL, NULL));
-  g_assert (strstr (contents, "enabled=true"));
+  gboolean loaded_file =
+    g_file_load_contents (fixture->permissions_config_file, NULL, &contents,
+                          NULL, NULL, NULL);
+  g_assert_true (loaded_file);
+  g_assert_nonnull (strstr (contents, "enabled=true"));
   g_free (contents);
 
   g_idle_add ((GSourceFunc) set_daemon_enabled_false_idle, fixture);
@@ -395,8 +441,10 @@ test_permissions_provider_set_daemon_enabled_updates_config_file (Fixture      *
 
   g_object_unref (monitor);
 
-  g_assert (g_file_load_contents (fixture->permissions_config_file, NULL,
-                                  &contents, NULL, NULL, NULL));
+  loaded_file =
+    g_file_load_contents (fixture->permissions_config_file, NULL, &contents,
+                          NULL, NULL, NULL);
+  g_assert_true (loaded_file);
   g_assert_nonnull (strstr (contents, "enabled=false"));
   g_free (contents);
 }
@@ -410,15 +458,15 @@ main (int                argc,
 #define ADD_PERMISSIONS_PROVIDER_TEST(path, file_contents, setup, test_func) \
   g_test_add ((path), Fixture, (file_contents), (setup), (test_func), teardown);
 
-  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/existing-permissions-config-file",
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/valid-file",
                                  PERMISSIONS_CONFIG_FILE_ENABLED_TEST,
                                  setup_with_config_file,
                                  test_permissions_provider_new);
-  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/absent-permissions-config-file",
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/absent-file",
                                  NULL, setup_with_config_file,
                                  test_permissions_provider_new);
-  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/invalid-permissions-config-file",
-                                 PERMISSIONS_CONFIG_FILE_INVALID_ENVIRONMENT,
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/invalid-file",
+                                 PERMISSIONS_CONFIG_FILE_INVALID,
                                  setup_invalid_file,
                                  test_permissions_provider_new_invalid_file);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/enabled",
@@ -429,10 +477,22 @@ main (int                argc,
                                  PERMISSIONS_CONFIG_FILE_DISABLED_TEST,
                                  setup_with_config_file,
                                  test_permissions_provider_get_daemon_enabled_false);
-  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/invalid-permissions-config-file",
-                                 PERMISSIONS_CONFIG_FILE_INVALID_ENVIRONMENT,
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/invalid-file",
+                                 PERMISSIONS_CONFIG_FILE_INVALID,
                                  setup_invalid_file,
                                  test_permissions_provider_get_daemon_enabled_fallback);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-uploading-enabled/enabled",
+                                 PERMISSIONS_CONFIG_FILE_ENABLED_TEST,
+                                 setup_with_config_file,
+                                 test_permissions_provider_get_uploading_enabled);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-uploading-enabled/disabled",
+                                 PERMISSIONS_CONFIG_FILE_UPLOADING_DISABLED_TEST,
+                                 setup_with_config_file,
+                                 test_permissions_provider_get_uploading_enabled_false);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-uploading-enabled/invalid-file",
+                                 PERMISSIONS_CONFIG_FILE_INVALID,
+                                 setup_invalid_file,
+                                 test_permissions_provider_get_uploading_enabled_fallback);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-environment/test",
                                  PERMISSIONS_CONFIG_FILE_ENABLED_TEST,
                                  setup_with_config_file,

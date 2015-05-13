@@ -97,7 +97,7 @@ static void
 test_network_send_provider_new_succeeds (Fixture      *fixture,
                                          gconstpointer unused)
 {
-  g_assert (fixture->network_send_provider != NULL);
+  g_assert_nonnull (fixture->network_send_provider);
 }
 
 static void

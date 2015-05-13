@@ -46,12 +46,16 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerPermissionsProvider, emer_permissions_provider, 
 
 #define DAEMON_GLOBAL_GROUP_NAME "global"
 #define DAEMON_ENABLED_KEY_NAME "enabled"
+#define DAEMON_UPLOADING_ENABLED_KEY_NAME "uploading_enabled"
 #define DAEMON_ENVIRONMENT_KEY_NAME "environment"
 
 #define FALLBACK_CONFIG_FILE_DATA \
   "[" DAEMON_GLOBAL_GROUP_NAME "]\n" \
   DAEMON_ENABLED_KEY_NAME "=false\n" \
+  DAEMON_UPLOADING_ENABLED_KEY_NAME "=true\n" \
   DAEMON_ENVIRONMENT_KEY_NAME "=production\n"
+
+#define PERMISSIONS_FILE CONFIG_DIR "eos-metrics-permissions.conf"
 
 enum
 {
@@ -94,7 +98,7 @@ write_config_file_sync (EmerPermissionsProvider *self)
   if (!g_key_file_save_to_file (priv->permissions, permissions_config_file_path,
       &error))
     {
-      g_critical ("Could not write to permissions config file '%s': %s.",
+      g_critical ("Could not write to permissions config file '%s'. Error: %s.",
                   permissions_config_file_path, error->message);
       g_clear_error (&error);
     }
@@ -113,27 +117,27 @@ read_config_file_sync (EmerPermissionsProvider *self)
   GError *error = NULL;
 
   gchar *path = g_file_get_path (priv->permissions_config_file);
-  gboolean success = g_key_file_load_from_file (priv->permissions, path,
-                                                G_KEY_FILE_NONE, &error);
-  if (!success)
+  gboolean load_succeeded =
+    g_key_file_load_from_file (priv->permissions, path, G_KEY_FILE_NONE, &error);
+  if (!load_succeeded)
     {
       load_fallback_data (self);
 
       if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT) &&
           !g_error_matches (error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_NOT_FOUND))
         g_critical ("Permissions config file '%s' was invalid or could not be "
-                    "read. Loading fallback data. Message: %s.", path,
+                    "read. Loading fallback data. Error: %s.", path,
                     error->message);
-      /* but if the config file was simply not there, fail silently and stick
-      with the defaults */
+      /* If the config file was simply not there, fail silently and stick
+       * with the defaults. */
 
       g_clear_error (&error);
     }
 
+  g_free (path);
+
   g_object_notify_by_pspec (G_OBJECT (self),
                             emer_permissions_provider_props[PROP_DAEMON_ENABLED]);
-
-  g_free (path);
 }
 
 /* Helper function to run write_config_file_sync() in another thread. */
@@ -264,7 +268,7 @@ read_environment (EmerPermissionsProvider *self)
   if (error != NULL)
     {
       g_critical ("Couldn't find key '%s:%s' in permissions config file. "
-                  "Returning default value. Message: %s.",
+                  "Returning default value. Error: %s.",
                   DAEMON_GLOBAL_GROUP_NAME, DAEMON_ENVIRONMENT_KEY_NAME,
                   error->message);
       g_error_free (error);
@@ -274,8 +278,8 @@ read_environment (EmerPermissionsProvider *self)
       g_strcmp0 (environment, "test") != 0 &&
       g_strcmp0 (environment, "production") != 0)
     {
-      g_warning ("Error: Metrics environment is set to: %s in %s. "
-                 "Valid metrics environments are: dev, test, production.",
+      g_warning ("Error: Metrics environment is set to: %s in %s. Valid "
+                 "metrics environments are: dev, test, production.",
                  environment, PERMISSIONS_FILE);
       g_clear_pointer (&environment, g_free);
     }
@@ -494,20 +498,19 @@ emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self)
     emer_permissions_provider_get_instance_private (self);
 
   GError *error = NULL;
-  gboolean retval = g_key_file_get_boolean (priv->permissions,
-                                            DAEMON_GLOBAL_GROUP_NAME,
-                                            DAEMON_ENABLED_KEY_NAME, &error);
+  gboolean daemon_enabled =
+    g_key_file_get_boolean (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
+                            DAEMON_ENABLED_KEY_NAME, &error);
   if (error != NULL)
     {
       g_critical ("Couldn't find key '%s:%s' in permissions config file. "
-                  "Returning default value. Message: %s.",
+                  "Returning default value. Error: %s.",
                   DAEMON_GLOBAL_GROUP_NAME, DAEMON_ENABLED_KEY_NAME,
                   error->message);
       g_error_free (error);
-      /* retval is FALSE in case of error */
     }
 
-  return retval;
+  return daemon_enabled;
 }
 
 /*
@@ -530,6 +533,40 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
   write_config_file_async (self);
 
   g_object_notify (G_OBJECT (self), "daemon-enabled");
+}
+
+/*
+ * emer_permissions_provider_get_uploading_enabled:
+ * @self: the permissions provider
+ *
+ * Tells whether the event recorder should upload events via the network. This
+ * setting is moot if the entire daemon is disabled; see
+ * emer_permissions_provider_get_daemon_enabled().
+ *
+ * Returns: %TRUE if the event recorder is allowed to upload events or the
+ *   user's preference is unknown, %FALSE if the user has opted out.
+ */
+gboolean
+emer_permissions_provider_get_uploading_enabled (EmerPermissionsProvider *self)
+{
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  GError *error = NULL;
+  gboolean uploading_enabled =
+    g_key_file_get_boolean (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
+                            DAEMON_UPLOADING_ENABLED_KEY_NAME, &error);
+  if (error != NULL)
+    {
+      g_critical ("Couldn't find key '%s:%s' in permissions config file. "
+                  "Returning default value. Error: %s.",
+                  DAEMON_GLOBAL_GROUP_NAME, DAEMON_UPLOADING_ENABLED_KEY_NAME,
+                  error->message);
+      g_error_free (error);
+      return TRUE;
+    }
+
+  return uploading_enabled;
 }
 
 /*

@@ -29,7 +29,10 @@
 #include "shared/metrics-util.h"
 
 #define TMP_DIR_TEMPLATE "persistent-cache-XXXXXX"
-#define MAX_CACHE_SIZE G_GUINT64_CONSTANT (92160) // 90 kB
+
+// TODO: Replace this with a reasonable value once it is used.
+#define MAX_BYTES_TO_READ G_GUINT64_CONSTANT (0)
+
 #define CACHE_VERSION_FILENAME "local_version_file"
 #define BOOT_OFFSET_UPDATE_INTERVAL (60u * 60u) // 1 hour
 
@@ -417,7 +420,9 @@ make_persistent_cache (GFile *directory)
   gchar *directory_path_with_slash = g_strconcat (directory_path, "/", NULL);
   g_free (directory_path);
 
+  EmerCacheSizeProvider *cache_size_provider = emer_cache_size_provider_new ();
   EmerBootIdProvider *boot_id_provider = emer_boot_id_provider_new ();
+
   gchar *cache_version_path =
     g_strconcat (directory_path_with_slash, CACHE_VERSION_FILENAME, NULL);
   EmerCacheVersionProvider *cache_version_provider =
@@ -426,10 +431,14 @@ make_persistent_cache (GFile *directory)
 
   EmerPersistentCache *persistent_cache =
     emer_persistent_cache_new_full (NULL /* GCancellable */, &error,
-                                    directory_path_with_slash, MAX_CACHE_SIZE,
-                                    boot_id_provider, cache_version_provider,
+                                    directory_path_with_slash,
+                                    cache_size_provider, boot_id_provider,
+                                    cache_version_provider,
                                     BOOT_OFFSET_UPDATE_INTERVAL);
   g_free (directory_path_with_slash);
+  g_object_unref (cache_size_provider);
+  g_object_unref (boot_id_provider);
+  g_object_unref (cache_version_provider);
 
   if (persistent_cache == NULL)
     g_error_free (error);
@@ -500,7 +509,7 @@ main (int   argc,
   gboolean drain_succeeded =
     emer_persistent_cache_drain_metrics (persistent_cache, &singulars,
                                          &aggregates, &sequences,
-                                         MAX_CACHE_SIZE);
+                                         MAX_BYTES_TO_READ);
 
   g_object_unref (persistent_cache);
 

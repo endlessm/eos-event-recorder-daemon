@@ -31,7 +31,6 @@
  "[cache_version_info]\n" \
  "version=40\n"
 
-#define SECOND_VERSION 42
 #define SECOND_KEY_FILE \
  "[cache_version_info]\n" \
  "version=42\n"
@@ -65,6 +64,7 @@ setup (Fixture      *fixture,
 {
   GFileIOStream *stream;
   fixture->tmp_file = g_file_new_tmp (TESTING_FILE_PATH, &stream, NULL);
+  g_object_unref (stream);
   fixture->tmp_path = g_file_get_path (fixture->tmp_file);
 
   fixture->key_file = g_key_file_new ();
@@ -89,7 +89,7 @@ static void
 test_cache_version_provider_new_succeeds (Fixture      *fixture,
                                           gconstpointer unused)
 {
-  g_assert (fixture->version_provider != NULL);
+  g_assert_nonnull (fixture->version_provider);
 }
 
 static void

@@ -18,6 +18,7 @@
 
 noinst_PROGRAMS += \
 	tests/daemon/test-boot-id-provider \
+	tests/daemon/test-cache-size-provider \
 	tests/daemon/test-cache-version-provider \
 	tests/daemon/test-daemon.dbusdaemon \
 	tests/daemon/test-machine-id-provider \
@@ -30,10 +31,17 @@ DAEMON_TEST_FLAGS = \
 	@EOS_EVENT_RECORDER_DAEMON_CFLAGS@ \
 	-I$(top_srcdir) \
 	-I$(top_srcdir)/daemon \
+	-DCONFIG_DIR="\"$(configdir)\"" \
 	-DPERSISTENT_CACHE_DIR="\"$(persistentcachedir)\"" \
-	-DPERMISSIONS_FILE="\"$(permissions_file)\"" \
 	$(NULL)
 DAEMON_TEST_LIBS = @EOS_EVENT_RECORDER_DAEMON_LIBS@
+
+tests_daemon_test_cache_size_provider_SOURCES = \
+	daemon/emer-cache-size-provider.c daemon/emer-cache-size-provider.h \
+	tests/daemon/test-cache-size-provider.c \
+	$(NULL)
+tests_daemon_test_cache_size_provider_CPPFLAGS = $(DAEMON_TEST_FLAGS)
+tests_daemon_test_cache_size_provider_LDADD = $(DAEMON_TEST_LIBS)
 
 tests_daemon_test_cache_version_provider_SOURCES = \
 	daemon/emer-cache-version-provider.c daemon/emer-cache-version-provider.h \
@@ -53,6 +61,7 @@ tests_daemon_test_daemon_dbusdaemon_SOURCES = \
 	daemon/emer-daemon.c daemon/emer-daemon.h \
 	tests/daemon/test-daemon.c \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
+	daemon/emer-cache-size-provider.c daemon/emer-cache-size-provider.h \
 	daemon/emer-cache-version-provider.c daemon/emer-cache-version-provider.h \
 	daemon/emer-machine-id-provider.c daemon/emer-machine-id-provider.h \
 	tests/daemon/mock-network-send-provider.c \
@@ -94,6 +103,7 @@ tests_daemon_test_persistent_cache_SOURCES = \
 	tests/daemon/test-persistent-cache.c \
 	daemon/emer-persistent-cache.c daemon/emer-persistent-cache.h \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
+	daemon/emer-cache-size-provider.c daemon/emer-cache-size-provider.h \
 	daemon/emer-cache-version-provider.c daemon/emer-cache-version-provider.h \
 	shared/metrics-util.c shared/metrics-util.h \
 	$(NULL)
@@ -111,6 +121,7 @@ dist_noinst_SCRIPTS = \
 TESTS = \
 	tests/test-opt-out-integration.py \
 	tests/daemon/test-boot-id-provider \
+	tests/daemon/test-cache-size-provider \
 	tests/daemon/test-cache-version-provider \
 	tests/daemon/test-daemon.dbusdaemon \
 	tests/daemon/test-machine-id-provider \

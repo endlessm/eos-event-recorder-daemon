@@ -19,7 +19,7 @@ override_dh_auto_configure:
 override_dh_auto_test:
 	dh_auto_test || ( find . -name '*.log' | xargs cat; false )
 
-# Avoid changing the owner of the permissions configuration and persistent cache
+# Avoid changing the owner of configuration files and the persistent cache
 # directory to root:root.
 override_dh_fixperms:
-	dh_fixperms -Xeos-metrics-permissions.conf -Xcache/metrics
+	dh_fixperms -Xeos-metrics-permissions.conf -Xcache-size.conf -Xcache/metrics

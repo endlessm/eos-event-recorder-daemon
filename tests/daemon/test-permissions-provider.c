@@ -43,7 +43,7 @@
   "[global]\n" \
   "enabled=false\n" \
   "environment=test"
-#define PERMISSIONS_CONFIG_FILE_INVALID_ENVIRONMENT \
+#define PERMISSIONS_CONFIG_FILE_INVALID \
   "lavubeu;f'w943ty[jdn;fbl\n"
 #define PERMISSIONS_CONFIG_FILE_ENABLED_DEV \
   "[global]\n" \
@@ -418,7 +418,7 @@ main (int                argc,
                                  NULL, setup_with_config_file,
                                  test_permissions_provider_new);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/new/invalid-permissions-config-file",
-                                 PERMISSIONS_CONFIG_FILE_INVALID_ENVIRONMENT,
+                                 PERMISSIONS_CONFIG_FILE_INVALID,
                                  setup_invalid_file,
                                  test_permissions_provider_new_invalid_file);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/enabled",
@@ -430,7 +430,7 @@ main (int                argc,
                                  setup_with_config_file,
                                  test_permissions_provider_get_daemon_enabled_false);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-daemon-enabled/invalid-permissions-config-file",
-                                 PERMISSIONS_CONFIG_FILE_INVALID_ENVIRONMENT,
+                                 PERMISSIONS_CONFIG_FILE_INVALID,
                                  setup_invalid_file,
                                  test_permissions_provider_get_daemon_enabled_fallback);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-environment/test",

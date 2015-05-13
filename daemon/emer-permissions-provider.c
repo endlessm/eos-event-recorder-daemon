@@ -117,9 +117,9 @@ read_config_file_sync (EmerPermissionsProvider *self)
   GError *error = NULL;
 
   gchar *path = g_file_get_path (priv->permissions_config_file);
-  gboolean success = g_key_file_load_from_file (priv->permissions, path,
-                                                G_KEY_FILE_NONE, &error);
-  if (!success)
+  gboolean load_succeeded =
+    g_key_file_load_from_file (priv->permissions, path, G_KEY_FILE_NONE, &error);
+  if (!load_succeeded)
     {
       load_fallback_data (self);
 
@@ -498,9 +498,9 @@ emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self)
     emer_permissions_provider_get_instance_private (self);
 
   GError *error = NULL;
-  gboolean retval = g_key_file_get_boolean (priv->permissions,
-                                            DAEMON_GLOBAL_GROUP_NAME,
-                                            DAEMON_ENABLED_KEY_NAME, &error);
+  gboolean daemon_enabled =
+    g_key_file_get_boolean (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
+                            DAEMON_ENABLED_KEY_NAME, &error);
   if (error != NULL)
     {
       g_critical ("Couldn't find key '%s:%s' in permissions config file. "
@@ -508,10 +508,9 @@ emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self)
                   DAEMON_GLOBAL_GROUP_NAME, DAEMON_ENABLED_KEY_NAME,
                   error->message);
       g_error_free (error);
-      /* retval is FALSE in case of error */
     }
 
-  return retval;
+  return daemon_enabled;
 }
 
 /*

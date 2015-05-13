@@ -25,7 +25,7 @@ fi
 
 ENVIRONMENT="$1"
 if [ "$ENVIRONMENT" == "dev" ] || [ "$ENVIRONMENT" == "test" ] || [ "$ENVIRONMENT" == "production" ]; then
-    sed -i "s/\(environment *= *\).*/\1"$ENVIRONMENT"/" @permissions_file@
+    sed --in-place="s/\(environment *= *\).*/\1"$ENVIRONMENT"/" @permissions_file@
 else
     echo "Invalid environment "$ENVIRONMENT" passed in as parameter." >&2
     exit 2

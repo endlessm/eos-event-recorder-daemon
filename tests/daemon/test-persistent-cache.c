@@ -1114,6 +1114,7 @@ static void
 test_persistent_cache_store_when_full_succeeds (gboolean     *unused,
                                                 gconstpointer dontuseme)
 {
+  GError *error = NULL;
   EmerCacheSizeProvider *cache_size_provider =
     emer_cache_size_provider_new_full (TEST_DIRECTORY TEST_CACHE_SIZE_FILE);
   EmerBootIdProvider *boot_id_provider =
@@ -1121,10 +1122,11 @@ test_persistent_cache_store_when_full_succeeds (gboolean     *unused,
   EmerCacheVersionProvider *cache_version_provider =
     emer_cache_version_provider_new_full (TEST_DIRECTORY TEST_CACHE_VERSION_FILE);
   EmerPersistentCache *cache =
-    emer_persistent_cache_new_full (NULL, NULL, TEST_DIRECTORY,
+    emer_persistent_cache_new_full (NULL, &error, TEST_DIRECTORY,
                                     cache_size_provider, boot_id_provider,
                                     cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL);
+  g_assert_no_error (error);
 
   g_object_unref (cache_version_provider);
   g_object_unref (boot_id_provider);
@@ -1403,6 +1405,7 @@ static void
 test_persistent_cache_purges_when_out_of_date_succeeds (gboolean     *unused,
                                                         gconstpointer dontuseme)
 {
+  GError *error = NULL;
   EmerCacheSizeProvider *cache_size_provider =
     emer_cache_size_provider_new_full (TEST_DIRECTORY TEST_CACHE_SIZE_FILE);
   EmerBootIdProvider *boot_id_provider =
@@ -1410,10 +1413,11 @@ test_persistent_cache_purges_when_out_of_date_succeeds (gboolean     *unused,
   EmerCacheVersionProvider *cache_version_provider =
     emer_cache_version_provider_new_full (TEST_DIRECTORY TEST_CACHE_VERSION_FILE);
   EmerPersistentCache *cache =
-    emer_persistent_cache_new_full (NULL, NULL, TEST_DIRECTORY,
+    emer_persistent_cache_new_full (NULL, &error, TEST_DIRECTORY,
                                     cache_size_provider, boot_id_provider,
                                     cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL);
+  g_assert_no_error (error);
 
   g_object_unref (cache_size_provider);
   g_object_unref (boot_id_provider);
@@ -1429,7 +1433,6 @@ test_persistent_cache_purges_when_out_of_date_succeeds (gboolean     *unused,
   gint current_version;
   g_assert (emer_cache_version_provider_get_version (cache_version_provider,
                                                      &current_version));
-  GError *error = NULL;
   g_assert (emer_cache_version_provider_set_version (cache_version_provider,
                                                      current_version - 1,
                                                      &error));

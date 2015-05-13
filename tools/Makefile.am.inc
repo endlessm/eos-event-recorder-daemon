@@ -28,6 +28,7 @@ PERSISTENT_CACHE_TOOL_FLAGS = \
 	-I$(top_srcdir)/tools \
 	-DPERSISTENT_CACHE_DIR="\"$(persistentcachedir)\"" \
 	-D_POSIX_C_SOURCE=200112L \
+	-DCONFIG_DIR="\"$(configdir)\"" \
 	$(NULL)
 PERSISTENT_CACHE_TOOL_LIBS = @EOS_EVENT_RECORDER_DAEMON_LIBS@
 

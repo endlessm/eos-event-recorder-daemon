@@ -50,8 +50,8 @@ eos_metrics_event_recorder_SOURCES = \
 eos_metrics_event_recorder_CPPFLAGS = \
 	$(EOS_EVENT_RECORDER_DAEMON_CFLAGS) \
 	-D_POSIX_C_SOURCE=200112L \
+	-DCONFIG_DIR="\"$(configdir)\"" \
 	-DPERSISTENT_CACHE_DIR="\"$(persistentcachedir)\"" \
-	-DPERMISSIONS_FILE="\"$(permissions_file)\"" \
 	$(NULL)
 
 eos_metrics_event_recorder_LDADD = $(EOS_EVENT_RECORDER_DAEMON_LIBS)

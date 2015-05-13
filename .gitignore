@@ -15,6 +15,7 @@
 /data/eos-metrics-event-recorder.service
 /data/com.endlessm.Metrics.service
 /data/eos-metrics-persistent-cache.conf
+/tools/eos-enable-metrics-uploading
 /tools/eos-select-metrics-env
 /tools/print-persistent-cache
 

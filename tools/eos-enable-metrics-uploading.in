@@ -1,0 +1,38 @@
+#!/bin/bash -e
+
+# Copyright 2015 Endless Mobile, Inc.
+
+# This file is part of eos-event-recorder-daemon.
+#
+# eos-event-recorder-daemon is free software: you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 2 of the License, or (at your
+# option) any later version.
+#
+# eos-event-recorder-daemon is distributed in the hope that it will be
+# useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+# Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with eos-event-recorder-daemon.  If not, see
+# <http://www.gnu.org/licenses/>.
+
+if [ ! -f @permissions_file@ ]; then
+    echo "Configuration file at @permissions_file@ not found or permission denied." >&2
+    exit 1
+fi
+
+case "$1" in
+    -e|--enable)
+         UPLOADING_ENABLED=true
+         ;;
+    -d|--disable)
+         UPLOADING_ENABLED=false
+         ;;
+    *)
+        echo "Invalid flag "$1"; expected --enable or --disable." >&2
+        exit 2
+esac
+
+sed --in-place="s/\(uploading_enabled *= *\).*/\1"$UPLOADING_ENABLED"/" @permissions_file@

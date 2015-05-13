@@ -43,13 +43,30 @@ tools_print_persistent_cache_SOURCES = \
 tools_print_persistent_cache_CPPFLAGS = $(PERSISTENT_CACHE_TOOL_FLAGS)
 tools_print_persistent_cache_LDADD = $(PERSISTENT_CACHE_TOOL_LIBS)
 
-dist_bin_SCRIPTS = tools/eos-select-metrics-env
-EXTRA_DIST += tools/eos-select-metrics-env.in
-CLEANFILES += tools/eos-select-metrics-env
+dist_bin_SCRIPTS = \
+	tools/eos-enable-metrics-uploading \
+	tools/eos-select-metrics-env \
+	$(NULL)
+EXTRA_DIST += \
+	tools/eos-enable-metrics-uploading.in \
+	tools/eos-select-metrics-env.in \
+	$(NULL)
+CLEANFILES += \
+	tools/eos-enable-metrics-uploading \
+	tools/eos-select-metrics-env \
+	$(NULL)
 
 substitute_permissions_file = sed \
 	-e 's|@permissions_file[@]|$(permissions_file)|g' \
 	$(NULL)
+
+tools/eos-enable-metrics-uploading: tools/eos-enable-metrics-uploading.in Makefile
+	$(AM_V_GEN)$(MKDIR_P) tools && \
+	rm -f $@ $@.tmp && \
+	$(substitute_permissions_file) $< >$@.tmp && \
+	chmod +x,a-w $@.tmp && \
+	mv $@.tmp $@
+
 tools/eos-select-metrics-env: tools/eos-select-metrics-env.in Makefile
 	$(AM_V_GEN)$(MKDIR_P) tools && \
 	rm -f $@ $@.tmp && \

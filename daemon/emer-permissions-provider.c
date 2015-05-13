@@ -278,8 +278,8 @@ read_environment (EmerPermissionsProvider *self)
       g_strcmp0 (environment, "test") != 0 &&
       g_strcmp0 (environment, "production") != 0)
     {
-      g_warning ("Error: Metrics environment is set to: %s in %s. "
-                 "Valid metrics environments are: dev, test, production.",
+      g_warning ("Error: Metrics environment is set to: %s in %s. Valid "
+                 "metrics environments are: dev, test, production.",
                  environment, PERMISSIONS_FILE);
       g_clear_pointer (&environment, g_free);
     }

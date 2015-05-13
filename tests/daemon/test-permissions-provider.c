@@ -38,24 +38,34 @@
 #define PERMISSIONS_CONFIG_FILE_ENABLED_TEST \
   "[global]\n" \
   "enabled=true\n" \
+  "uploading_enabled=true\n" \
   "environment=test"
 #define PERMISSIONS_CONFIG_FILE_DISABLED_TEST \
   "[global]\n" \
   "enabled=false\n" \
+  "uploading_enabled=true\n" \
+  "environment=test"
+#define PERMISSIONS_CONFIG_FILE_UPLOADING_DISABLED_TEST \
+  "[global]\n" \
+  "enabled=true\n" \
+  "uploading_enabled=false\n" \
   "environment=test"
 #define PERMISSIONS_CONFIG_FILE_INVALID \
   "lavubeu;f'w943ty[jdn;fbl\n"
 #define PERMISSIONS_CONFIG_FILE_ENABLED_DEV \
   "[global]\n" \
   "enabled=true\n" \
+  "uploading_enabled=true\n" \
   "environment=dev"
 #define PERMISSIONS_CONFIG_FILE_ENABLED_PRODUCTION \
   "[global]\n" \
   "enabled=true\n" \
+  "uploading_enabled=true\n" \
   "environment=production"
 #define PERMISSIONS_CONFIG_FILE_ENABLED_INVALID_ENVIRONMENT \
   "[global]\n" \
   "enabled=true\n" \
+  "uploading_enabled=true\n" \
   "environment=invalid"
 #define OSTREE_CONFIG_FILE_STAGING_URL \
   "[core]\n" \
@@ -296,6 +306,34 @@ test_permissions_provider_get_daemon_enabled_fallback (Fixture      *fixture,
 }
 
 static void
+test_permissions_provider_get_uploading_enabled (Fixture      *fixture,
+                                                 gconstpointer unused)
+{
+  gboolean uploading_enabled =
+    emer_permissions_provider_get_uploading_enabled (fixture->test_object);
+  g_assert_true (uploading_enabled);
+}
+
+static void
+test_permissions_provider_get_uploading_enabled_false (Fixture      *fixture,
+                                                       gconstpointer unused)
+{
+  gboolean uploading_enabled =
+    emer_permissions_provider_get_uploading_enabled (fixture->test_object);
+  g_assert_false (uploading_enabled);
+}
+
+static void
+test_permissions_provider_get_uploading_enabled_fallback (Fixture      *fixture,
+                                                          gconstpointer unused)
+{
+  gboolean uploading_enabled =
+    emer_permissions_provider_get_uploading_enabled (fixture->test_object);
+  g_assert_true (uploading_enabled);
+  g_test_assert_expected_messages ();
+}
+
+static void
 test_permissions_provider_get_environment_test (Fixture      *fixture,
                                                 gconstpointer unused)
 {
@@ -433,6 +471,18 @@ main (int                argc,
                                  PERMISSIONS_CONFIG_FILE_INVALID,
                                  setup_invalid_file,
                                  test_permissions_provider_get_daemon_enabled_fallback);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-uploading-enabled/enabled",
+                                 PERMISSIONS_CONFIG_FILE_ENABLED_TEST,
+                                 setup_with_config_file,
+                                 test_permissions_provider_get_uploading_enabled);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-uploading-enabled/disabled",
+                                 PERMISSIONS_CONFIG_FILE_UPLOADING_DISABLED_TEST,
+                                 setup_with_config_file,
+                                 test_permissions_provider_get_uploading_enabled_false);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-uploading-enabled/invalid-file",
+                                 PERMISSIONS_CONFIG_FILE_INVALID,
+                                 setup_invalid_file,
+                                 test_permissions_provider_get_uploading_enabled_fallback);
   ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-environment/test",
                                  PERMISSIONS_CONFIG_FILE_ENABLED_TEST,
                                  setup_with_config_file,

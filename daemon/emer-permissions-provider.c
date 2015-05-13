@@ -46,11 +46,13 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerPermissionsProvider, emer_permissions_provider, 
 
 #define DAEMON_GLOBAL_GROUP_NAME "global"
 #define DAEMON_ENABLED_KEY_NAME "enabled"
+#define DAEMON_UPLOADING_ENABLED_KEY_NAME "uploading_enabled"
 #define DAEMON_ENVIRONMENT_KEY_NAME "environment"
 
 #define FALLBACK_CONFIG_FILE_DATA \
   "[" DAEMON_GLOBAL_GROUP_NAME "]\n" \
   DAEMON_ENABLED_KEY_NAME "=false\n" \
+  DAEMON_UPLOADING_ENABLED_KEY_NAME "=true\n" \
   DAEMON_ENVIRONMENT_KEY_NAME "=production\n"
 
 #define PERMISSIONS_FILE CONFIG_DIR "eos-metrics-permissions.conf"
@@ -532,6 +534,40 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
   write_config_file_async (self);
 
   g_object_notify (G_OBJECT (self), "daemon-enabled");
+}
+
+/*
+ * emer_permissions_provider_get_uploading_enabled:
+ * @self: the permissions provider
+ *
+ * Tells whether the event recorder should upload events via the network. This
+ * setting is moot if the entire daemon is disabled; see
+ * emer_permissions_provider_get_daemon_enabled().
+ *
+ * Returns: %TRUE if the event recorder is allowed to upload events or the
+ *   user's preference is unknown, %FALSE if the user has opted out.
+ */
+gboolean
+emer_permissions_provider_get_uploading_enabled (EmerPermissionsProvider *self)
+{
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  GError *error = NULL;
+  gboolean uploading_enabled =
+    g_key_file_get_boolean (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
+                            DAEMON_UPLOADING_ENABLED_KEY_NAME, &error);
+  if (error != NULL)
+    {
+      g_critical ("Couldn't find key '%s:%s' in permissions config file. "
+                  "Returning default value. Error: %s.",
+                  DAEMON_GLOBAL_GROUP_NAME, DAEMON_UPLOADING_ENABLED_KEY_NAME,
+                  error->message);
+      g_error_free (error);
+      return TRUE;
+    }
+
+  return uploading_enabled;
 }
 
 /*

@@ -128,16 +128,16 @@ write_config_file (GFileIOStream *stream,
 
   if (contents != NULL)
     {
-      g_assert (g_output_stream_write_all (ostream, contents,
-                                           strlen (contents),
-                                           NULL /* bytes written */,
-                                           NULL, NULL));
+      gboolean write_succeeded =
+        g_output_stream_write_all (ostream, contents, strlen (contents),
+                                   NULL /* bytes written */, NULL, NULL);
+      g_assert_true (write_succeeded);
       g_object_unref (stream);
     }
   else
     {
       g_object_unref (stream);
-      g_assert (g_file_delete (config_file, NULL, NULL));
+      g_assert_true (g_file_delete (config_file, NULL, NULL));
     }
 
   return g_file_get_path (config_file);
@@ -287,21 +287,27 @@ static void
 test_permissions_provider_get_daemon_enabled (Fixture      *fixture,
                                               gconstpointer unused)
 {
-  g_assert (emer_permissions_provider_get_daemon_enabled (fixture->test_object));
+  gboolean daemon_enabled =
+    emer_permissions_provider_get_daemon_enabled (fixture->test_object);
+  g_assert_true (daemon_enabled);
 }
 
 static void
 test_permissions_provider_get_daemon_enabled_false (Fixture      *fixture,
                                                     gconstpointer unused)
 {
-  g_assert_false (emer_permissions_provider_get_daemon_enabled (fixture->test_object));
+  gboolean daemon_enabled =
+    emer_permissions_provider_get_daemon_enabled (fixture->test_object);
+  g_assert_false (daemon_enabled);
 }
 
 static void
 test_permissions_provider_get_daemon_enabled_fallback (Fixture      *fixture,
                                                        gconstpointer unused)
 {
-  g_assert_false (emer_permissions_provider_get_daemon_enabled (fixture->test_object));
+  gboolean daemon_enabled =
+    emer_permissions_provider_get_daemon_enabled (fixture->test_object);
+  g_assert_false (daemon_enabled);
   g_test_assert_expected_messages ();
 }
 
@@ -389,7 +395,7 @@ test_permissions_provider_set_daemon_enabled (Fixture      *fixture,
 {
   g_idle_add ((GSourceFunc) set_daemon_enabled_false_idle, fixture);
   g_main_loop_run (fixture->main_loop);
-  g_assert (fixture->notify_daemon_called);
+  g_assert_true (fixture->notify_daemon_called);
   g_assert_false (fixture->notify_daemon_called_with);
 }
 
@@ -411,9 +417,11 @@ test_permissions_provider_set_daemon_enabled_updates_config_file (Fixture      *
                                                                   gconstpointer unused)
 {
   gchar *contents;
-  g_assert (g_file_load_contents (fixture->permissions_config_file, NULL,
-                                  &contents, NULL, NULL, NULL));
-  g_assert (strstr (contents, "enabled=true"));
+  gboolean loaded_file =
+    g_file_load_contents (fixture->permissions_config_file, NULL, &contents,
+                          NULL, NULL, NULL);
+  g_assert_true (loaded_file);
+  g_assert_nonnull (strstr (contents, "enabled=true"));
   g_free (contents);
 
   g_idle_add ((GSourceFunc) set_daemon_enabled_false_idle, fixture);
@@ -433,8 +441,10 @@ test_permissions_provider_set_daemon_enabled_updates_config_file (Fixture      *
 
   g_object_unref (monitor);
 
-  g_assert (g_file_load_contents (fixture->permissions_config_file, NULL,
-                                  &contents, NULL, NULL, NULL));
+  loaded_file =
+    g_file_load_contents (fixture->permissions_config_file, NULL, &contents,
+                          NULL, NULL, NULL);
+  g_assert_true (loaded_file);
   g_assert_nonnull (strstr (contents, "enabled=false"));
   g_free (contents);
 }

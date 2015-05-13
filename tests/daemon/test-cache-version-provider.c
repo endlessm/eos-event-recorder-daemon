@@ -89,7 +89,7 @@ static void
 test_cache_version_provider_new_succeeds (Fixture      *fixture,
                                           gconstpointer unused)
 {
-  g_assert (fixture->version_provider != NULL);
+  g_assert_nonnull (fixture->version_provider);
 }
 
 static void

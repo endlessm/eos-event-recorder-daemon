@@ -773,7 +773,10 @@ upload_events (GNetworkMonitor *source_object,
   gboolean uploading_enabled =
     emer_permissions_provider_get_uploading_enabled (priv->permissions_provider);
   if (!uploading_enabled)
-    return;
+    {
+      flush_to_persistent_cache (self);
+      return;
+    }
 
   GError *error = NULL;
   if (!g_network_monitor_can_reach_finish (priv->network_monitor, res, &error))

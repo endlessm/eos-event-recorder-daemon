@@ -51,6 +51,7 @@ noinst_PROGRAMS =
 
 persistentcachedir=$(localstatedir)/cache/metrics/
 configdir=$(sysconfdir)/metrics/
+permissions_file=$(configdir)eos-metrics-permissions.conf
 
 # chown and chgrp are not allowed unless you are root or under some specific
 # other conditions that may not be met every time you run 'make'.

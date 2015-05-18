@@ -32,6 +32,7 @@ DAEMON_TEST_FLAGS = \
 	-I$(top_srcdir) \
 	-I$(top_srcdir)/daemon \
 	-DCONFIG_DIR="\"$(configdir)\"" \
+	-DPERMISSIONS_FILE="\"$(permissions_file)\"" \
 	-DPERSISTENT_CACHE_DIR="\"$(persistentcachedir)\"" \
 	$(NULL)
 DAEMON_TEST_LIBS = @EOS_EVENT_RECORDER_DAEMON_LIBS@

@@ -55,8 +55,6 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerPermissionsProvider, emer_permissions_provider, 
   DAEMON_UPLOADING_ENABLED_KEY_NAME "=true\n" \
   DAEMON_ENVIRONMENT_KEY_NAME "=production\n"
 
-#define PERMISSIONS_FILE CONFIG_DIR "eos-metrics-permissions.conf"
-
 enum
 {
   PROP_0,

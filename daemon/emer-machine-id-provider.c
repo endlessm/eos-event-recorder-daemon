@@ -80,7 +80,9 @@ static GParamSpec *emer_machine_id_provider_props[NPROPS] = { NULL, };
 static const gchar *
 get_id_path (EmerMachineIdProvider *self)
 {
-  EmerMachineIdProviderPrivate *priv = emer_machine_id_provider_get_instance_private (self);
+  EmerMachineIdProviderPrivate *priv =
+    emer_machine_id_provider_get_instance_private (self);
+
   return priv->path;
 }
 
@@ -88,7 +90,9 @@ static void
 set_id_path (EmerMachineIdProvider *self,
              const gchar           *given_path)
 {
-  EmerMachineIdProviderPrivate *priv = emer_machine_id_provider_get_instance_private (self);
+  EmerMachineIdProviderPrivate *priv =
+    emer_machine_id_provider_get_instance_private (self);
+
   priv->path = g_strdup (given_path);
 }
 
@@ -132,7 +136,9 @@ static void
 emer_machine_id_provider_finalize (GObject *object)
 {
   EmerMachineIdProvider *self = EMER_MACHINE_ID_PROVIDER (object);
-  EmerMachineIdProviderPrivate *priv = emer_machine_id_provider_get_instance_private (self);
+  EmerMachineIdProviderPrivate *priv =
+    emer_machine_id_provider_get_instance_private (self);
+
   g_free (priv->path);
 
   G_OBJECT_CLASS (emer_machine_id_provider_parent_class)->finalize (object);
@@ -219,7 +225,8 @@ hyphenate_uuid (gchar *uuid_sans_hyphens)
 static gboolean
 read_machine_id (EmerMachineIdProvider *self)
 {
-  EmerMachineIdProviderPrivate *priv = emer_machine_id_provider_get_instance_private (self);
+  EmerMachineIdProviderPrivate *priv =
+    emer_machine_id_provider_get_instance_private (self);
 
   gchar *machine_id_sans_hyphens;
   gsize machine_id_sans_hyphens_length;
@@ -281,7 +288,9 @@ gboolean
 emer_machine_id_provider_get_id (EmerMachineIdProvider *self,
                                  uuid_t                 machine_id)
 {
-  EmerMachineIdProviderPrivate *priv = emer_machine_id_provider_get_instance_private (self);
+  EmerMachineIdProviderPrivate *priv =
+    emer_machine_id_provider_get_instance_private (self);
+
   static gboolean id_is_valid = FALSE;
   G_LOCK_DEFINE_STATIC (id_is_valid);
 

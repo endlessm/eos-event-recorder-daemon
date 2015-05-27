@@ -262,7 +262,7 @@ emit_shutdown_signal (gboolean shutdown)
 }
 
 static GVariant *
-make_event_id_gvariant (void)
+make_event_id_variant (void)
 {
   uuid_t uuid;
   if (uuid_parse (MEANINGLESS_EVENT, uuid) != 0)
@@ -273,14 +273,14 @@ make_event_id_gvariant (void)
 }
 
 static GVariant *
-make_variant_payload (void)
+make_auxiliary_payload (void)
 {
   GVariant *sword_of_a_thousand = g_variant_new_boolean (TRUE);
   return g_variant_new_variant (sword_of_a_thousand);
 }
 
 static GVariant *
-make_event_values_gvariant (void)
+make_event_values_variant (void)
 {
   GVariantBuilder builder;
   g_variant_builder_init (&builder, G_VARIANT_TYPE ("a(xbv)"));
@@ -354,22 +354,22 @@ test_daemon_can_record_singular_event (Fixture      *fixture,
 {
   emer_daemon_record_singular_event (fixture->test_object,
                                      USER_ID,
-                                     make_event_id_gvariant (),
+                                     make_event_id_variant (),
                                      RELATIVE_TIMESTAMP,
                                      FALSE,
                                      g_variant_new_string ("This must be ignored."));
   emer_daemon_record_singular_event (fixture->test_object,
                                      USER_ID,
-                                     make_event_id_gvariant (),
+                                     make_event_id_variant (),
                                      RELATIVE_TIMESTAMP,
                                      FALSE,
                                      g_variant_new_string ("This must be ignored."));
   emer_daemon_record_singular_event (fixture->test_object,
                                      USER_ID,
-                                     make_event_id_gvariant (),
+                                     make_event_id_variant (),
                                      RELATIVE_TIMESTAMP,
                                      TRUE,
-                                     make_variant_payload ());
+                                     make_auxiliary_payload ());
 }
 
 static void
@@ -378,18 +378,18 @@ test_daemon_can_record_aggregate_events (Fixture      *fixture,
 {
   emer_daemon_record_aggregate_event (fixture->test_object,
                                       USER_ID,
-                                      make_event_id_gvariant (),
+                                      make_event_id_variant (),
                                       101,
                                       RELATIVE_TIMESTAMP,
                                       FALSE,
                                       g_variant_new_string ("This must be ignored."));
   emer_daemon_record_aggregate_event (fixture->test_object,
                                       USER_ID,
-                                      make_event_id_gvariant (),
+                                      make_event_id_variant (),
                                       101,
                                       RELATIVE_TIMESTAMP,
                                       TRUE,
-                                      make_variant_payload ());
+                                      make_auxiliary_payload ());
 }
 
 static void
@@ -398,8 +398,8 @@ test_daemon_can_record_event_sequence (Fixture      *fixture,
 {
   emer_daemon_record_event_sequence (fixture->test_object,
                                      USER_ID,
-                                     make_event_id_gvariant (),
-                                     make_event_values_gvariant ());
+                                     make_event_id_variant (),
+                                     make_event_values_variant ());
 }
 
 static void

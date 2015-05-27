@@ -219,8 +219,8 @@ release_shutdown_inhibitor (EmerDaemon *self)
 }
 
 static void
-uuid_from_gvariant (GVariant *event_id,
-                    uuid_t    uuid)
+uuid_from_variant (GVariant *event_id,
+                   uuid_t    uuid)
 {
   gsize event_id_length;
   g_variant_ref_sink (event_id);
@@ -1518,7 +1518,7 @@ emer_daemon_record_singular_event (EmerDaemon *self,
         priv->num_singulars_buffered;
       priv->num_singulars_buffered++;
       singular->user_id = user_id;
-      uuid_from_gvariant (event_id, singular->event_id);
+      uuid_from_variant (event_id, singular->event_id);
       GVariant *nullable_payload = get_nullable_payload (has_payload, payload);
       EventValue event_value = { relative_timestamp, nullable_payload };
       singular->event_value = event_value;
@@ -1560,7 +1560,7 @@ emer_daemon_record_aggregate_event (EmerDaemon *self,
       priv->num_aggregates_buffered++;
       SingularEvent singular;
       singular.user_id = user_id;
-      uuid_from_gvariant (event_id, singular.event_id);
+      uuid_from_variant (event_id, singular.event_id);
       aggregate->num_events = num_events;
       GVariant *nullable_payload = get_nullable_payload (has_payload, payload);
       EventValue event_value = { relative_timestamp, nullable_payload };
@@ -1600,7 +1600,7 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
       priv->num_sequences_buffered++;
 
       event_sequence->user_id = user_id;
-      uuid_from_gvariant (event_id, event_sequence->event_id);
+      uuid_from_variant (event_id, event_sequence->event_id);
 
       g_variant_ref_sink (event_values);
       gsize num_events = g_variant_n_children (event_values);

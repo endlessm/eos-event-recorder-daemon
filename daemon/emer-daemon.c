@@ -863,7 +863,7 @@ dequeue_and_do_upload (EmerDaemon  *self,
 
   if (priv->use_default_server_uri)
     {
-      g_clear_pointer (&priv->server_uri, g_free);
+      g_free (priv->server_uri);
       priv->server_uri =
         g_strconcat ("https://", environment, ".metrics.endlessm.com/"
                      CLIENT_VERSION_NUMBER "/", NULL);
@@ -1246,7 +1246,7 @@ emer_daemon_constructed (GObject *object)
     emer_permissions_provider_get_environment (priv->permissions_provider);
   schedule_upload (self, environment);
 
-  g_clear_pointer (&environment, g_free);
+  g_free (environment);
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->constructed (object);
 }

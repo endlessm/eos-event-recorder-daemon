@@ -42,8 +42,10 @@
 
 #define MACHINE_ID_PATH "/tmp/testing-machine-id"
 #define USER_ID 4200u
-#define IO_OPERATION_TIMEOUT_MS 5000  /* 5 seconds */
 #define RELATIVE_TIMESTAMP G_GINT64_CONSTANT (123456789)
+
+#define TIMEOUT_SEC 5
+
 #define EXPECTED_INHIBIT_SHUTDOWN_ARGS \
   "\"shutdown\" " \
   "\"EndlessOS Event Recorder Daemon\" " \
@@ -229,7 +231,7 @@ await_shutdown_inhibit (Fixture *fixture)
   g_source_unref (stdout_source);
 
   fixture->timeout_id =
-    g_timeout_add_seconds (5, timeout, NULL /* user data */);
+    g_timeout_add_seconds (TIMEOUT_SEC, timeout, NULL /* user data */);
 
   g_main_loop_run (fixture->main_loop);
 
@@ -254,7 +256,7 @@ emit_shutdown_signal (gboolean shutdown)
                                                 "PrepareForShutdown", "b",
                                                 &args_builder),
                                  NULL, G_DBUS_CALL_FLAGS_NO_AUTO_START,
-                                 IO_OPERATION_TIMEOUT_MS,
+                                 TIMEOUT_SEC * 1000,
                                  NULL, NULL);
   g_assert_nonnull (response);
 }

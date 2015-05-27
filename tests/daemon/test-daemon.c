@@ -57,7 +57,7 @@
   "\"Flushing events to disk\" " \
   "\"delay\""
 
-typedef struct
+typedef struct _Fixture
 {
   EmerDaemon *test_object;
   EmerMachineIdProvider *mock_machine_id_provider;

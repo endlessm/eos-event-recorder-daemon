@@ -725,6 +725,45 @@ emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
   return TRUE;
 }
 
+static GVariant *
+deep_copy_variant (GVariant *variant)
+{
+  GBytes *bytes = g_variant_get_data_as_bytes (variant);
+  const GVariantType *variant_type = g_variant_get_type (variant);
+  GVariant *copy = g_variant_new_from_bytes (variant_type, bytes, TRUE);
+  g_bytes_unref (bytes);
+  return copy;
+}
+
+/* Return a new floating GVariant with the machine's native endianness that is
+ * in normal form and marked trusted.
+ */
+static GVariant *
+regularize_variant (GVariant *variant)
+{
+  g_variant_ref_sink (variant);
+  GVariant *normalized_variant = g_variant_get_normal_form (variant);
+  g_variant_unref (variant);
+
+  if (G_BYTE_ORDER == G_BIG_ENDIAN)
+    {
+      GVariant *byteswapped_variant = g_variant_byteswap (normalized_variant);
+      g_variant_unref (normalized_variant);
+      normalized_variant = byteswapped_variant;
+    }
+  else if (G_BYTE_ORDER != G_LITTLE_ENDIAN)
+    {
+      g_error ("This machine is neither big endian nor little endian. Mixed-"
+               "endian machines are not supported by the metrics system.");
+    }
+
+  // Restore floating bit.
+  GVariant *native_endian_variant = deep_copy_variant (normalized_variant);
+
+  g_variant_unref (normalized_variant);
+  return native_endian_variant;
+}
+
 /*
  * Will transfer all metrics in the corresponding file into the out parameter
  * 'return_list'. The list will be NULL-terminated.  Returns TRUE on success,
@@ -820,15 +859,9 @@ drain_metrics_file (EmerPersistentCache *self,
                                  FALSE,
                                  (GDestroyNotify) g_free,
                                  writable.data);
-      g_variant_ref_sink (current_event);
 
-      // Correct byte_ordering if necessary.
-      GVariant *native_endian_event =
-        swap_bytes_if_big_endian (current_event);
-
-      g_variant_unref (current_event);
-
-      g_array_append_val (dynamic_array, native_endian_event);
+      GVariant *regularized_event = regularize_variant (current_event);
+      g_array_append_val (dynamic_array, regularized_event);
     }
   g_object_unref (stream);
   g_object_unref (file);

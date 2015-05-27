@@ -577,24 +577,15 @@ drain_persistent_cache (EmerDaemonPrivate *priv,
     return FALSE;
 
   for (gint i = 0; list_of_singulars[i] != NULL; i++)
-    {
-      g_variant_builder_add_value (singulars_builder, list_of_singulars[i]);
-      g_variant_unref (list_of_singulars[i]);
-    }
+    g_variant_builder_add_value (singulars_builder, list_of_singulars[i]);
   g_free (list_of_singulars);
 
   for (gint i = 0; list_of_aggregates[i] != NULL; i++)
-    {
-      g_variant_builder_add_value (aggregates_builder, list_of_aggregates[i]);
-      g_variant_unref (list_of_aggregates[i]);
-    }
+    g_variant_builder_add_value (aggregates_builder, list_of_aggregates[i]);
   g_free (list_of_aggregates);
 
   for (gint i = 0; list_of_sequences[i] != NULL; i++)
-    {
-      g_variant_builder_add_value (sequences_builder, list_of_sequences[i]);
-      g_variant_unref (list_of_sequences[i]);
-    }
+    g_variant_builder_add_value (sequences_builder, list_of_sequences[i]);
   g_free (list_of_sequences);
 
   return TRUE;

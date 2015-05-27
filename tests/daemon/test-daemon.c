@@ -42,6 +42,7 @@
 
 #define MACHINE_ID_PATH "/tmp/testing-machine-id"
 #define USER_ID 4200u
+#define NUM_EVENTS 101
 #define RELATIVE_TIMESTAMP G_GINT64_CONSTANT (123456789)
 
 #define TIMEOUT_SEC 5
@@ -379,14 +380,14 @@ test_daemon_can_record_aggregate_events (Fixture      *fixture,
   emer_daemon_record_aggregate_event (fixture->test_object,
                                       USER_ID,
                                       make_event_id_variant (),
-                                      101,
+                                      NUM_EVENTS,
                                       RELATIVE_TIMESTAMP,
                                       FALSE,
                                       g_variant_new_string ("This must be ignored."));
   emer_daemon_record_aggregate_event (fixture->test_object,
                                       USER_ID,
                                       make_event_id_variant (),
-                                      101,
+                                      NUM_EVENTS,
                                       RELATIVE_TIMESTAMP,
                                       TRUE,
                                       make_auxiliary_payload ());

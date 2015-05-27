@@ -83,14 +83,13 @@ start_mock_logind_service (Fixture *fixture)
 static void
 terminate_mock_logind_service_and_wait (Fixture *fixture)
 {
-  GError *error = NULL;
-
   g_subprocess_send_signal (fixture->logind_mock, SIGTERM);
 
   /*
    * Make sure it was the SIGTERM that finished the process, and not something
    * else.
    */
+  GError *error = NULL;
   g_assert_false (g_subprocess_wait_check (fixture->logind_mock, NULL, &error));
   g_assert_error (error, G_SPAWN_ERROR, G_SPAWN_ERROR_FAILED);
   g_assert_cmpstr (error->message, ==, "Child process killed by signal 15");

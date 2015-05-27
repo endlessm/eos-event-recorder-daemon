@@ -82,8 +82,9 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
 
   priv->daemon_enabled = enabled;
 
-  /* This works for faking a property notification even though there isn't a
-  property by that name in this mock object */
+  /* Emit a property notification even though there isn't a property by this
+   * name in this mock object.
+   */
   g_signal_emit_by_name (self, "notify::daemon-enabled", NULL);
 }
 

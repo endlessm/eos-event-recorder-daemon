@@ -150,11 +150,11 @@ sequence_to_variant (SequenceEvent *sequence)
 }
 
 /*
- * Returns a new reference to a little-endian version of GVariant * regardless
- * of this machine's endianness. Crashes with a g_error if this machine is
- * middle-endian (a.k.a., mixed-endian).
+ * Returns a new reference to a little-endian version of the given GVariant
+ * regardless of this machine's endianness. Crashes with a g_error if this
+ * machine is middle-endian (a.k.a., mixed-endian).
  *
- * The returned GVariant * should have g_variant_unref() called on it when it is
+ * The returned GVariant should have g_variant_unref() called on it when it is
  * no longer needed.
  */
 GVariant *

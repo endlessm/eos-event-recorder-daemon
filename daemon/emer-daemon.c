@@ -189,7 +189,7 @@ swap_bytes_64_if_big_endian (gint64 value)
   if (G_BYTE_ORDER == G_BIG_ENDIAN)
     return bswap_64 (value);
   if (G_BYTE_ORDER != G_LITTLE_ENDIAN)
-    g_error ("This machine is neither big endian nor little endian. Mixed "
+    g_error ("This machine is neither big endian nor little endian. Mixed-"
              "endian machines are not supported by the metrics system.");
   return value;
 }
@@ -383,7 +383,6 @@ handle_http_response (SoupSession         *http_session,
       GError *error = NULL;
       GVariant *updated_request_body =
         get_updated_request_body (self, callback_data->request_body, &error);
-
       if (updated_request_body == NULL)
         {
           g_task_return_error (callback_data->upload_task, error);
@@ -798,7 +797,6 @@ schedule_upload (EmerDaemon  *self,
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   guint network_send_interval;
-
   if (priv->network_send_interval != 0u)
     network_send_interval = priv->network_send_interval;
   else if (g_strcmp0 (environment, "production") == 0)
@@ -1242,7 +1240,6 @@ emer_daemon_constructed (GObject *object)
   gchar *environment =
     emer_permissions_provider_get_environment (priv->permissions_provider);
   schedule_upload (self, environment);
-
   g_free (environment);
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->constructed (object);
@@ -1507,6 +1504,7 @@ emer_daemon_init (EmerDaemon *self)
                                    SOUP_SESSION_ADD_FEATURE_BY_TYPE,
                                    SOUP_TYPE_CACHE,
                                    NULL);
+
   g_free (user_agent);
 }
 
@@ -1526,24 +1524,26 @@ emer_daemon_new (void)
 /*
  * emer_daemon_new_full:
  * @rand: (allow-none): random number generator to use for randomized
- *   exponential backoff, or %NULL to use the default
+ *   exponential backoff, or %NULL to use the default.
  * @server_uri: (allow-none): the URI (including protocol and, optionally, port
  *   number) to which to upload events, or %NULL to use the default. Must
  *   include trailing forward slash. If the port number is unspecified, it
  *   defaults to 443 (the standard port used by SSL).
- * @network_send_interval: frequency with which the client will attempt a
- *   network send request
+ * @network_send_interval: frequency in seconds with which the client will
+ *   attempt a network send request.
  * @machine_id_provider: (allow-none): The #EmerMachineIdProvider to supply the
- *   machine ID, or %NULL to use the default
+ *   machine ID, or %NULL to use the default.
  * @network_send_provider: (allow-none): The #EmerNetworkSendProvider to supply
  *   the network send metadata, or %NULL to use the default.
  * @permissions_provider: The #EmerPermissionsProvider to supply information
- *   about opting out of metrics collection
+ *   about opting out of metrics collection, disabling network uploads, and the
+ *   metrics environment (dev or production).
  * @persistent_cache: (allow-none): The #EmerPersistentCache in which to store
  *   metrics locally when they can't be sent over the network, or %NULL to use
  *   the default.
- * @buffer_length: The maximum size of the buffers to be used for in-memory
- *   storage of metrics
+ * @buffer_length: The maximum number of events to store in each of the
+ *   in-memory buffers. There are three in-memory buffers, one for singulars,
+ *   for aggregates, and one for sequences.
  *
  * Testing function for creating a new EOS Metrics daemon.
  * You should only need to use this for unit testing.
@@ -1598,8 +1598,8 @@ emer_daemon_record_singular_event (EmerDaemon *self,
   if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
                                                    &boot_offset, NULL, FALSE))
     {
-      g_warning ("Unable to correct metric's relative timestamp. "
-                 "Dropping metric.");
+      g_warning ("Unable to correct event's relative timestamp. Dropping "
+                 "event.");
       return;
     }
   relative_timestamp += boot_offset;
@@ -1642,8 +1642,8 @@ emer_daemon_record_aggregate_event (EmerDaemon *self,
   if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
                                                    &boot_offset, NULL, FALSE))
     {
-      g_warning ("Unable to correct metric's relative timestamp. "
-                 "Dropping metric.");
+      g_warning ("Unable to correct event's relative timestamp. Dropping "
+                 "event.");
       return;
     }
   relative_timestamp += boot_offset;
@@ -1686,8 +1686,8 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
   if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
                                                    &boot_offset, NULL, FALSE))
     {
-      g_warning ("Unable to correct metric's relative timestamp. "
-                 "Dropping metric.");
+      g_warning ("Unable to correct event's relative timestamp. Dropping "
+                 "event.");
       return;
     }
 

@@ -1875,6 +1875,7 @@ test_persistent_cache_updates_timestamps_on_finalize (gboolean     *unused,
 
   g_assert_true (get_succeeded);
   g_assert_no_error (error);
+
   gint64 relative_time = read_relative_time ();
   gint64 absolute_time = read_absolute_time ();
 

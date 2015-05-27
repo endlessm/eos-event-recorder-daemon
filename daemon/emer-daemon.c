@@ -339,7 +339,7 @@ get_updated_request_body (EmerDaemon *self,
                           GVariant   *request_body,
                           GError    **error)
 {
-  gint send_number;
+  gint32 send_number;
   GVariantIter *machine_id_iter;
   GVariantIter *singulars_iter, *aggregates_iter, *sequences_iter;
   g_variant_get (request_body, "(ixxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))",

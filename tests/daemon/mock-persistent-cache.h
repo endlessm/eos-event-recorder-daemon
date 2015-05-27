@@ -29,6 +29,8 @@
 
 G_BEGIN_DECLS
 
+#define BOOT_TIME_OFFSET G_GINT64_CONSTANT (73)
+
 gint mock_persistent_cache_get_num_timestamp_updates (EmerPersistentCache *self);
 gint mock_persistent_cache_get_store_metrics_called  (EmerPersistentCache *self);
 

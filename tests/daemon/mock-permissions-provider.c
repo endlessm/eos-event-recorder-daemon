@@ -29,8 +29,7 @@
 typedef struct _EmerPermissionsProviderPrivate
 {
   gboolean mock_daemon_enabled;
-
-  gint get_daemon_enabled_called;
+  gboolean uploading_enabled;
 } EmerPermissionsProviderPrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerPermissionsProvider, emer_permissions_provider, G_TYPE_OBJECT)
@@ -47,6 +46,7 @@ emer_permissions_provider_init (EmerPermissionsProvider *self)
     emer_permissions_provider_get_instance_private (self);
 
   priv->mock_daemon_enabled = TRUE;
+  priv->uploading_enabled = TRUE;
 }
 
 /* MOCK PUBLIC API */
@@ -70,7 +70,6 @@ emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self)
   EmerPermissionsProviderPrivate *priv =
     emer_permissions_provider_get_instance_private (self);
 
-  priv->get_daemon_enabled_called++;
   return priv->mock_daemon_enabled;
 }
 
@@ -91,7 +90,10 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
 gboolean
 emer_permissions_provider_get_uploading_enabled (EmerPermissionsProvider *self)
 {
-  return TRUE;
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  return priv->uploading_enabled;
 }
 
 gchar *
@@ -102,12 +104,14 @@ emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
 
 /* API OF MOCK OBJECT */
 
-/* Return number of calls to emer_permissions_provider_get_daemon_enabled(). */
-gint
-mock_permissions_provider_get_daemon_enabled_called (EmerPermissionsProvider *self)
+/* Sets the value to return from
+ * emer_permissions_provider_get_uploading_enabled(). */
+void
+mock_permissions_provider_set_uploading_enabled (EmerPermissionsProvider *self,
+                                                 gboolean                 uploading_enabled)
 {
   EmerPermissionsProviderPrivate *priv =
     emer_permissions_provider_get_instance_private (self);
 
-  return priv->get_daemon_enabled_called;
+  priv->uploading_enabled = uploading_enabled;
 }

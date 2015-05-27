@@ -31,6 +31,12 @@
 #include "emer-event-recorder-server.h"
 #include "shared/metrics-util.h"
 
+typedef struct _DBusCallbackData
+{
+  EmerEventRecorderServer *server;
+  GDBusMethodInvocation *invocation;
+} DBusCallbackData;
+
 static gboolean
 on_record_singular_event (EmerEventRecorderServer *server,
                           GDBusMethodInvocation   *invocation,
@@ -88,6 +94,38 @@ on_set_enabled (EmerEventRecorderServer *server,
 {
   emer_event_recorder_server_set_enabled (server, enabled);
   emer_event_recorder_server_complete_set_enabled (server, invocation);
+  return TRUE;
+}
+
+static void
+handle_upload_finished (EmerDaemon       *daemon,
+                        GAsyncResult     *result,
+                        DBusCallbackData *callback_data)
+{
+  GError *error = NULL;
+  gboolean upload_succeeded =
+    emer_daemon_upload_events_finish (daemon, result, &error);
+  if (upload_succeeded)
+    emer_event_recorder_server_complete_upload_events (callback_data->server,
+                                                       callback_data->invocation);
+  else
+    g_dbus_method_invocation_take_error (callback_data->invocation, error);
+
+  g_object_unref (callback_data->server);
+  g_free (callback_data);
+}
+
+static gboolean
+on_upload_events (EmerEventRecorderServer *server,
+                  GDBusMethodInvocation   *invocation,
+                  EmerDaemon              *daemon)
+{
+  DBusCallbackData *callback_data = g_new (DBusCallbackData, 1);
+  callback_data->server = g_object_ref (server);
+  callback_data->invocation = g_object_ref (invocation);
+  emer_daemon_upload_events (daemon,
+                             (GAsyncReadyCallback) handle_upload_finished,
+                             callback_data);
   return TRUE;
 }
 
@@ -178,6 +216,8 @@ on_bus_acquired (GDBusConnection *system_bus,
                     G_CALLBACK (on_record_event_sequence), daemon);
   g_signal_connect (server, "handle-set-enabled",
                     G_CALLBACK (on_set_enabled), daemon);
+  g_signal_connect (server, "handle-upload-events",
+                    G_CALLBACK (on_upload_events), daemon);
   g_signal_connect (server, "g-authorize-method",
                     G_CALLBACK (on_authorize_method_check), daemon);
 

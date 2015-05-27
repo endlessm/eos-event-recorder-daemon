@@ -29,8 +29,10 @@
 #include <string.h>
 #include <time.h>
 
+#include <gio/gio.h>
 #include <gio/gunixfdlist.h>
 #include <glib.h>
+#include <glib-object.h>
 #include <glib/gstdio.h>
 #include <libsoup/soup.h>
 #include <uuid/uuid.h>
@@ -92,6 +94,7 @@ typedef struct _NetworkCallbackData
   EmerDaemon *daemon;
   GVariant *request_body;
   gint attempt_num;
+  GTask *upload_task;
 } NetworkCallbackData;
 
 typedef struct _EmerDaemonPrivate
@@ -100,12 +103,16 @@ typedef struct _EmerDaemonPrivate
   GDBusProxy *login_manager_proxy;
   guint network_send_interval;
   GSocketConnectable *ping_socket;
-  gchar *server_uri;
+  GQueue *upload_queue;
+  gboolean uploading;
   SoupSession *http_session;
 
   /* Private storage for public properties */
 
   GRand *rand;
+
+  gboolean use_default_server_uri;
+  gchar *server_uri;
 
   guint upload_events_timeout_source_id;
 
@@ -140,6 +147,7 @@ enum
 {
   PROP_0,
   PROP_RANDOM_NUMBER_GENERATOR,
+  PROP_SERVER_URI,
   PROP_NETWORK_SEND_INTERVAL,
   PROP_MACHINE_ID_PROVIDER,
   PROP_NETWORK_SEND_PROVIDER,
@@ -153,13 +161,29 @@ enum
 
 static GParamSpec *emer_daemon_props[NPROPS] = { NULL, };
 
-static gboolean check_and_upload_events (EmerDaemon *self);
+enum
+{
+  SIGNAL_0,
+  SIGNAL_UPLOAD_FINISHED,
+  NSIGNALS
+};
+
+static guint emer_daemon_signals[NSIGNALS] = { 0u, };
+
+static gboolean handle_upload_timer (EmerDaemon *self);
 
 static void
-free_network_callback_data (NetworkCallbackData *callback_data)
+finish_network_callback (NetworkCallbackData *callback_data)
 {
+  EmerDaemon *self = callback_data->daemon;
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
   g_variant_unref (callback_data->request_body);
+  g_object_unref (callback_data->upload_task);
   g_free (callback_data);
+
+  priv->uploading = FALSE;
+  g_signal_emit (self, emer_daemon_signals[SIGNAL_UPLOAD_FINISHED], 0u);
 }
 
 static gint64
@@ -290,25 +314,24 @@ get_http_request_uri (EmerDaemon   *self,
 static gboolean
 get_offset_timestamps (EmerDaemon *self,
                        gint64     *rel_timestamp_ptr,
-                       gint64     *abs_timestamp_ptr)
+                       gint64     *abs_timestamp_ptr,
+                       GError    **error)
 {
 
   if (!emtr_util_get_current_time (CLOCK_BOOTTIME, rel_timestamp_ptr) ||
       !emtr_util_get_current_time (CLOCK_REALTIME, abs_timestamp_ptr))
-    return FALSE;
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                   "Could not get current time.");
+      return FALSE;
+    }
 
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  GError *error = NULL;
   gint64 boot_offset;
   if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
-                                                   &boot_offset, &error, FALSE))
-    {
-      g_warning ("Persistent cache could not get boot offset: %s.",
-                 error->message);
-      g_error_free (error);
-      return FALSE;
-    }
+                                                   &boot_offset, error, FALSE))
+    return FALSE;
 
   *rel_timestamp_ptr += boot_offset;
   return TRUE;
@@ -316,7 +339,8 @@ get_offset_timestamps (EmerDaemon *self,
 
 static GVariant *
 get_updated_request_body (EmerDaemon *self,
-                          GVariant   *request_body)
+                          GVariant   *request_body,
+                          GError    **error)
 {
   gint send_number;
   GVariantIter *machine_id_iter;
@@ -348,11 +372,9 @@ get_updated_request_body (EmerDaemon *self,
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.
   gint64 relative_timestamp, absolute_timestamp;
-  if (!get_offset_timestamps (self, &relative_timestamp, &absolute_timestamp))
-    {
-      g_warning ("Could not get, or correct, network request timestamps.");
-      return NULL;
-    }
+  if (!get_offset_timestamps (self, &relative_timestamp, &absolute_timestamp,
+                              error))
+    return NULL;
 
   gint64 little_endian_relative_timestamp =
     swap_bytes_64_if_big_endian (relative_timestamp);
@@ -381,7 +403,8 @@ handle_http_response (SoupSession         *http_session,
   g_object_get (http_message, "status-code", &status_code, NULL);
   if (SOUP_STATUS_IS_SUCCESSFUL (status_code))
     {
-      free_network_callback_data (callback_data);
+      g_task_return_boolean (callback_data->upload_task, TRUE);
+      finish_network_callback (callback_data);
       return;
     }
 
@@ -392,9 +415,11 @@ handle_http_response (SoupSession         *http_session,
 
   if (++callback_data->attempt_num >= NETWORK_ATTEMPT_LIMIT)
     {
-      g_debug ("Maximum number of network attempts (%d) reached -- dropping "
-               "metrics.", NETWORK_ATTEMPT_LIMIT);
-      free_network_callback_data (callback_data);
+      g_task_return_new_error (callback_data->upload_task, G_IO_ERROR,
+                               G_IO_ERROR_FAILED,
+                               "Maximum number of network attempts (%d) "
+                               "reached.", NETWORK_ATTEMPT_LIMIT);
+      finish_network_callback (callback_data);
       return;
     }
 
@@ -403,14 +428,15 @@ handle_http_response (SoupSession         *http_session,
       SOUP_STATUS_IS_SERVER_ERROR (status_code))
     {
       backoff (priv->rand, callback_data->attempt_num);
+
+      GError *error = NULL;
       GVariant *updated_request_body =
-        get_updated_request_body (self, callback_data->request_body);
+        get_updated_request_body (self, callback_data->request_body, &error);
 
       if (updated_request_body == NULL)
         {
-          g_warning ("Could not update network request with current "
-                     "timestamps. Dropping metrics.");
-          free_network_callback_data (callback_data);
+          g_task_return_error (callback_data->upload_task, error);
+          finish_network_callback (callback_data);
           return;
         }
 
@@ -421,9 +447,11 @@ handle_http_response (SoupSession         *http_session,
         g_variant_get_data (updated_request_body);
       if (serialized_request_body == NULL)
         {
-          g_warning ("Could not serialize updated network request body. "
-                     "Dropping metrics.");
-          free_network_callback_data (callback_data);
+          g_task_return_new_error (callback_data->upload_task, G_IO_ERROR,
+                                   G_IO_ERROR_INVALID_DATA,
+                                   "Could not serialize updated network "
+                                   "request body.");
+          finish_network_callback (callback_data);
           return;
         }
 
@@ -448,8 +476,10 @@ handle_http_response (SoupSession         *http_session,
       return;
     }
 
-  g_warning ("Received HTTP status code: %u. Dropping metrics.", status_code);
-  free_network_callback_data (callback_data);
+  g_task_return_new_error (callback_data->upload_task, G_IO_ERROR,
+                           G_IO_ERROR_FAILED, "Received HTTP status code: %u.",
+                           status_code);
+  finish_network_callback (callback_data);
 }
 
 static void
@@ -577,14 +607,20 @@ drain_persistent_cache (EmerDaemonPrivate *priv,
 }
 
 static GVariant *
-create_request_body (EmerDaemon *self)
+create_request_body (EmerDaemon *self,
+                     GError    **error)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
   uuid_t machine_id;
   gboolean read_id = emer_machine_id_provider_get_id (priv->machine_id_provider,
                                                       machine_id);
   if (!read_id)
-    return NULL;
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                   "Could not read machine ID.");
+      return NULL;
+    }
 
   GVariantBuilder machine_id_builder;
   get_uuid_builder (machine_id, &machine_id_builder);
@@ -608,11 +644,9 @@ create_request_body (EmerDaemon *self)
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.
   gint64 relative_timestamp, absolute_timestamp;
-  if (!get_offset_timestamps (self, &relative_timestamp, &absolute_timestamp))
-    {
-      g_warning ("Could not get, or correct, network request timestamps.");
-      return NULL;
-    }
+  if (!get_offset_timestamps (self, &relative_timestamp, &absolute_timestamp,
+                              error))
+    return NULL;
 
   GVariant *request_body =
     g_variant_new ("(ixxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))", send_number,
@@ -727,43 +761,44 @@ flush_to_persistent_cache (EmerDaemon *self)
 }
 
 static void
-upload_events (GNetworkMonitor *source_object,
-               GAsyncResult    *res,
-               EmerDaemon      *self)
+handle_network_monitor_can_reach (GNetworkMonitor *source_object,
+                                  GAsyncResult    *res,
+                                  EmerDaemon      *self)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  if (!priv->recording_enabled)
+  if (priv->uploading)
     return;
 
-  gboolean uploading_enabled =
-    emer_permissions_provider_get_uploading_enabled (priv->permissions_provider);
-  if (!uploading_enabled)
-    {
-      flush_to_persistent_cache (self);
-      return;
-    }
+  GTask *upload_task = g_queue_pop_head (priv->upload_queue);
 
   GError *error = NULL;
   if (!g_network_monitor_can_reach_finish (priv->network_monitor, res, &error))
     {
-      g_debug ("Network Monitor says we can't reach the network. Sending "
-               "metrics to persistent cache. Error: %s.", error->message);
-      g_error_free (error);
       flush_to_persistent_cache (self);
+      g_task_return_error (upload_task, error);
+      g_object_unref (upload_task);
       return;
     }
 
-  GVariant *request_body = create_request_body (self);
+  GVariant *request_body = create_request_body (self, &error);
   if (request_body == NULL)
-    return;
+    {
+      g_task_return_error (upload_task, error);
+      g_object_unref (upload_task);
+      return;
+    }
 
   gconstpointer serialized_request_body = g_variant_get_data (request_body);
   if (serialized_request_body == NULL)
     {
-      g_warning ("Could not serialize network request body.");
+      g_task_return_new_error (upload_task, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                               "Could not serialize network request body.");
+      g_object_unref (upload_task);
       return;
     }
+
+  priv->uploading = TRUE;
 
   gsize request_body_length = g_variant_get_size (request_body);
 
@@ -781,6 +816,7 @@ upload_events (GNetworkMonitor *source_object,
   callback_data->daemon = self;
   callback_data->request_body = request_body;
   callback_data->attempt_num = 0;
+  callback_data->upload_task = upload_task;
   soup_session_queue_message (priv->http_session, http_message,
                               (SoupSessionCallback) handle_http_response,
                               callback_data);
@@ -805,8 +841,8 @@ set_ping_socket (EmerDaemon *self)
 }
 
 static void
-add_upload_events_timeout (EmerDaemon  *self,
-                           const gchar *environment)
+schedule_upload (EmerDaemon  *self,
+                 const gchar *environment)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
@@ -821,35 +857,129 @@ add_upload_events_timeout (EmerDaemon  *self,
 
   priv->upload_events_timeout_source_id =
     g_timeout_add_seconds (network_send_interval,
-                           (GSourceFunc) check_and_upload_events,
+                           (GSourceFunc) handle_upload_timer,
                            self);
 }
 
 static gboolean
-check_and_upload_events (EmerDaemon *self)
+upload_permitted (EmerDaemon *self,
+                  GError    **error)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  if (!priv->recording_enabled)
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED,
+                   "Could not upload events because the metrics system is "
+                   "disabled. You may enable the metrics system via "
+                   "Settings/Configuración > Privacy/Privacidad > "
+                   "Metrics/Métricas.");
+      return FALSE;
+    }
+
+  gboolean uploading_enabled =
+    emer_permissions_provider_get_uploading_enabled (priv->permissions_provider);
+  if (!uploading_enabled)
+    {
+      flush_to_persistent_cache (self);
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED,
+                   "Could not upload events because uploading is disabled. You "
+                   "may enable uploading by setting uploading_enabled to true "
+                   "in " PERMISSIONS_FILE ".");
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
+static void
+dequeue_and_do_upload (EmerDaemon  *self,
+                       const gchar *environment)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  GError *error = NULL;
+  if (!upload_permitted (self, &error))
+    {
+      GTask *upload_task = g_queue_pop_head (priv->upload_queue);
+      g_task_return_error (upload_task, error);
+      g_object_unref (upload_task);
+      return;
+    }
+
+  if (priv->use_default_server_uri)
+    {
+      g_clear_pointer (&priv->server_uri, g_free);
+      priv->server_uri =
+        g_strconcat ("https://", environment, ".metrics.endlessm.com/"
+                     CLIENT_VERSION_NUMBER "/", NULL);
+    }
+
+  set_ping_socket (self);
+
+  g_network_monitor_can_reach_async (priv->network_monitor,
+                                     priv->ping_socket,
+                                     NULL,
+                                     (GAsyncReadyCallback) handle_network_monitor_can_reach,
+                                     self);
+}
+
+static void
+check_and_upload_events (EmerDaemon         *self,
+                         const gchar        *environment,
+                         GAsyncReadyCallback callback,
+                         gpointer            user_data)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  GTask *upload_task =
+    g_task_new (self, NULL /* GCancellable */, callback, user_data);
+  g_queue_push_tail (priv->upload_queue, upload_task);
+  dequeue_and_do_upload (self, environment);
+}
+
+static void
+log_upload_error (EmerDaemon   *self,
+                  GAsyncResult *result,
+                  gpointer      unused)
+{
+  GError *error = NULL;
+  if (!emer_daemon_upload_events_finish (self, result, &error))
+    {
+      g_warning ("Dropped events because they could not be uploaded: %s.",
+                 error->message);
+      g_error_free (error);
+    }
+}
+
+static gboolean
+handle_upload_timer (EmerDaemon *self)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   gchar *environment =
     emer_permissions_provider_get_environment (priv->permissions_provider);
-  g_clear_pointer (&priv->server_uri, g_free);
-  priv->server_uri = g_strconcat ("https://",
-                                  environment,
-                                  ".metrics.endlessm.com/",
-                                  CLIENT_VERSION_NUMBER,
-                                  "/",
-                                  NULL);
+  schedule_upload (self, environment);
+  check_and_upload_events (self, environment,
+                           (GAsyncReadyCallback) log_upload_error,
+                           NULL /* user_data */);
+  g_free (environment);
 
-  set_ping_socket (self);
-  add_upload_events_timeout (self, environment);
-
-  g_clear_pointer (&environment, g_free);
-  g_network_monitor_can_reach_async (priv->network_monitor,
-                                     priv->ping_socket,
-                                     NULL,
-                                     (GAsyncReadyCallback) upload_events,
-                                     self);
   return G_SOURCE_REMOVE;
+}
+
+static void
+handle_upload_finished (EmerDaemon *self)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  if (g_queue_is_empty (priv->upload_queue))
+    return;
+
+  gchar *environment =
+    emer_permissions_provider_get_environment (priv->permissions_provider);
+  dequeue_and_do_upload (self, environment);
+  g_free (environment);
 }
 
 static void
@@ -1035,6 +1165,21 @@ set_random_number_generator (EmerDaemon *self,
 }
 
 static void
+set_server_uri (EmerDaemon  *self,
+                const gchar *server_uri)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  priv->use_default_server_uri = (server_uri == NULL);
+  if (!priv->use_default_server_uri)
+    {
+      g_free (priv->server_uri);
+      priv->server_uri =
+        g_strconcat (server_uri, CLIENT_VERSION_NUMBER "/", NULL);
+    }
+}
+
+static void
 set_network_send_interval (EmerDaemon *self,
                            guint       seconds)
 {
@@ -1146,7 +1291,7 @@ emer_daemon_constructed (GObject *object)
 
   gchar *environment =
     emer_permissions_provider_get_environment (priv->permissions_provider);
-  add_upload_events_timeout (self, environment);
+  schedule_upload (self, environment);
 
   g_clear_pointer (&environment, g_free);
 
@@ -1165,6 +1310,10 @@ emer_daemon_set_property (GObject      *object,
     {
     case PROP_RANDOM_NUMBER_GENERATOR:
       set_random_number_generator (self, g_value_get_pointer (value));
+      break;
+
+    case PROP_SERVER_URI:
+      set_server_uri (self, g_value_get_string (value));
       break;
 
     case PROP_NETWORK_SEND_INTERVAL:
@@ -1218,10 +1367,15 @@ emer_daemon_finalize (GObject *object)
 
   g_clear_object (&priv->login_manager_proxy);
   g_clear_object (&priv->ping_socket);
-  g_free (priv->server_uri);
+
+  g_queue_free_full (priv->upload_queue, g_object_unref);
+
+  soup_session_abort (priv->http_session);
+
   g_clear_object (&priv->http_session);
 
   g_rand_free (priv->rand);
+  g_free (priv->server_uri);
   g_clear_object (&priv->machine_id_provider);
   g_clear_object (&priv->network_send_provider);
   g_clear_object (&priv->permissions_provider);
@@ -1258,6 +1412,20 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                           "exponential backoff",
                           G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                           G_PARAM_STATIC_STRINGS);
+
+  /*
+   * EmerDaemon:server-uri:
+   *
+   * The URI to which events are uploaded. The URI must contain the protocol and
+   * may contain the port number. If unspecified, the port number defaults to
+   * 443, which is the standard port number for SSL.
+   */
+  emer_daemon_props[PROP_SERVER_URI] =
+    g_param_spec_string ("server-uri", "Server URI",
+                         "URI to which events are uploaded",
+                         NULL,
+                         G_PARAM_CONSTRUCT | G_PARAM_WRITABLE |
+                         G_PARAM_STATIC_STRINGS);
 
   /*
    * EmerDaemon:network-send-interval:
@@ -1359,6 +1527,14 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                       G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, NPROPS, emer_daemon_props);
+
+  klass->upload_finished_handler = handle_upload_finished;
+
+  emer_daemon_signals[SIGNAL_UPLOAD_FINISHED] =
+    g_signal_new ("upload-finished", EMER_TYPE_DAEMON, G_SIGNAL_RUN_FIRST,
+                  G_STRUCT_OFFSET (EmerDaemonClass, upload_finished_handler),
+                  NULL /* GSignalAccumulator */, NULL /* accumulator_data */,
+                  g_cclosure_marshal_VOID__VOID, G_TYPE_NONE, 0u);
 }
 
 static void
@@ -1372,7 +1548,9 @@ emer_daemon_init (EmerDaemon *self)
   connect_to_login_manager (self);
 
   priv->ping_socket = NULL;
-  priv->server_uri = NULL;
+
+  priv->upload_queue = g_queue_new ();
+  priv->uploading = FALSE;
 
   gchar *user_agent = get_user_agent ();
 
@@ -1404,6 +1582,10 @@ emer_daemon_new (void)
  * emer_daemon_new_full:
  * @rand: (allow-none): random number generator to use for randomized
  *   exponential backoff, or %NULL to use the default
+ * @server_uri: (allow-none): the URI (including protocol and, optionally, port
+ *   number) to which to upload events, or %NULL to use the default. Must
+ *   include trailing forward slash. If the port number is unspecified, it
+ *   defaults to 443 (the standard port used by SSL).
  * @network_send_interval: frequency with which the client will attempt a
  *   network send request
  * @machine_id_provider: (allow-none): The #EmerMachineIdProvider to supply the
@@ -1425,6 +1607,7 @@ emer_daemon_new (void)
  */
 EmerDaemon *
 emer_daemon_new_full (GRand                   *rand,
+                      const gchar             *server_uri,
                       guint                    network_send_interval,
                       EmerMachineIdProvider   *machine_id_provider,
                       EmerNetworkSendProvider *network_send_provider,
@@ -1434,6 +1617,7 @@ emer_daemon_new_full (GRand                   *rand,
 {
   return g_object_new (EMER_TYPE_DAEMON,
                        "random-number-generator", rand,
+                       "server-uri", server_uri,
                        "network-send-interval", network_send_interval,
                        "machine-id-provider", machine_id_provider,
                        "network-send-provider", network_send_provider,
@@ -1572,6 +1756,50 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
       g_variant_unref (event_values);
       event_sequence->num_event_values = num_events;
     }
+}
+
+/* emer_daemon_upload_events:
+ * @self: the daemon
+ * @callback (nullable): the function to call once the upload completes. The
+ * first parameter passed to this callback is self. The second parameter is a
+ * GAsyncResult that can be passed to emer_daemon_upload_events_finish to
+ * determine whether the upload succeeded. The third parameter is user_data.
+ * @user_data (nullable): arbitrary data that is blindly passed through to the
+ * callback.
+ *
+ * The event recorder daemon may have already decided to upload some or all
+ * events before this method was called. Once events have been uploaded, they
+ * may no longer be stored locally.
+ */
+void
+emer_daemon_upload_events (EmerDaemon         *self,
+                           GAsyncReadyCallback callback,
+                           gpointer            user_data)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  gchar *environment =
+    emer_permissions_provider_get_environment (priv->permissions_provider);
+  check_and_upload_events (self, environment, callback, user_data);
+  g_free (environment);
+}
+
+/* emer_daemon_upload_events_finish:
+ * @self: the daemon
+ * @result: a GAsyncResult that encapsulates whether the upload succeeded
+ * @error (out) (optional): if the upload failed, error will be set to a GError
+ * describing what went wrong; otherwise it will be set to NULL. Pass NULL to
+ * ignore this value.
+ *
+ * Returns: TRUE if the upload succeeded (even if there were no events to
+ * upload) and FALSE if it failed.
+ */
+gboolean
+emer_daemon_upload_events_finish (EmerDaemon   *self,
+                                  GAsyncResult *result,
+                                  GError      **error)
+{
+  return g_task_propagate_boolean (G_TASK (result), error);
 }
 
 /*

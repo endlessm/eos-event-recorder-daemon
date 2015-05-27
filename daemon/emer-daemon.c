@@ -102,7 +102,6 @@ typedef struct _EmerDaemonPrivate
   gint shutdown_inhibitor;
   GDBusProxy *login_manager_proxy;
   guint network_send_interval;
-  GSocketConnectable *ping_socket;
   GQueue *upload_queue;
   gboolean uploading;
   SoupSession *http_session;
@@ -820,22 +819,23 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
                               callback_data);
 }
 
-static void
-set_ping_socket (EmerDaemon *self)
+static GSocketConnectable *
+get_ping_socket (EmerDaemon *self)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  g_clear_object (&priv->ping_socket);
   GError *error = NULL;
-  priv->ping_socket = g_network_address_parse_uri (priv->server_uri,
-                                                   443, // SSL default port
-                                                   &error);
-  if (priv->ping_socket == NULL)
+  GSocketConnectable *ping_socket =
+    g_network_address_parse_uri (priv->server_uri, 443 /* SSL default port */,
+                                 &error);
+  if (ping_socket == NULL)
   {
     g_error ("Invalid server URI '%s' could not be parsed because: %s.",
              priv->server_uri, error->message);
     g_error_free (error);
   }
+
+  return ping_socket;
 }
 
 static void
@@ -914,10 +914,11 @@ dequeue_and_do_upload (EmerDaemon  *self,
     }
 
   GNetworkMonitor *network_monitor = g_network_monitor_get_default ();
-  set_ping_socket (self);
-  g_network_monitor_can_reach_async (network_monitor, priv->ping_socket, NULL,
+  GSocketConnectable *ping_socket = get_ping_socket (self);
+  g_network_monitor_can_reach_async (network_monitor, ping_socket, NULL,
                                      (GAsyncReadyCallback) handle_network_monitor_can_reach,
                                      self);
+  g_object_unref (ping_socket);
 }
 
 static void
@@ -1362,7 +1363,6 @@ emer_daemon_finalize (GObject *object)
   release_shutdown_inhibitor (self);
 
   g_clear_object (&priv->login_manager_proxy);
-  g_clear_object (&priv->ping_socket);
 
   g_queue_free_full (priv->upload_queue, g_object_unref);
 
@@ -1541,8 +1541,6 @@ emer_daemon_init (EmerDaemon *self)
   priv->shutdown_inhibitor = -1;
 
   connect_to_login_manager (self);
-
-  priv->ping_socket = NULL;
 
   priv->upload_queue = g_queue_new ();
   priv->uploading = FALSE;

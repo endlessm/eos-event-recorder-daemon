@@ -795,7 +795,7 @@ upload_events (GNetworkMonitor *source_object,
   SoupURI *https_request_uri =
     get_https_request_uri (self, serialized_request_body, request_body_length);
   SoupMessage *https_message =
-    soup_message_new_from_uri ("PUT",  https_request_uri);
+    soup_message_new_from_uri ("PUT", https_request_uri);
   soup_uri_free (https_request_uri);
 
   soup_message_set_request (https_message, "application/octet-stream",

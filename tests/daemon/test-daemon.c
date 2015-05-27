@@ -448,8 +448,7 @@ static GVariant *
 make_event_id_variant (void)
 {
   uuid_t uuid;
-  if (uuid_parse (MEANINGLESS_EVENT, uuid) != 0)
-    g_error ("Failed to parse testing uuid.");
+  g_assert_cmpint (uuid_parse (MEANINGLESS_EVENT, uuid), ==, 0);
   GVariantBuilder event_id_builder;
   get_uuid_builder (uuid, &event_id_builder);
   return g_variant_builder_end (&event_id_builder);

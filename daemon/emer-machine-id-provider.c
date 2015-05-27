@@ -24,7 +24,6 @@
 
 #include "shared/metrics-util.h"
 
-#include <stdio.h>
 #include <string.h>
 #include <uuid/uuid.h>
 #include <glib/gprintf.h>

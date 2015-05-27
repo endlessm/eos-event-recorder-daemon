@@ -28,7 +28,6 @@
 #include <glib-object.h>
 
 #include <errno.h>
-#include <stdio.h>
 
 #include <eosmetrics/eosmetrics.h>
 

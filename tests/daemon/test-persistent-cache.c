@@ -21,7 +21,6 @@
 #include "daemon/emer-persistent-cache.h"
 
 #include <glib.h>
-#include <stdio.h>
 #include <glib/gstdio.h>
 
 #include <eosmetrics/eosmetrics.h>

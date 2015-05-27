@@ -22,8 +22,6 @@
 
 #include "emer-cache-version-provider.h"
 
-#include <stdio.h>
-
 typedef struct EmerCacheVersionProviderPrivate
 {
   gchar *path;

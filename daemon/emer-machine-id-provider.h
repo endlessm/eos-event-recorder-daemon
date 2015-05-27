@@ -83,7 +83,7 @@ EmerMachineIdProvider *emer_machine_id_provider_new      (void);
 EmerMachineIdProvider *emer_machine_id_provider_new_full (const gchar           *machine_id_file_path);
 
 gboolean               emer_machine_id_provider_get_id   (EmerMachineIdProvider *self,
-                                                          guchar                 uuid[16]);
+                                                          guchar                 machine_id[16]);
 
 G_END_DECLS
 

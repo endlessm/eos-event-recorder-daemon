@@ -290,11 +290,11 @@ get_http_request_uri (EmerDaemon   *self,
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  gchar *checksum_string = g_compute_checksum_for_data (G_CHECKSUM_SHA512, data,
-                                                        length);
+  gchar *checksum =
+    g_compute_checksum_for_data (G_CHECKSUM_SHA512, data, length);
   gchar *http_request_uri_string =
-    g_strconcat (priv->server_uri, checksum_string, NULL);
-  g_free (checksum_string);
+    g_strconcat (priv->server_uri, checksum, NULL);
+  g_free (checksum);
 
   SoupURI *http_request_uri = soup_uri_new (http_request_uri_string);
 
@@ -761,8 +761,8 @@ flush_to_persistent_cache (EmerDaemon *self)
 }
 
 static void
-handle_network_monitor_can_reach (GNetworkMonitor *source_object,
-                                  GAsyncResult    *res,
+handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
+                                  GAsyncResult    *result,
                                   EmerDaemon      *self)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
@@ -773,7 +773,8 @@ handle_network_monitor_can_reach (GNetworkMonitor *source_object,
   GTask *upload_task = g_queue_pop_head (priv->upload_queue);
 
   GError *error = NULL;
-  if (!g_network_monitor_can_reach_finish (priv->network_monitor, res, &error))
+  if (!g_network_monitor_can_reach_finish (priv->network_monitor, result,
+                                           &error))
     {
       flush_to_persistent_cache (self);
       g_task_return_error (upload_task, error);

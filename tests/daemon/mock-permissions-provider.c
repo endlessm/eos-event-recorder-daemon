@@ -28,7 +28,7 @@
 
 typedef struct _EmerPermissionsProviderPrivate
 {
-  gboolean mock_daemon_enabled;
+  gboolean daemon_enabled;
   gboolean uploading_enabled;
 } EmerPermissionsProviderPrivate;
 
@@ -45,7 +45,7 @@ emer_permissions_provider_init (EmerPermissionsProvider *self)
   EmerPermissionsProviderPrivate *priv =
     emer_permissions_provider_get_instance_private (self);
 
-  priv->mock_daemon_enabled = TRUE;
+  priv->daemon_enabled = TRUE;
   priv->uploading_enabled = TRUE;
 }
 
@@ -70,7 +70,7 @@ emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self)
   EmerPermissionsProviderPrivate *priv =
     emer_permissions_provider_get_instance_private (self);
 
-  return priv->mock_daemon_enabled;
+  return priv->daemon_enabled;
 }
 
 void
@@ -80,7 +80,7 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
   EmerPermissionsProviderPrivate *priv =
     emer_permissions_provider_get_instance_private (self);
 
-  priv->mock_daemon_enabled = enabled;
+  priv->daemon_enabled = enabled;
 
   /* This works for faking a property notification even though there isn't a
   property by that name in this mock object */

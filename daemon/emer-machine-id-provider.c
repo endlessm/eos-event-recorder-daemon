@@ -280,7 +280,7 @@ read_machine_id (EmerMachineIdProvider *self)
  */
 gboolean
 emer_machine_id_provider_get_id (EmerMachineIdProvider *self,
-                                 uuid_t                 uuid)
+                                 uuid_t                 machine_id)
 {
   EmerMachineIdProviderPrivate *priv = emer_machine_id_provider_get_instance_private (self);
   static gboolean id_is_valid = FALSE;
@@ -301,6 +301,6 @@ emer_machine_id_provider_get_id (EmerMachineIdProvider *self,
     }
   G_UNLOCK (id_is_valid);
 
-  memcpy(uuid, priv->id, UUID_LENGTH);
+  memcpy(machine_id, priv->id, UUID_LENGTH);
   return TRUE;
 }

@@ -476,7 +476,7 @@ make_event_values_variant (void)
                          RELATIVE_TIMESTAMP,
                          TRUE,
                          g_variant_new_boolean (TRUE));
-  return g_variant_new ("a(xbv)", &builder);
+  return g_variant_builder_end (&builder);
 }
 
 static void

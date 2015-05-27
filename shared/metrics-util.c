@@ -178,7 +178,7 @@ void
 get_uuid_builder (uuid_t           uuid,
                   GVariantBuilder *uuid_builder)
 {
-  g_variant_builder_init (uuid_builder, G_VARIANT_TYPE ("ay"));
+  g_variant_builder_init (uuid_builder, G_VARIANT_TYPE_BYTESTRING);
   for (size_t i = 0; i < UUID_LENGTH; ++i)
     g_variant_builder_add (uuid_builder, "y", uuid[i]);
 }

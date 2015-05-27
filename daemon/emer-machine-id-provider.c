@@ -300,6 +300,6 @@ emer_machine_id_provider_get_id (EmerMachineIdProvider *self,
     }
   G_UNLOCK (id_is_valid);
 
-  memcpy(machine_id, priv->id, UUID_LENGTH);
+  uuid_copy (machine_id, priv->id);
   return TRUE;
 }

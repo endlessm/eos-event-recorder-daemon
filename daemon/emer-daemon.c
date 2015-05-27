@@ -216,29 +216,26 @@ release_shutdown_inhibitor (EmerDaemon *self)
     }
 }
 
+static gboolean
+is_uuid (GVariant *variant)
+{
+  const GVariantType *variant_type = g_variant_get_type (variant);
+  if (!g_variant_type_equal (variant_type, G_VARIANT_TYPE_BYTESTRING))
+    return FALSE;
+
+  return g_variant_n_children (variant) == UUID_LENGTH;
+}
+
 static void
-uuid_from_variant (GVariant *event_id,
+uuid_from_variant (GVariant *variant,
                    uuid_t    uuid)
 {
-  gsize event_id_length;
-  g_variant_ref_sink (event_id);
-  gconstpointer event_id_arr =
-    g_variant_get_fixed_array (event_id, &event_id_length, sizeof (guchar));
-  if (event_id_length != UUID_LENGTH)
-    g_critical ("The event ID should be %d bytes, but it was %d. This is "
-                "probably a bug in the metrics daemon.",
-                UUID_LENGTH, event_id_length);
-  if (event_id_length >= UUID_LENGTH)
-    {
-      memcpy (uuid, event_id_arr, UUID_LENGTH * sizeof (guchar));
-    }
-  else
-    {
-      memcpy (uuid, event_id_arr, event_id_length * sizeof (guchar));
-      memset (uuid + event_id_length, '\0',
-              (UUID_LENGTH - event_id_length) * sizeof (guchar));
-    }
-  g_variant_unref (event_id);
+  g_variant_ref_sink (variant);
+  gsize variant_length;
+  const guchar *array =
+    g_variant_get_fixed_array (variant, &variant_length, sizeof (guchar));
+  uuid_copy (uuid, array);
+  g_variant_unref (variant);
 }
 
 static void
@@ -1590,6 +1587,13 @@ emer_daemon_record_singular_event (EmerDaemon *self,
   if (!priv->recording_enabled)
     return;
 
+  if (!is_uuid (event_id))
+    {
+      g_warning ("Event ID must be a UUID represented as an array of %d "
+                 "bytes. Dropping event.", UUID_LENGTH);
+      return;
+    }
+
   gint64 boot_offset;
   if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
                                                    &boot_offset, NULL, FALSE))
@@ -1627,6 +1631,13 @@ emer_daemon_record_aggregate_event (EmerDaemon *self,
   if (!priv->recording_enabled)
     return;
 
+  if (!is_uuid (event_id))
+    {
+      g_warning ("Event ID must be a UUID represented as an array of %d "
+                 "bytes. Dropping event.", UUID_LENGTH);
+      return;
+    }
+
   gint64 boot_offset;
   if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
                                                    &boot_offset, NULL, FALSE))
@@ -1663,6 +1674,13 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
 
   if (!priv->recording_enabled)
     return;
+
+  if (!is_uuid (event_id))
+    {
+      g_warning ("Event ID must be a UUID represented as an array of %d "
+                 "bytes. Dropping event.", UUID_LENGTH);
+      return;
+    }
 
   gint64 boot_offset;
   if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,

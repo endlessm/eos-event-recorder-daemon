@@ -28,6 +28,7 @@
 #include <byteswap.h>
 #include <string.h>
 #include <time.h>
+#include <uuid/uuid.h>
 
 #include <gio/gio.h>
 #include <gio/gunixfdlist.h>
@@ -35,7 +36,6 @@
 #include <glib-object.h>
 #include <glib/gstdio.h>
 #include <libsoup/soup.h>
-#include <uuid/uuid.h>
 
 #include <eosmetrics/eosmetrics.h>
 

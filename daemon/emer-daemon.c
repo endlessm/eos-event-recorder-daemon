@@ -100,7 +100,7 @@ typedef struct _EmerDaemonPrivate
   GDBusProxy *login_manager_proxy;
   guint network_send_interval;
   GSocketConnectable *ping_socket;
-  gchar *proxy_server_uri;
+  gchar *server_uri;
   SoupSession *http_session;
 
   /* Private storage for public properties */
@@ -260,26 +260,26 @@ backoff (GRand *rand,
  * done.
  */
 static SoupURI *
-get_https_request_uri (EmerDaemon   *self,
-                       const guchar *data,
-                       gsize         length)
+get_http_request_uri (EmerDaemon   *self,
+                      const guchar *data,
+                      gsize         length)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   gchar *checksum_string = g_compute_checksum_for_data (G_CHECKSUM_SHA512, data,
                                                         length);
-  gchar *https_request_uri_string = g_strconcat (priv->proxy_server_uri,
-                                                 checksum_string, NULL);
+  gchar *http_request_uri_string =
+    g_strconcat (priv->server_uri, checksum_string, NULL);
   g_free (checksum_string);
 
-  SoupURI *https_request_uri = soup_uri_new (https_request_uri_string);
+  SoupURI *http_request_uri = soup_uri_new (http_request_uri_string);
 
-  if (https_request_uri == NULL)
-    g_error ("Invalid URI: %s.", https_request_uri_string);
+  if (http_request_uri == NULL)
+    g_error ("Invalid URI: %s.", http_request_uri_string);
 
-  g_free (https_request_uri_string);
+  g_free (http_request_uri_string);
 
-  return https_request_uri;
+  return http_request_uri;
 }
 
 /*
@@ -370,15 +370,15 @@ get_updated_request_body (EmerDaemon *self,
 
 // Handles HTTP or HTTPS responses.
 static void
-handle_https_response (SoupSession         *https_session,
-                       SoupMessage         *https_message,
-                       NetworkCallbackData *callback_data)
+handle_http_response (SoupSession         *http_session,
+                      SoupMessage         *http_message,
+                      NetworkCallbackData *callback_data)
 {
   EmerDaemon *self = callback_data->daemon;
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   guint status_code;
-  g_object_get (https_message, "status-code", &status_code, NULL);
+  g_object_get (http_message, "status-code", &status_code, NULL);
   if (SOUP_STATUS_IS_SUCCESSFUL (status_code))
     {
       free_network_callback_data (callback_data);
@@ -386,7 +386,7 @@ handle_https_response (SoupSession         *https_session,
     }
 
   gchar *reason_phrase;
-  g_object_get (https_message, "reason-phrase", &reason_phrase, NULL);
+  g_object_get (http_message, "reason-phrase", &reason_phrase, NULL);
   g_warning ("Attempt to upload metrics failed: %s.", reason_phrase);
   g_free (reason_phrase);
 
@@ -429,19 +429,19 @@ handle_https_response (SoupSession         *https_session,
 
       gsize request_body_length = g_variant_get_size (updated_request_body);
 
-      SoupURI *https_request_uri =
-        get_https_request_uri (callback_data->daemon, serialized_request_body,
-                               request_body_length);
-      SoupMessage *new_https_message =
-        soup_message_new_from_uri ("PUT", https_request_uri);
-      soup_uri_free (https_request_uri);
+      SoupURI *http_request_uri =
+        get_http_request_uri (callback_data->daemon, serialized_request_body,
+                              request_body_length);
+      SoupMessage *new_http_message =
+        soup_message_new_from_uri ("PUT", http_request_uri);
+      soup_uri_free (http_request_uri);
 
-      soup_message_set_request (new_https_message, "application/octet-stream",
+      soup_message_set_request (new_http_message, "application/octet-stream",
                                 SOUP_MEMORY_TEMPORARY, serialized_request_body,
                                 request_body_length);
 
-      soup_session_queue_message (https_session, new_https_message,
-                                  (SoupSessionCallback) handle_https_response,
+      soup_session_queue_message (http_session, new_http_message,
+                                  (SoupSessionCallback) handle_http_response,
                                   callback_data);
       /* Old message is unreffed automatically, because it is not requeued. */
 
@@ -767,13 +767,13 @@ upload_events (GNetworkMonitor *source_object,
 
   gsize request_body_length = g_variant_get_size (request_body);
 
-  SoupURI *https_request_uri =
-    get_https_request_uri (self, serialized_request_body, request_body_length);
-  SoupMessage *https_message =
-    soup_message_new_from_uri ("PUT", https_request_uri);
-  soup_uri_free (https_request_uri);
+  SoupURI *http_request_uri =
+    get_http_request_uri (self, serialized_request_body, request_body_length);
+  SoupMessage *http_message =
+    soup_message_new_from_uri ("PUT", http_request_uri);
+  soup_uri_free (http_request_uri);
 
-  soup_message_set_request (https_message, "application/octet-stream",
+  soup_message_set_request (http_message, "application/octet-stream",
                             SOUP_MEMORY_TEMPORARY, serialized_request_body,
                             request_body_length);
 
@@ -781,8 +781,8 @@ upload_events (GNetworkMonitor *source_object,
   callback_data->daemon = self;
   callback_data->request_body = request_body;
   callback_data->attempt_num = 0;
-  soup_session_queue_message (priv->http_session, https_message,
-                              (SoupSessionCallback) handle_https_response,
+  soup_session_queue_message (priv->http_session, http_message,
+                              (SoupSessionCallback) handle_http_response,
                               callback_data);
 }
 
@@ -793,13 +793,13 @@ set_ping_socket (EmerDaemon *self)
 
   g_clear_object (&priv->ping_socket);
   GError *error = NULL;
-  priv->ping_socket = g_network_address_parse_uri (priv->proxy_server_uri,
+  priv->ping_socket = g_network_address_parse_uri (priv->server_uri,
                                                    443, // SSL default port
                                                    &error);
   if (priv->ping_socket == NULL)
   {
-    g_error ("Invalid proxy server URI '%s' could not be parsed because: %s.",
-             priv->proxy_server_uri, error->message);
+    g_error ("Invalid server URI '%s' could not be parsed because: %s.",
+             priv->server_uri, error->message);
     g_error_free (error);
   }
 }
@@ -832,13 +832,13 @@ check_and_upload_events (EmerDaemon *self)
 
   gchar *environment =
     emer_permissions_provider_get_environment (priv->permissions_provider);
-  g_clear_pointer (&priv->proxy_server_uri, g_free);
-  priv->proxy_server_uri = g_strconcat ("https://",
-                                        environment,
-                                        ".metrics.endlessm.com/",
-                                        CLIENT_VERSION_NUMBER,
-                                        "/",
-                                        NULL);
+  g_clear_pointer (&priv->server_uri, g_free);
+  priv->server_uri = g_strconcat ("https://",
+                                  environment,
+                                  ".metrics.endlessm.com/",
+                                  CLIENT_VERSION_NUMBER,
+                                  "/",
+                                  NULL);
 
   set_ping_socket (self);
   add_upload_events_timeout (self, environment);
@@ -1218,7 +1218,7 @@ emer_daemon_finalize (GObject *object)
 
   g_clear_object (&priv->login_manager_proxy);
   g_clear_object (&priv->ping_socket);
-  g_free (priv->proxy_server_uri);
+  g_free (priv->server_uri);
   g_clear_object (&priv->http_session);
 
   g_rand_free (priv->rand);
@@ -1372,7 +1372,7 @@ emer_daemon_init (EmerDaemon *self)
   connect_to_login_manager (self);
 
   priv->ping_socket = NULL;
-  priv->proxy_server_uri = NULL;
+  priv->server_uri = NULL;
 
   gchar *user_agent = get_user_agent ();
 

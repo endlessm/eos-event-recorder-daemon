@@ -1022,7 +1022,9 @@ append_variant_to_string (EmerPersistentCache *self,
   gsize event_size_on_disk = sizeof (gsize) + g_variant_get_size (variant);
   if (cache_has_room (self, event_size_on_disk))
     {
+      g_variant_ref_sink (variant);
       GVariant *native_endian_variant = swap_bytes_if_big_endian (variant);
+      g_variant_unref (variant);
 
       GVariantWritable writable;
       writable.length = g_variant_get_size (native_endian_variant);
@@ -1106,12 +1108,8 @@ store_singulars (EmerPersistentCache *self,
     {
       SingularEvent *curr_singular = singular_buffer + i;
       GVariant *curr_singular_variant = singular_to_variant (curr_singular);
-
-      g_variant_ref_sink (curr_singular_variant);
       string_fit =
         append_variant_to_string (self, variant_string, curr_singular_variant);
-      g_variant_unref (curr_singular_variant);
-
       if (!string_fit)
         break;
     }
@@ -1148,12 +1146,8 @@ store_aggregates (EmerPersistentCache *self,
     {
       AggregateEvent *curr_aggregate = aggregate_buffer + i;
       GVariant *curr_aggregate_variant = aggregate_to_variant (curr_aggregate);
-
-      g_variant_ref_sink (curr_aggregate_variant);
       string_fit =
         append_variant_to_string (self, variant_string, curr_aggregate_variant);
-      g_variant_unref (curr_aggregate_variant);
-
       if (!string_fit)
         break;
     }
@@ -1190,12 +1184,8 @@ store_sequences (EmerPersistentCache *self,
     {
       SequenceEvent *curr_sequence = sequence_buffer + i;
       GVariant *curr_sequence_variant = sequence_to_variant (curr_sequence);
-
-      g_variant_ref_sink (curr_sequence_variant);
       string_fit =
         append_variant_to_string (self, variant_string, curr_sequence_variant);
-      g_variant_unref (curr_sequence_variant);
-
       if (!string_fit)
         break;
     }

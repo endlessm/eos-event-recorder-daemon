@@ -201,7 +201,7 @@ get_pollable_input_stream (GSubprocess *subprocess)
   GInputStream *input_stream = g_subprocess_get_stdout_pipe (subprocess);
   GPollableInputStream *pollable_input_stream =
     G_POLLABLE_INPUT_STREAM (input_stream);
-  g_assert (g_pollable_input_stream_can_poll (pollable_input_stream));
+  g_assert_true (g_pollable_input_stream_can_poll (pollable_input_stream));
   return pollable_input_stream;
 }
 

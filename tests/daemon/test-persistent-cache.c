@@ -106,13 +106,14 @@ static void
 write_default_cache_version_key_file (void)
 {
   GKeyFile *key_file = g_key_file_new ();
-  g_assert (g_key_file_load_from_data (key_file,
-                                       DEFAULT_CACHE_VERSION_KEY_FILE_DATA,
-                                       -1, G_KEY_FILE_NONE, NULL));
+  gboolean load_succeeded =
+    g_key_file_load_from_data (key_file, DEFAULT_CACHE_VERSION_KEY_FILE_DATA,
+                               -1, G_KEY_FILE_NONE, NULL);
+  g_assert_true (load_succeeded);
 
-  g_assert (g_key_file_save_to_file (key_file,
-                                     TEST_DIRECTORY TEST_CACHE_VERSION_FILE,
-                                     NULL));
+  gboolean save_succeeded =
+    g_key_file_save_to_file (key_file, TEST_DIRECTORY TEST_CACHE_VERSION_FILE, NULL);
+  g_assert_true (save_succeeded);
   g_key_file_unref (key_file);
 }
 
@@ -198,8 +199,9 @@ load_testing_key_file (void)
   GKeyFile *key_file = g_key_file_new ();
   gchar *full_path =
     g_strconcat (TEST_DIRECTORY, BOOT_OFFSET_METADATA_FILE, NULL);
-  g_assert (g_key_file_load_from_file (key_file, full_path, G_KEY_FILE_NONE,
-                                       NULL));
+  gboolean load_succeeded =
+    g_key_file_load_from_file (key_file, full_path, G_KEY_FILE_NONE, NULL);
+  g_assert_true (load_succeeded);
   return key_file;
 }
 
@@ -217,9 +219,10 @@ set_boot_offset_in_metadata_file (gint64 new_offset)
                         CACHE_BOOT_OFFSET_KEY,
                         new_offset);
 
-  g_assert (g_key_file_save_to_file (key_file,
-                                     TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE,
-                                     NULL));
+  gboolean save_succeeded =
+    g_key_file_save_to_file (key_file, TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE,
+                             NULL);
+  g_assert_true (save_succeeded);
   g_key_file_unref (key_file);
 }
 
@@ -233,13 +236,15 @@ static void
 write_default_boot_offset_key_file_to_disk (void)
 {
   GKeyFile *key_file = g_key_file_new ();
-  g_assert (g_key_file_load_from_data (key_file,
-                                       DEFAULT_BOOT_OFFSET_KEY_FILE_DATA,
-                                       -1, G_KEY_FILE_NONE, NULL));
+  gboolean load_succeeded =
+    g_key_file_load_from_data (key_file, DEFAULT_BOOT_OFFSET_KEY_FILE_DATA, -1,
+                               G_KEY_FILE_NONE, NULL);
+  g_assert_true (load_succeeded);
 
-  g_assert (g_key_file_save_to_file (key_file,
-                                     TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE,
-                                     NULL));
+  gboolean save_succeeded =
+    g_key_file_save_to_file (key_file, TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE,
+                             NULL);
+  g_assert_true (save_succeeded);
 }
 
 /*
@@ -255,9 +260,10 @@ set_boot_id_in_metadata_file (gchar *boot_id)
                          CACHE_LAST_BOOT_ID_KEY,
                          boot_id);
 
-  g_assert (g_key_file_save_to_file (key_file,
-                                     TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE,
-                                     NULL));
+  gboolean save_succeeded =
+    g_key_file_save_to_file (key_file, TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE,
+                             NULL);
+  g_assert_true (save_succeeded);
   g_key_file_unref (key_file);
 }
 
@@ -269,12 +275,15 @@ static void
 remove_offset (void)
 {
   GKeyFile *key_file = load_testing_key_file ();
-  g_assert (g_key_file_remove_key (key_file, CACHE_TIMING_GROUP_NAME,
-                                   CACHE_BOOT_OFFSET_KEY, NULL));
+  gboolean remove_succeeded =
+    g_key_file_remove_key (key_file, CACHE_TIMING_GROUP_NAME,
+                           CACHE_BOOT_OFFSET_KEY, NULL);
+  g_assert_true (remove_succeeded);
 
-  g_assert (g_key_file_save_to_file (key_file,
-                                     TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE,
-                                     NULL));
+  gboolean save_succeeded =
+    g_key_file_save_to_file (key_file, TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE,
+                             NULL);
+  g_assert_true (save_succeeded);
   g_key_file_unref (key_file);
 }
 
@@ -359,10 +368,15 @@ boot_timestamp_is_valid (gint64 previous_relative_time,
   gint64 stored_relative_time = read_relative_time ();
   gint64 stored_absolute_time = read_absolute_time ();
 
-  gint64 after_relative_time, after_absolute_time;
+  gint64 after_relative_time;
+  gboolean get_succeeded =
+    emtr_util_get_current_time (CLOCK_BOOTTIME, &after_relative_time);
+  g_assert_true (get_succeeded);
 
-  g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &after_relative_time) &&
-            emtr_util_get_current_time (CLOCK_REALTIME, &after_absolute_time));
+  gint64 after_absolute_time;
+  get_succeeded =
+    emtr_util_get_current_time (CLOCK_REALTIME, &after_absolute_time);
+  g_assert_true (get_succeeded);
 
   // The actual testing:
   return (previous_relative_time <= stored_relative_time &&
@@ -923,10 +937,10 @@ assert_singulars_equal_variants (SingularEvent *singular_array,
 {
   for (gint i = 0; i < singular_array_length || variants[i] != NULL; i++)
     {
-      g_assert (i < singular_array_length && variants[i] != NULL);
+      g_assert_true (i < singular_array_length && variants[i] != NULL);
 
       GVariant *singular_variant = singular_to_variant (singular_array + i);
-      g_assert (g_variant_equal (singular_variant, variants[i]));
+      g_assert_true (g_variant_equal (singular_variant, variants[i]));
       g_variant_unref (singular_variant);
     }
 }
@@ -938,10 +952,10 @@ assert_aggregates_equal_variants (AggregateEvent *aggregate_array,
 {
   for (gint i = 0; i < aggregate_array_length || variants[i] != NULL; i++)
     {
-      g_assert (i < aggregate_array_length && variants[i] != NULL);
+      g_assert_true (i < aggregate_array_length && variants[i] != NULL);
 
       GVariant *aggregate_variant = aggregate_to_variant (aggregate_array + i);
-      g_assert (g_variant_equal (aggregate_variant, variants[i]));
+      g_assert_true (g_variant_equal (aggregate_variant, variants[i]));
       g_variant_unref (aggregate_variant);
     }
 }
@@ -953,10 +967,10 @@ assert_sequences_equal_variants (SequenceEvent *sequence_array,
 {
   for (gint i = 0; i < sequence_array_length || variants[i] != NULL; i++)
     {
-      g_assert (i < sequence_array_length && variants[i] != NULL);
+      g_assert_true (i < sequence_array_length && variants[i] != NULL);
 
       GVariant *sequence_variant = sequence_to_variant (sequence_array + i);
-      g_assert (g_variant_equal (sequence_variant, variants[i]));
+      g_assert_true (g_variant_equal (sequence_variant, variants[i]));
       g_variant_unref (sequence_variant);
     }
 }
@@ -996,15 +1010,15 @@ test_persistent_cache_store_sets_out_parameters (gboolean     *unused,
   gint num_aggregates_stored = -50;
   gint num_sequences_stored = 555;
 
-  g_assert (emer_persistent_cache_store_metrics (cache,
-                                                 singular_array,
-                                                 aggregate_array,
-                                                 sequence_array,
-                                                 0, 0, 0,
-                                                 &num_singulars_stored,
-                                                 &num_aggregates_stored,
-                                                 &num_sequences_stored,
-                                                 &capacity));
+  g_assert_true (emer_persistent_cache_store_metrics (cache,
+                                                      singular_array,
+                                                      aggregate_array,
+                                                      sequence_array,
+                                                      0, 0, 0,
+                                                      &num_singulars_stored,
+                                                      &num_aggregates_stored,
+                                                      &num_sequences_stored,
+                                                      &capacity));
 
   // An empty cache should be in the LOW capacity state.
   g_assert_cmpint (capacity, ==, CAPACITY_LOW);
@@ -1021,7 +1035,7 @@ test_persistent_cache_store_one_singular_event_succeeds (gboolean     *unused,
 {
   EmerPersistentCache *cache = make_testing_cache ();
   capacity_t capacity;
-  g_assert (store_single_singular_event (cache, &capacity));
+  g_assert_true (store_single_singular_event (cache, &capacity));
   g_object_unref (cache);
   g_assert_cmpint (capacity, ==, CAPACITY_LOW);
 }
@@ -1032,7 +1046,7 @@ test_persistent_cache_store_one_aggregate_event_succeeds (gboolean     *unused,
 {
   EmerPersistentCache *cache = make_testing_cache ();
   capacity_t capacity;
-  g_assert (store_single_aggregate_event (cache, &capacity));
+  g_assert_true (store_single_aggregate_event (cache, &capacity));
   g_object_unref (cache);
   g_assert_cmpint (capacity, ==, CAPACITY_LOW);
 }
@@ -1043,7 +1057,7 @@ test_persistent_cache_store_one_sequence_event_succeeds (gboolean     *unused,
 {
   EmerPersistentCache *cache = make_testing_cache ();
   capacity_t capacity;
-  g_assert (store_single_sequence_event (cache, &capacity));
+  g_assert_true (store_single_sequence_event (cache, &capacity));
   g_object_unref (cache);
   g_assert_cmpint (capacity, ==, CAPACITY_LOW);
 }
@@ -1080,7 +1094,7 @@ test_persistent_cache_store_one_of_each_succeeds (gboolean     *unused,
 
   g_free (sequence_array[0].event_values);
 
-  g_assert (success);
+  g_assert_true (success);
 
   g_assert_cmpint (num_singulars_stored, ==, 1);
   g_assert_cmpint (num_aggregates_stored, ==, 1);
@@ -1103,7 +1117,7 @@ test_persistent_cache_store_many_succeeds (gboolean     *unused,
                 &num_sequences_made, &num_singulars_stored,
                 &num_aggregates_stored, &num_sequences_stored, &capacity);
   g_object_unref (cache);
-  g_assert (success);
+  g_assert_true (success);
 
   g_assert_cmpint (num_singulars_stored, ==, num_singulars_made);
   g_assert_cmpint (num_aggregates_stored, ==, num_aggregates_made);
@@ -1147,7 +1161,7 @@ test_persistent_cache_store_when_full_succeeds (gboolean     *unused,
         store_many (cache, &num_singulars_made, &num_aggregates_made,
                     &num_sequences_made, &num_singulars_stored,
                     &num_aggregates_stored, &num_sequences_stored, &capacity);
-      g_assert (success);
+      g_assert_true (success);
 
       if (capacity == CAPACITY_MAX)
         {
@@ -1200,7 +1214,7 @@ test_persistent_cache_drain_one_singular_event_succeeds (gboolean     *unused,
                                                           MAX_BYTES_TO_READ);
   g_object_unref (cache);
 
-  g_assert (success);
+  g_assert_true (success);
 
   assert_singulars_equal_variants (singulars_stored, 1, singulars_drained);
   g_assert_cmpint (c_array_len (aggregates_drained), ==, 0);
@@ -1248,7 +1262,7 @@ test_persistent_cache_drain_one_aggregate_event_succeeds (gboolean     *unused,
                                                           MAX_BYTES_TO_READ);
   g_object_unref (cache);
 
-  g_assert (success);
+  g_assert_true (success);
 
   g_assert_cmpint (c_array_len (singulars_drained), ==, 0);
   assert_aggregates_equal_variants (aggregates_stored, 1, aggregates_drained);
@@ -1298,7 +1312,7 @@ test_persistent_cache_drain_one_sequence_event_succeeds (gboolean     *unused,
                                                           MAX_BYTES_TO_READ);
   g_object_unref (cache);
 
-  g_assert (success);
+  g_assert_true (success);
 
   g_assert_cmpint (c_array_len (singulars_drained), ==, 0);
   g_assert_cmpint (c_array_len (aggregates_drained), ==, 0);
@@ -1359,7 +1373,7 @@ test_persistent_cache_drain_many_succeeds (gboolean     *unused,
                                                           MAX_BYTES_TO_READ);
   g_object_unref (cache);
 
-  g_assert (success);
+  g_assert_true (success);
   assert_singulars_equal_variants (singulars_stored, num_singulars_made,
                                    singulars_drained);
   assert_aggregates_equal_variants (aggregates_stored, num_aggregates_made,
@@ -1390,7 +1404,7 @@ test_persistent_cache_drain_empty_succeeds (gboolean     *unused,
                                                           MAX_BYTES_TO_READ);
   g_object_unref (cache);
 
-  g_assert (success);
+  g_assert_true (success);
 
   g_assert_cmpint (c_array_len (singulars_drained), ==, 0);
   g_assert_cmpint (c_array_len (aggregates_drained), ==, 0);
@@ -1431,11 +1445,16 @@ test_persistent_cache_purges_when_out_of_date_succeeds (gboolean     *unused,
               &num_aggregates_stored, &num_sequences_stored, &capacity);
 
   gint current_version;
-  g_assert (emer_cache_version_provider_get_version (cache_version_provider,
-                                                     &current_version));
-  g_assert (emer_cache_version_provider_set_version (cache_version_provider,
-                                                     current_version - 1,
-                                                     &error));
+  gboolean get_succeeded =
+    emer_cache_version_provider_get_version (cache_version_provider,
+                                             &current_version);
+  g_assert_true (get_succeeded);
+
+  gboolean set_succeeded =
+    emer_cache_version_provider_set_version (cache_version_provider,
+                                             current_version - 1, &error);
+  g_assert_true (set_succeeded);
+
   g_assert_no_error (error);
   g_object_unref (cache_version_provider);
   g_object_unref (cache);
@@ -1536,13 +1555,15 @@ test_persistent_cache_resets_boot_metadata_file_when_boot_offset_corrupted (gboo
                          "valid boot offset in the metadata file. Error: *.");
 
   // This call should detect corruption and reset the metadata file.
-  g_assert (emer_persistent_cache_get_boot_time_offset (cache, NULL, &error,
-                                                        TRUE));
+  gboolean get_succeeded =
+    emer_persistent_cache_get_boot_time_offset (cache, NULL, &error, TRUE);
+
+  g_assert_true (get_succeeded);
 
   g_test_assert_expected_messages ();
   g_assert_no_error (error);
 
-  g_assert (boot_offset_was_reset ());
+  g_assert_true (boot_offset_was_reset ());
 
   g_object_unref (cache);
 }
@@ -1568,14 +1589,17 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
   EmerPersistentCache *cache = make_testing_cache ();
 
   GError *error = NULL;
-  g_assert (emer_persistent_cache_get_boot_time_offset (cache, NULL, &error,
-                                                        TRUE));
+  gboolean get_succeeded =
+    emer_persistent_cache_get_boot_time_offset (cache, NULL, &error, TRUE);
+  g_assert_true (get_succeeded);
   g_assert_no_error (error);
-  g_assert (boot_offset_was_reset ());
+  g_assert_true (boot_offset_was_reset ());
 
-  gint64 absolute_time, relative_time;
-  g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) &&
-            emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
+  gint64 relative_time;
+  g_assert_true (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time));
+
+  gint64 absolute_time;
+  g_assert_true (emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
 
   g_object_unref (cache);
   set_boot_id_in_metadata_file (FAKE_BOOT_ID);
@@ -1583,11 +1607,13 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
   EmerPersistentCache *cache2 = make_testing_cache ();
 
   // This call should have to compute the boot offset itself.
-  g_assert (emer_persistent_cache_get_boot_time_offset (cache2, NULL, &error,
-                                                        TRUE));
+  get_succeeded =
+    emer_persistent_cache_get_boot_time_offset (cache2, NULL, &error, TRUE);
+
+  g_assert_true (get_succeeded);
   g_assert_no_error (error);
 
-  g_assert (boot_timestamp_is_valid (relative_time, absolute_time));
+  g_assert_true (boot_timestamp_is_valid (relative_time, absolute_time));
   gint64 second_offset = read_offset ();
 
   // This should not have simply reset the metadata file again.
@@ -1596,8 +1622,9 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
   g_object_unref (cache2);
   EmerPersistentCache *cache3 = make_testing_cache ();
 
-  g_assert (emer_persistent_cache_get_boot_time_offset (cache3, NULL, &error,
-                                                        TRUE));
+  get_succeeded =
+    emer_persistent_cache_get_boot_time_offset (cache3, NULL, &error, TRUE);
+  g_assert_true (get_succeeded);
   g_assert_no_error (error);
 
   gint64 third_offset = read_offset ();
@@ -1623,11 +1650,13 @@ test_persistent_cache_computes_reasonable_offset (gboolean     *unused,
   store_single_singular_event (cache, &capacity);
 
   gint64 first_offset = read_offset ();
-  g_assert (boot_offset_was_reset ());
+  g_assert_true (boot_offset_was_reset ());
 
-  gint64 absolute_time, relative_time;
-  g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) &&
-            emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
+  gint64 relative_time;
+  g_assert_true (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time));
+
+  gint64 absolute_time;
+  g_assert_true (emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
 
   g_object_unref (cache);
   EmerPersistentCache *cache2 = make_testing_cache ();
@@ -1637,7 +1666,7 @@ test_persistent_cache_computes_reasonable_offset (gboolean     *unused,
 
   store_single_aggregate_event (cache2, &capacity);
 
-  g_assert (boot_timestamp_is_valid (relative_time, absolute_time));
+  g_assert_true (boot_timestamp_is_valid (relative_time, absolute_time));
   gint64 second_offset = read_offset ();
   gint64 max_second_offset = first_offset + ACCEPTABLE_OFFSET_VARIANCE;
   gint64 min_second_offset = first_offset - ACCEPTABLE_OFFSET_VARIANCE;
@@ -1645,7 +1674,7 @@ test_persistent_cache_computes_reasonable_offset (gboolean     *unused,
   g_assert_cmpint (second_offset, >=, min_second_offset);
 
   // This should not have simply reset the metadata file again.
-  g_assert (!boot_offset_was_reset ());
+  g_assert_false (boot_offset_was_reset ());
 
   g_object_unref (cache2);
 }
@@ -1665,26 +1694,30 @@ test_persistent_cache_builds_boot_metadata_file (gboolean     *unused,
   EmerPersistentCache *cache = make_testing_cache ();
 
   GError *error = NULL;
-  g_assert (emer_persistent_cache_get_boot_time_offset (cache, NULL, &error,
-                                                        TRUE));
+  gboolean get_succeeded =
+    emer_persistent_cache_get_boot_time_offset (cache, NULL, &error, TRUE);
+  g_assert_true (get_succeeded);
   g_assert_no_error (error);
 
   gint64 first_offset = read_offset ();
 
-  gint64 absolute_time, relative_time;
-  g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) &&
-            emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
+  gint64 relative_time;
+  g_assert_true (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time));
 
-  g_assert (emer_persistent_cache_get_boot_time_offset (cache, NULL, &error,
-                                                        TRUE));
+  gint64 absolute_time;
+  g_assert_true (emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
+
+  get_succeeded =
+    emer_persistent_cache_get_boot_time_offset (cache, NULL, &error, TRUE);
+  g_assert_true (get_succeeded);
   g_assert_no_error (error);
 
-  g_assert (boot_timestamp_is_valid (relative_time, absolute_time));
+  g_assert_true (boot_timestamp_is_valid (relative_time, absolute_time));
   gint64 second_offset = read_offset();
 
   // The offset should not have changed.
   g_assert_cmpint (first_offset, ==, second_offset);
-  g_assert (boot_offset_was_reset ());
+  g_assert_true (boot_offset_was_reset ());
 
   g_object_unref (cache);
 }
@@ -1702,13 +1735,17 @@ test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
 
   gint64 first_offset;
   GError *error = NULL;
-  g_assert (emer_persistent_cache_get_boot_time_offset (cache, &first_offset,
-                                                        &error, TRUE));
+  gboolean get_succeeded =
+    emer_persistent_cache_get_boot_time_offset (cache, &first_offset, &error,
+                                                TRUE);
+  g_assert_true (get_succeeded);
   g_assert_no_error (error);
 
-  gint64 absolute_time, relative_time;
-  g_assert (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time) &&
-            emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
+  gint64 relative_time;
+  g_assert_true (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time));
+
+  gint64 absolute_time;
+  g_assert_true (emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
 
   /*
    * This value should never be read because the persistent cache should read
@@ -1722,11 +1759,13 @@ test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
    * This call should read the offset from its in-memory cache, not the new one
    * on disk.
    */
-  g_assert (emer_persistent_cache_get_boot_time_offset (cache, &second_offset,
-                                                        &error, TRUE));
+  get_succeeded =
+    emer_persistent_cache_get_boot_time_offset (cache, &second_offset, &error,
+                                                TRUE);
+  g_assert_true (get_succeeded);
   g_assert_no_error (error);
 
-  g_assert (boot_timestamp_is_valid (relative_time, absolute_time));
+  g_assert_true (boot_timestamp_is_valid (relative_time, absolute_time));
 
   g_assert_cmpint (first_offset, ==, second_offset);
 
@@ -1752,8 +1791,9 @@ test_persistent_cache_get_offset_wont_update_timestamps_if_it_isnt_supposed_to (
   GError *error = NULL;
 
   // Update metadata file to reasonable values.
-  g_assert (emer_persistent_cache_get_boot_time_offset (cache, NULL, &error,
-                                                        TRUE));
+  gboolean get_succeeded =
+    emer_persistent_cache_get_boot_time_offset (cache, NULL, &error, TRUE);
+  g_assert_true (get_succeeded);
   g_assert_no_error (error);
   gint64 relative_time = read_relative_time ();
   gint64 absolute_time = read_absolute_time ();
@@ -1762,8 +1802,10 @@ test_persistent_cache_get_offset_wont_update_timestamps_if_it_isnt_supposed_to (
   g_usleep (75000); // 0.075 seconds
 
   // This call shouldn't update the metadata file.
-  g_assert (emer_persistent_cache_get_boot_time_offset (cache, NULL, &error,
-                                                        FALSE));
+  get_succeeded =
+    emer_persistent_cache_get_boot_time_offset (cache, NULL, &error, FALSE);
+
+  g_assert_true (get_succeeded);
   g_assert_no_error (error);
 
   // These timestamps should not have changed.
@@ -1791,8 +1833,9 @@ test_persistent_cache_get_offset_updates_timestamps_when_requested (gboolean    
   GError *error = NULL;
 
   // Update metadata file to reasonable values.
-  g_assert (emer_persistent_cache_get_boot_time_offset (cache, NULL, &error,
-                                                        FALSE));
+  gboolean get_succeeded =
+    emer_persistent_cache_get_boot_time_offset (cache, NULL, &error, FALSE);
+  g_assert_true (get_succeeded);
 
   g_assert_no_error (error);
   gint64 relative_time = read_relative_time ();
@@ -1802,8 +1845,9 @@ test_persistent_cache_get_offset_updates_timestamps_when_requested (gboolean    
   g_usleep (75000); // 0.075 seconds
 
   // This call should update the timestamps in the metadata file.
-  g_assert (emer_persistent_cache_get_boot_time_offset (cache, NULL, &error,
-                                                        TRUE));
+  get_succeeded =
+    emer_persistent_cache_get_boot_time_offset (cache, NULL, &error, TRUE);
+  g_assert_true (get_succeeded);
 
   g_assert_no_error (error);
 
@@ -1826,8 +1870,10 @@ test_persistent_cache_updates_timestamps_on_finalize (gboolean     *unused,
   GError *error = NULL;
 
   // Update metadata file to reasonable values.
-  g_assert (emer_persistent_cache_get_boot_time_offset (cache, NULL, &error,
-                                                        TRUE));
+  gboolean get_succeeded =
+    emer_persistent_cache_get_boot_time_offset (cache, NULL, &error, TRUE);
+
+  g_assert_true (get_succeeded);
   g_assert_no_error (error);
   gint64 relative_time = read_relative_time ();
   gint64 absolute_time = read_absolute_time ();
@@ -1864,12 +1910,14 @@ test_persistent_cache_get_offset_can_build_boot_metadata_file (gboolean     *unu
    * This call should create the metadata file even though the
    * always_update_timestamps parameter is FALSE.
    */
-  g_assert (emer_persistent_cache_get_boot_time_offset (cache, NULL, &error,
-                                                        FALSE));
+  gboolean get_succeeded =
+    emer_persistent_cache_get_boot_time_offset (cache, NULL, &error, FALSE);
+
+  g_assert_true (get_succeeded);
   g_assert_no_error (error);
 
   // The previous request should have reset the metadata file.
-  g_assert (boot_offset_was_reset ());
+  g_assert_true (boot_offset_was_reset ());
 
   g_object_unref (cache);
 }
@@ -1895,9 +1943,10 @@ test_g_file_measure_disk_usage_returns_zero_on_empty_file (gboolean     *unused,
   g_assert_no_error (error);
 
   guint64 disk_usage = 555; // Arbitrary non-zero value
-  g_assert (g_file_measure_disk_usage (file, G_FILE_MEASURE_REPORT_ANY_ERROR,
-                                       NULL, NULL, NULL, &disk_usage, NULL,
-                                       NULL, &error));
+  gboolean measure_succeeded =
+    g_file_measure_disk_usage (file, G_FILE_MEASURE_REPORT_ANY_ERROR, NULL,
+                               NULL, NULL, &disk_usage, NULL, NULL, &error);
+  g_assert_true (measure_succeeded);
   g_assert_no_error (error);
   g_assert_cmpint (disk_usage, ==, 0);
 

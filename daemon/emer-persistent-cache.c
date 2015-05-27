@@ -790,6 +790,7 @@ drain_metrics_file (EmerPersistentCache *self,
   GInputStream *stream = G_INPUT_STREAM (file_stream);
 
   GArray *dynamic_array = g_array_new (TRUE, FALSE, sizeof (GVariant *));
+  g_array_set_clear_func (dynamic_array, (GDestroyNotify) g_variant_unref);
 
   while (TRUE)
     {

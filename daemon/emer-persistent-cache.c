@@ -29,7 +29,6 @@
 
 #include <errno.h>
 #include <stdio.h>
-#include <string.h>
 
 #include <eosmetrics/eosmetrics.h>
 
@@ -790,7 +789,7 @@ drain_metrics_file (EmerPersistentCache *self,
     }
   GInputStream *stream = G_INPUT_STREAM (file_stream);
 
-  GArray *dynamic_array = g_array_new (FALSE, FALSE, sizeof (GVariant *));
+  GArray *dynamic_array = g_array_new (TRUE, FALSE, sizeof (GVariant *));
 
   while (TRUE)
     {
@@ -863,14 +862,11 @@ drain_metrics_file (EmerPersistentCache *self,
       GVariant *regularized_event = regularize_variant (current_event);
       g_array_append_val (dynamic_array, regularized_event);
     }
+
   g_object_unref (stream);
   g_object_unref (file);
 
-  *return_list = g_new (GVariant *, dynamic_array->len + 1);
-  memcpy (*return_list, dynamic_array->data,
-          dynamic_array->len * sizeof (GVariant *));
-  (*return_list)[dynamic_array->len] = NULL;
-  g_array_free (dynamic_array, TRUE);
+  *return_list = (GVariant **) g_array_free (dynamic_array, FALSE);
 
   return TRUE;
 }

@@ -812,7 +812,7 @@ drain_metrics_file (EmerPersistentCache *self,
           g_error_free (error);
           g_object_unref (stream);
           g_object_unref (file);
-          g_array_free (dynamic_array, TRUE);
+          g_array_unref (dynamic_array);
           return FALSE;
         }
       if (length_bytes_read != sizeof (gsize))
@@ -821,7 +821,7 @@ drain_metrics_file (EmerPersistentCache *self,
                       length_bytes_read, sizeof (gsize));
           g_object_unref (stream);
           g_object_unref (file);
-          g_array_free (dynamic_array, TRUE);
+          g_array_unref (dynamic_array);
           return FALSE;
         }
 
@@ -846,7 +846,7 @@ drain_metrics_file (EmerPersistentCache *self,
           g_error_free (error);
           g_object_unref (stream);
           g_object_unref (file);
-          g_array_free (dynamic_array, TRUE);
+          g_array_unref (dynamic_array);
           return FALSE;
         }
 

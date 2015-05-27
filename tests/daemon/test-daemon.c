@@ -67,42 +67,6 @@ typedef struct
 
 // Helper methods first:
 
-static GVariant *
-make_event_id_gvariant (void)
-{
-  uuid_t uuid;
-  if (uuid_parse (MEANINGLESS_EVENT, uuid) != 0)
-    g_error ("Failed to parse testing uuid.");
-  GVariantBuilder event_id_builder;
-  get_uuid_builder (uuid, &event_id_builder);
-  return g_variant_builder_end (&event_id_builder);
-}
-
-static GVariant *
-make_variant_payload (void)
-{
-  GVariant *sword_of_a_thousand = g_variant_new_boolean (TRUE);
-  return g_variant_new_variant (sword_of_a_thousand);
-}
-
-static GVariant *
-make_event_values_gvariant (void)
-{
-  GVariantBuilder builder;
-  g_variant_builder_init (&builder, G_VARIANT_TYPE ("a(xbv)"));
-  g_variant_builder_add (&builder,
-                         "(xbv)",
-                         RELATIVE_TIMESTAMP,
-                         FALSE,
-                         g_variant_new_boolean (FALSE));
-  g_variant_builder_add (&builder,
-                         "(xbv)",
-                         RELATIVE_TIMESTAMP,
-                         TRUE,
-                         g_variant_new_boolean (TRUE));
-  return g_variant_new ("a(xbv)", &builder);
-}
-
 static void
 start_mock_logind_service (Fixture *fixture)
 {
@@ -131,14 +95,10 @@ terminate_mock_logind_service_and_wait (Fixture *fixture)
   g_object_unref (fixture->logind_mock);
 }
 
-static GPollableInputStream *
-get_pollable_input_stream (GSubprocess *subprocess)
+static gboolean
+timeout (gpointer unused)
 {
-  GInputStream *input_stream = g_subprocess_get_stdout_pipe (subprocess);
-  GPollableInputStream *pollable_input_stream =
-    G_POLLABLE_INPUT_STREAM (input_stream);
-  g_assert (g_pollable_input_stream_can_poll (pollable_input_stream));
-  return pollable_input_stream;
+  g_assert_not_reached ();
 }
 
 /*
@@ -173,6 +133,16 @@ contains_dbus_call (const gchar *line,
   gchar *given_args_index = strstr (arguments_given, arguments);
   g_free (arguments_given);
   return given_args_index != NULL;
+}
+
+static GPollableInputStream *
+get_pollable_input_stream (GSubprocess *subprocess)
+{
+  GInputStream *input_stream = g_subprocess_get_stdout_pipe (subprocess);
+  GPollableInputStream *pollable_input_stream =
+    G_POLLABLE_INPUT_STREAM (input_stream);
+  g_assert (g_pollable_input_stream_can_poll (pollable_input_stream));
+  return pollable_input_stream;
 }
 
 /*
@@ -242,12 +212,6 @@ on_output_received (GPollableInputStream *pollable_input_stream,
   return G_SOURCE_CONTINUE;
 }
 
-static gboolean
-timeout (gpointer unused)
-{
-  g_assert_not_reached ();
-}
-
 static void
 await_shutdown_inhibit (Fixture *fixture)
 {
@@ -293,6 +257,42 @@ emit_shutdown_signal (gboolean shutdown)
                                  IO_OPERATION_TIMEOUT_MS,
                                  NULL, NULL);
   g_assert_nonnull (response);
+}
+
+static GVariant *
+make_event_id_gvariant (void)
+{
+  uuid_t uuid;
+  if (uuid_parse (MEANINGLESS_EVENT, uuid) != 0)
+    g_error ("Failed to parse testing uuid.");
+  GVariantBuilder event_id_builder;
+  get_uuid_builder (uuid, &event_id_builder);
+  return g_variant_builder_end (&event_id_builder);
+}
+
+static GVariant *
+make_variant_payload (void)
+{
+  GVariant *sword_of_a_thousand = g_variant_new_boolean (TRUE);
+  return g_variant_new_variant (sword_of_a_thousand);
+}
+
+static GVariant *
+make_event_values_gvariant (void)
+{
+  GVariantBuilder builder;
+  g_variant_builder_init (&builder, G_VARIANT_TYPE ("a(xbv)"));
+  g_variant_builder_add (&builder,
+                         "(xbv)",
+                         RELATIVE_TIMESTAMP,
+                         FALSE,
+                         g_variant_new_boolean (FALSE));
+  g_variant_builder_add (&builder,
+                         "(xbv)",
+                         RELATIVE_TIMESTAMP,
+                         TRUE,
+                         g_variant_new_boolean (TRUE));
+  return g_variant_new ("a(xbv)", &builder);
 }
 
 // Setup/Teardown functions next:

@@ -194,26 +194,6 @@ swap_bytes_64_if_big_endian (gint64 value)
   return value;
 }
 
-/*
- * Populates builder with the elements from iter. Assumes all elements are of
- * the given type.
- */
-static void
-get_builder_from_iter (GVariantIter       *iter,
-                       GVariantBuilder    *builder,
-                       const GVariantType *type)
-{
-  g_variant_builder_init (builder, type);
-  while (TRUE)
-    {
-      GVariant *curr_elem = g_variant_iter_next_value (iter);
-      if (curr_elem == NULL)
-        break;
-      g_variant_builder_add_value (builder, curr_elem);
-      g_variant_unref (curr_elem);
-    }
-}
-
 static void
 release_shutdown_inhibitor (EmerDaemon *self)
 {
@@ -340,31 +320,11 @@ get_updated_request_body (EmerDaemon *self,
                           GError    **error)
 {
   gint32 send_number;
-  GVariantIter *machine_id_iter;
-  GVariantIter *singulars_iter, *aggregates_iter, *sequences_iter;
-  g_variant_get (request_body, "(ixxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))",
-                 &send_number, NULL, NULL, &machine_id_iter, &singulars_iter,
-                 &aggregates_iter, &sequences_iter);
-
-  GVariantBuilder machine_id_builder;
-  get_builder_from_iter (machine_id_iter, &machine_id_builder,
-                         G_VARIANT_TYPE ("ay"));
-  g_variant_iter_free (machine_id_iter);
-
-  GVariantBuilder singulars_builder;
-  get_builder_from_iter (singulars_iter, &singulars_builder,
-                         G_VARIANT_TYPE ("a(uayxmv)"));
-  g_variant_iter_free (singulars_iter);
-
-  GVariantBuilder aggregates_builder;
-  get_builder_from_iter (aggregates_iter, &aggregates_builder,
-                         G_VARIANT_TYPE ("a(uayxxmv)"));
-  g_variant_iter_free (aggregates_iter);
-
-  GVariantBuilder sequences_builder;
-  get_builder_from_iter (sequences_iter, &sequences_builder,
-                         G_VARIANT_TYPE ("a(uaya(xmv))"));
-  g_variant_iter_free (sequences_iter);
+  GVariant *machine_id, *singulars, *aggregates, *sequences;
+  g_variant_get (request_body, "(ixx@ay@a(uayxmv)@a(uayxxmv)@a(uaya(xmv)))",
+                 &send_number, NULL /* relative time */,
+                 NULL /* absolute time */, &machine_id, &singulars, &aggregates,
+                 &sequences);
 
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.
@@ -378,13 +338,10 @@ get_updated_request_body (EmerDaemon *self,
   gint64 little_endian_absolute_timestamp =
     swap_bytes_64_if_big_endian (absolute_timestamp);
 
-  GVariant *updated_request_body =
-    g_variant_new ("(ixxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))", send_number,
-                   little_endian_relative_timestamp,
-                   little_endian_absolute_timestamp, &machine_id_builder,
-                   &singulars_builder, &aggregates_builder, &sequences_builder);
-
-  return updated_request_body;
+  return g_variant_new ("(ixx@ay@a(uayxmv)@a(uayxxmv)@a(uaya(xmv)))",
+                        send_number, little_endian_relative_timestamp,
+                        little_endian_absolute_timestamp, &machine_id,
+                        &singulars, &aggregates, &sequences);
 }
 
 // Handles HTTP or HTTPS responses.

@@ -813,22 +813,22 @@ drain_metrics_file (EmerPersistentCache *self,
         }
 
       // Deserialize
-      GVariant *current_metric =
+      GVariant *current_event =
         g_variant_new_from_data (G_VARIANT_TYPE (variant_type),
                                  writable.data,
                                  writable.length,
                                  FALSE,
                                  (GDestroyNotify) g_free,
                                  writable.data);
-      g_variant_ref_sink (current_metric);
+      g_variant_ref_sink (current_event);
 
       // Correct byte_ordering if necessary.
-      GVariant *native_endian_metric =
-        swap_bytes_if_big_endian (current_metric);
+      GVariant *native_endian_event =
+        swap_bytes_if_big_endian (current_event);
 
-      g_variant_unref (current_metric);
+      g_variant_unref (current_event);
 
-      g_array_append_val (dynamic_array, native_endian_metric);
+      g_array_append_val (dynamic_array, native_endian_event);
     }
   g_object_unref (stream);
   g_object_unref (file);

@@ -223,7 +223,7 @@ read_byte (GPollableInputStream *pollable_input_stream,
   switch (num_bytes_read)
     {
     case -1:
-      g_assert (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_WOULD_BLOCK));
+      g_assert_error (error, G_IO_ERROR, G_IO_ERROR_WOULD_BLOCK);
       g_error_free (error); // Fall through.
     case 0:
       return FALSE;
@@ -291,9 +291,7 @@ append_bytes (GPollableInputStream *pollable_input_stream,
                                               NULL /* GCancellable */, &error);
   if (num_bytes_read == -1)
     {
-      gboolean would_block =
-        g_error_matches (error, G_IO_ERROR, G_IO_ERROR_WOULD_BLOCK);
-      g_assert_true (would_block);
+      g_assert_error (error, G_IO_ERROR, G_IO_ERROR_WOULD_BLOCK);
       g_error_free (error);
       return FALSE;
     }

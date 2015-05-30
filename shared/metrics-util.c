@@ -124,7 +124,7 @@ aggregate_to_variant (AggregateEvent *aggregate)
   get_uuid_builder (event.event_id, &event_id_builder);
   EventValue event_value = event.event_value;
   return g_variant_new ("(uayxxmv)", event.user_id, &event_id_builder,
-                        event_value.relative_timestamp, aggregate->num_events,
+                        aggregate->num_events, event_value.relative_timestamp,
                         event_value.auxiliary_payload);
 }
 

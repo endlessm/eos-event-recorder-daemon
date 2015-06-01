@@ -122,8 +122,6 @@ typedef struct _EmerDaemonPrivate
 
   EmerPersistentCache *persistent_cache;
 
-  GNetworkMonitor *network_monitor;
-
   gboolean recording_enabled;
 
   /* Storage buffers for different event types */
@@ -773,8 +771,7 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
   GTask *upload_task = g_queue_pop_head (priv->upload_queue);
 
   GError *error = NULL;
-  if (!g_network_monitor_can_reach_finish (priv->network_monitor, result,
-                                           &error))
+  if (!g_network_monitor_can_reach_finish (network_monitor, result, &error))
     {
       flush_to_persistent_cache (self);
       g_task_return_error (upload_task, error);
@@ -916,11 +913,9 @@ dequeue_and_do_upload (EmerDaemon  *self,
                      CLIENT_VERSION_NUMBER "/", NULL);
     }
 
+  GNetworkMonitor *network_monitor = g_network_monitor_get_default ();
   set_ping_socket (self);
-
-  g_network_monitor_can_reach_async (priv->network_monitor,
-                                     priv->ping_socket,
-                                     NULL,
+  g_network_monitor_can_reach_async (network_monitor, priv->ping_socket, NULL,
                                      (GAsyncReadyCallback) handle_network_monitor_can_reach,
                                      self);
 }
@@ -1380,7 +1375,6 @@ emer_daemon_finalize (GObject *object)
   g_clear_object (&priv->machine_id_provider);
   g_clear_object (&priv->network_send_provider);
   g_clear_object (&priv->permissions_provider);
-  // Do not free the GNetworkMonitor.  It is transfer none.
 
   free_singular_buffer (priv->singular_buffer, priv->num_singulars_buffered);
   free_aggregate_buffer (priv->aggregate_buffer, priv->num_aggregates_buffered);
@@ -1563,7 +1557,6 @@ emer_daemon_init (EmerDaemon *self)
                                    SOUP_TYPE_CACHE,
                                    NULL);
   g_free (user_agent);
-  priv->network_monitor = g_network_monitor_get_default ();
 }
 
 /*

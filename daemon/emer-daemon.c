@@ -832,7 +832,6 @@ get_ping_socket (EmerDaemon *self)
   {
     g_error ("Invalid server URI '%s' could not be parsed because: %s.",
              priv->server_uri, error->message);
-    g_error_free (error);
   }
 
   return ping_socket;

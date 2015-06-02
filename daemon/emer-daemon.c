@@ -124,17 +124,14 @@ typedef struct _EmerDaemonPrivate
   SingularEvent * volatile singular_buffer;
   gint singular_buffer_length;
   volatile gint num_singulars_buffered;
-  GMutex singular_buffer_lock;
 
   AggregateEvent * volatile aggregate_buffer;
   gint aggregate_buffer_length;
   volatile gint num_aggregates_buffered;
-  GMutex aggregate_buffer_lock;
 
   SequenceEvent * volatile sequence_buffer;
   gint sequence_buffer_length;
   volatile gint num_sequences_buffered;
-  GMutex sequence_buffer_lock;
 } EmerDaemonPrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerDaemon, emer_daemon, G_TYPE_OBJECT)
@@ -459,8 +456,6 @@ static void
 drain_singulars_buffer (EmerDaemonPrivate *priv,
                         GVariantBuilder   *singulars_builder)
 {
-  g_mutex_lock (&priv->singular_buffer_lock);
-
   SingularEvent *singular_buffer = priv->singular_buffer;
   gint num_singulars = priv->num_singulars_buffered;
   for (gint i = 0; i < num_singulars; ++i)
@@ -477,16 +472,12 @@ drain_singulars_buffer (EmerDaemonPrivate *priv,
       trash_singular_event (curr_singular);
     }
   priv->num_singulars_buffered = 0;
-
-  g_mutex_unlock (&priv->singular_buffer_lock);
 }
 
 static void
 drain_aggregates_buffer (EmerDaemonPrivate *priv,
                          GVariantBuilder   *aggregates_builder)
 {
-  g_mutex_lock (&priv->aggregate_buffer_lock);
-
   AggregateEvent *aggregate_buffer = priv->aggregate_buffer;
   gint num_aggregates = priv->num_aggregates_buffered;
   for (gint i = 0; i < num_aggregates; ++i)
@@ -505,16 +496,12 @@ drain_aggregates_buffer (EmerDaemonPrivate *priv,
       trash_aggregate_event (curr_aggregate);
     }
   priv->num_aggregates_buffered = 0;
-
-  g_mutex_unlock (&priv->aggregate_buffer_lock);
 }
 
 static void
 drain_sequences_buffer (EmerDaemonPrivate *priv,
                         GVariantBuilder   *sequences_builder)
 {
-  g_mutex_lock (&priv->sequence_buffer_lock);
-
   SequenceEvent *sequence_buffer = priv->sequence_buffer;
   gint num_sequences = priv->num_sequences_buffered;
   for (gint i = 0; i < num_sequences; ++i)
@@ -540,8 +527,6 @@ drain_sequences_buffer (EmerDaemonPrivate *priv,
       trash_sequence_event (curr_sequence);
     }
   priv->num_sequences_buffered = 0;
-
-  g_mutex_unlock (&priv->sequence_buffer_lock);
 }
 
 /*
@@ -661,8 +646,7 @@ get_nullable_payload (gboolean  has_payload,
  * Trashes the first num_singulars_stored events in the singular buffer and
  * updates the number of singulars buffered accordingly. Slides the remaining
  * events over to the beginning of the buffer. Does not free the singular buffer
- * itself. The calling code is expected to be holding the lock on the singular
- * buffer.
+ * itself.
  */
 static void
 trash_stored_singulars (EmerDaemon *self,
@@ -723,10 +707,6 @@ flush_to_persistent_cache (EmerDaemon *self)
   if (!priv->recording_enabled)
     return;
 
-  g_mutex_lock (&priv->singular_buffer_lock);
-  g_mutex_lock (&priv->aggregate_buffer_lock);
-  g_mutex_lock (&priv->sequence_buffer_lock);
-
   gint num_singulars_stored, num_aggregates_stored, num_sequences_stored;
   capacity_t capacity;
   emer_persistent_cache_store_metrics (priv->persistent_cache,
@@ -742,13 +722,8 @@ flush_to_persistent_cache (EmerDaemon *self)
                                        &capacity);
 
   trash_stored_singulars (self, num_singulars_stored);
-  g_mutex_unlock (&priv->singular_buffer_lock);
-
   trash_stored_aggregates (self, num_aggregates_stored);
-  g_mutex_unlock (&priv->aggregate_buffer_lock);
-
   trash_stored_sequences (self, num_sequences_stored);
-  g_mutex_unlock (&priv->sequence_buffer_lock);
 }
 
 static void
@@ -1140,7 +1115,6 @@ set_singular_buffer_length (EmerDaemon *self,
   priv->singular_buffer_length = length;
   priv->singular_buffer = g_new (SingularEvent, length);
   priv->num_singulars_buffered = 0;
-  g_mutex_init (&priv->singular_buffer_lock);
 }
 
 static void
@@ -1151,7 +1125,6 @@ set_aggregate_buffer_length (EmerDaemon *self,
   priv->aggregate_buffer_length = length;
   priv->aggregate_buffer = g_new (AggregateEvent, length);
   priv->num_aggregates_buffered = 0;
-  g_mutex_init (&priv->aggregate_buffer_lock);
 }
 
 static void
@@ -1162,7 +1135,6 @@ set_sequence_buffer_length (EmerDaemon *self,
   priv->sequence_buffer_length = length;
   priv->sequence_buffer = g_new (SequenceEvent, length);
   priv->num_sequences_buffered = 0;
-  g_mutex_init (&priv->sequence_buffer_lock);
 
 }
 
@@ -1256,13 +1228,8 @@ emer_daemon_finalize (GObject *object)
   // Do not free the GNetworkMonitor.  It is transfer none.
 
   free_singular_buffer (priv->singular_buffer, priv->num_singulars_buffered);
-  g_mutex_clear (&priv->singular_buffer_lock);
-
   free_aggregate_buffer (priv->aggregate_buffer, priv->num_aggregates_buffered);
-  g_mutex_clear (&priv->aggregate_buffer_lock);
-
   free_sequence_buffer (priv->sequence_buffer, priv->num_sequences_buffered);
-  g_mutex_clear (&priv->sequence_buffer_lock);
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->finalize (object);
 }
@@ -1501,8 +1468,6 @@ emer_daemon_record_singular_event (EmerDaemon *self,
     }
   relative_timestamp += boot_offset;
 
-  g_mutex_lock (&priv->singular_buffer_lock);
-
   if (priv->num_singulars_buffered < priv->singular_buffer_length)
     {
       SingularEvent *singular = priv->singular_buffer +
@@ -1514,8 +1479,6 @@ emer_daemon_record_singular_event (EmerDaemon *self,
       EventValue event_value = { relative_timestamp, nullable_payload };
       singular->event_value = event_value;
     }
-
-  g_mutex_unlock (&priv->singular_buffer_lock);
 }
 
 void
@@ -1542,8 +1505,6 @@ emer_daemon_record_aggregate_event (EmerDaemon *self,
     }
   relative_timestamp += boot_offset;
 
-  g_mutex_lock (&priv->aggregate_buffer_lock);
-
   if (priv->num_aggregates_buffered < priv->aggregate_buffer_length)
     {
       AggregateEvent *aggregate = priv->aggregate_buffer +
@@ -1558,8 +1519,6 @@ emer_daemon_record_aggregate_event (EmerDaemon *self,
       singular.event_value = event_value;
       aggregate->event = singular;
     }
-
-  g_mutex_unlock (&priv->aggregate_buffer_lock);
 }
 
 void
@@ -1581,8 +1540,6 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
                  "Dropping metric.");
       return;
     }
-
-  g_mutex_lock (&priv->sequence_buffer_lock);
 
   if (priv->num_sequences_buffered < priv->sequence_buffer_length)
     {
@@ -1615,8 +1572,6 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
       g_variant_unref (event_values);
       event_sequence->num_event_values = num_events;
     }
-
-  g_mutex_unlock (&priv->sequence_buffer_lock);
 }
 
 /*

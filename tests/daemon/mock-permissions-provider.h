@@ -29,7 +29,8 @@
 
 G_BEGIN_DECLS
 
-gint mock_permissions_provider_get_daemon_enabled_called (EmerPermissionsProvider *self);
+void mock_permissions_provider_set_uploading_enabled (EmerPermissionsProvider *self,
+                                                      gboolean                 uploading_enabled);
 
 G_END_DECLS
 

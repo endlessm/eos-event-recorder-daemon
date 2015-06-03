@@ -124,7 +124,7 @@ aggregate_to_variant (AggregateEvent *aggregate)
   get_uuid_builder (event.event_id, &event_id_builder);
   EventValue event_value = event.event_value;
   return g_variant_new ("(uayxxmv)", event.user_id, &event_id_builder,
-                        event_value.relative_timestamp, aggregate->num_events,
+                        aggregate->num_events, event_value.relative_timestamp,
                         event_value.auxiliary_payload);
 }
 
@@ -150,11 +150,11 @@ sequence_to_variant (SequenceEvent *sequence)
 }
 
 /*
- * Returns a new reference to a little-endian version of GVariant * regardless
- * of this machine's endianness. Crashes with a g_error if this machine is
- * middle-endian (a.k.a., mixed-endian).
+ * Returns a new reference to a little-endian version of the given GVariant
+ * regardless of this machine's endianness. Crashes with a g_error if this
+ * machine is middle-endian (a.k.a., mixed-endian).
  *
- * The returned GVariant * should have g_variant_unref() called on it when it is
+ * The returned GVariant should have g_variant_unref() called on it when it is
  * no longer needed.
  */
 GVariant *
@@ -178,7 +178,7 @@ void
 get_uuid_builder (uuid_t           uuid,
                   GVariantBuilder *uuid_builder)
 {
-  g_variant_builder_init (uuid_builder, G_VARIANT_TYPE ("ay"));
+  g_variant_builder_init (uuid_builder, G_VARIANT_TYPE_BYTESTRING);
   for (size_t i = 0; i < UUID_LENGTH; ++i)
     g_variant_builder_add (uuid_builder, "y", uuid[i]);
 }

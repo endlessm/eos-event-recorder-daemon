@@ -134,8 +134,9 @@ read_config_file_sync (EmerPermissionsProvider *self)
 
   g_free (path);
 
-  g_object_notify_by_pspec (G_OBJECT (self),
-                            emer_permissions_provider_props[PROP_DAEMON_ENABLED]);
+  GParamSpec *daemon_enabled_pspec =
+    emer_permissions_provider_props[PROP_DAEMON_ENABLED];
+  g_object_notify_by_pspec (G_OBJECT (self), daemon_enabled_pspec);
 }
 
 /* Helper function to run write_config_file_sync() in another thread. */
@@ -530,7 +531,9 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
 
   write_config_file_async (self);
 
-  g_object_notify (G_OBJECT (self), "daemon-enabled");
+  GParamSpec *daemon_enabled_pspec =
+    emer_permissions_provider_props[PROP_DAEMON_ENABLED];
+  g_object_notify_by_pspec (G_OBJECT (self), daemon_enabled_pspec);
 }
 
 /*

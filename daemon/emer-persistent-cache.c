@@ -28,8 +28,6 @@
 #include <glib-object.h>
 
 #include <errno.h>
-#include <stdio.h>
-#include <string.h>
 
 #include <eosmetrics/eosmetrics.h>
 
@@ -725,6 +723,45 @@ emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
   return TRUE;
 }
 
+static GVariant *
+deep_copy_variant (GVariant *variant)
+{
+  GBytes *bytes = g_variant_get_data_as_bytes (variant);
+  const GVariantType *variant_type = g_variant_get_type (variant);
+  GVariant *copy = g_variant_new_from_bytes (variant_type, bytes, TRUE);
+  g_bytes_unref (bytes);
+  return copy;
+}
+
+/* Return a new floating GVariant with the machine's native endianness that is
+ * in normal form and marked trusted.
+ */
+static GVariant *
+regularize_variant (GVariant *variant)
+{
+  g_variant_ref_sink (variant);
+  GVariant *normalized_variant = g_variant_get_normal_form (variant);
+  g_variant_unref (variant);
+
+  if (G_BYTE_ORDER == G_BIG_ENDIAN)
+    {
+      GVariant *byteswapped_variant = g_variant_byteswap (normalized_variant);
+      g_variant_unref (normalized_variant);
+      normalized_variant = byteswapped_variant;
+    }
+  else if (G_BYTE_ORDER != G_LITTLE_ENDIAN)
+    {
+      g_error ("This machine is neither big endian nor little endian. Mixed-"
+               "endian machines are not supported by the metrics system.");
+    }
+
+  // Restore floating bit.
+  GVariant *native_endian_variant = deep_copy_variant (normalized_variant);
+
+  g_variant_unref (normalized_variant);
+  return native_endian_variant;
+}
+
 /*
  * Will transfer all metrics in the corresponding file into the out parameter
  * 'return_list'. The list will be NULL-terminated.  Returns TRUE on success,
@@ -751,7 +788,8 @@ drain_metrics_file (EmerPersistentCache *self,
     }
   GInputStream *stream = G_INPUT_STREAM (file_stream);
 
-  GArray *dynamic_array = g_array_new (FALSE, FALSE, sizeof (GVariant *));
+  GArray *dynamic_array = g_array_new (TRUE, FALSE, sizeof (GVariant *));
+  g_array_set_clear_func (dynamic_array, (GDestroyNotify) g_variant_unref);
 
   while (TRUE)
     {
@@ -774,7 +812,7 @@ drain_metrics_file (EmerPersistentCache *self,
           g_error_free (error);
           g_object_unref (stream);
           g_object_unref (file);
-          g_array_free (dynamic_array, TRUE);
+          g_array_unref (dynamic_array);
           return FALSE;
         }
       if (length_bytes_read != sizeof (gsize))
@@ -783,7 +821,7 @@ drain_metrics_file (EmerPersistentCache *self,
                       length_bytes_read, sizeof (gsize));
           g_object_unref (stream);
           g_object_unref (file);
-          g_array_free (dynamic_array, TRUE);
+          g_array_unref (dynamic_array);
           return FALSE;
         }
 
@@ -808,36 +846,27 @@ drain_metrics_file (EmerPersistentCache *self,
           g_error_free (error);
           g_object_unref (stream);
           g_object_unref (file);
-          g_array_free (dynamic_array, TRUE);
+          g_array_unref (dynamic_array);
           return FALSE;
         }
 
       // Deserialize
-      GVariant *current_metric =
+      GVariant *current_event =
         g_variant_new_from_data (G_VARIANT_TYPE (variant_type),
                                  writable.data,
                                  writable.length,
                                  FALSE,
                                  (GDestroyNotify) g_free,
                                  writable.data);
-      g_variant_ref_sink (current_metric);
 
-      // Correct byte_ordering if necessary.
-      GVariant *native_endian_metric =
-        swap_bytes_if_big_endian (current_metric);
-
-      g_variant_unref (current_metric);
-
-      g_array_append_val (dynamic_array, native_endian_metric);
+      GVariant *regularized_event = regularize_variant (current_event);
+      g_array_append_val (dynamic_array, regularized_event);
     }
+
   g_object_unref (stream);
   g_object_unref (file);
 
-  *return_list = g_new (GVariant *, dynamic_array->len + 1);
-  memcpy (*return_list, dynamic_array->data,
-          dynamic_array->len * sizeof (GVariant *));
-  (*return_list)[dynamic_array->len] = NULL;
-  g_array_free (dynamic_array, TRUE);
+  *return_list = (GVariant **) g_array_free (dynamic_array, FALSE);
 
   return TRUE;
 }
@@ -989,7 +1018,9 @@ append_variant_to_string (EmerPersistentCache *self,
   gsize event_size_on_disk = sizeof (gsize) + g_variant_get_size (variant);
   if (cache_has_room (self, event_size_on_disk))
     {
+      g_variant_ref_sink (variant);
       GVariant *native_endian_variant = swap_bytes_if_big_endian (variant);
+      g_variant_unref (variant);
 
       GVariantWritable writable;
       writable.length = g_variant_get_size (native_endian_variant);
@@ -1073,12 +1104,8 @@ store_singulars (EmerPersistentCache *self,
     {
       SingularEvent *curr_singular = singular_buffer + i;
       GVariant *curr_singular_variant = singular_to_variant (curr_singular);
-
-      g_variant_ref_sink (curr_singular_variant);
       string_fit =
         append_variant_to_string (self, variant_string, curr_singular_variant);
-      g_variant_unref (curr_singular_variant);
-
       if (!string_fit)
         break;
     }
@@ -1115,12 +1142,8 @@ store_aggregates (EmerPersistentCache *self,
     {
       AggregateEvent *curr_aggregate = aggregate_buffer + i;
       GVariant *curr_aggregate_variant = aggregate_to_variant (curr_aggregate);
-
-      g_variant_ref_sink (curr_aggregate_variant);
       string_fit =
         append_variant_to_string (self, variant_string, curr_aggregate_variant);
-      g_variant_unref (curr_aggregate_variant);
-
       if (!string_fit)
         break;
     }
@@ -1157,12 +1180,8 @@ store_sequences (EmerPersistentCache *self,
     {
       SequenceEvent *curr_sequence = sequence_buffer + i;
       GVariant *curr_sequence_variant = sequence_to_variant (curr_sequence);
-
-      g_variant_ref_sink (curr_sequence_variant);
       string_fit =
         append_variant_to_string (self, variant_string, curr_sequence_variant);
-      g_variant_unref (curr_sequence_variant);
-
       if (!string_fit)
         break;
     }

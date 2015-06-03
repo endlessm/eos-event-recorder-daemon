@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # Copyright 2014, 2015 Endless Mobile, Inc.
 
 # This file is part of eos-event-recorder-daemon.

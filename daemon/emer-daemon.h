@@ -28,6 +28,7 @@
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
 
+#include <gio/gio.h>
 #include <glib-object.h>
 
 G_BEGIN_DECLS
@@ -65,6 +66,8 @@ struct _EmerDaemon
 struct _EmerDaemonClass
 {
   GObjectClass parent_class;
+
+  void (*upload_finished_handler) (EmerDaemon *self);
 };
 
 GType                    emer_daemon_get_type                 (void) G_GNUC_CONST;
@@ -72,6 +75,7 @@ GType                    emer_daemon_get_type                 (void) G_GNUC_CONS
 EmerDaemon *             emer_daemon_new                      (void);
 
 EmerDaemon *             emer_daemon_new_full                 (GRand                   *rand,
+                                                               const gchar             *server_uri,
                                                                guint                    network_send_interval,
                                                                EmerMachineIdProvider   *machine_id_provider,
                                                                EmerNetworkSendProvider *network_send_provider,
@@ -98,6 +102,14 @@ void                     emer_daemon_record_event_sequence    (EmerDaemon       
                                                                guint32                  user_id,
                                                                GVariant                *event_id,
                                                                GVariant                *events);
+
+void                     emer_daemon_upload_events            (EmerDaemon              *self,
+                                                               GAsyncReadyCallback      callback,
+                                                               gpointer                 user_data);
+
+gboolean                 emer_daemon_upload_events_finish     (EmerDaemon              *self,
+                                                               GAsyncResult            *result,
+                                                               GError                 **error);
 
 EmerPermissionsProvider *emer_daemon_get_permissions_provider (EmerDaemon              *self);
 

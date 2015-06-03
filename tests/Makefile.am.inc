@@ -64,7 +64,7 @@ tests_daemon_test_daemon_dbusdaemon_SOURCES = \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
 	daemon/emer-cache-size-provider.c daemon/emer-cache-size-provider.h \
 	daemon/emer-cache-version-provider.c daemon/emer-cache-version-provider.h \
-	daemon/emer-machine-id-provider.c daemon/emer-machine-id-provider.h \
+	tests/daemon/mock-machine-id-provider.c daemon/emer-machine-id-provider.h \
 	tests/daemon/mock-network-send-provider.c \
 	daemon/emer-network-send-provider.h \
 	tests/daemon/mock-permissions-provider.c \
@@ -76,6 +76,7 @@ tests_daemon_test_daemon_dbusdaemon_SOURCES = \
 tests_daemon_test_daemon_dbusdaemon_CPPFLAGS = \
 	$(DAEMON_TEST_FLAGS) \
 	-D_POSIX_C_SOURCE=200112L \
+	-DTEST_DIR="\"$(srcdir)/tests/\"" \
 	$(NULL)
 tests_daemon_test_daemon_dbusdaemon_LDADD = $(DAEMON_TEST_LIBS)
 
@@ -115,6 +116,7 @@ tests_daemon_test_persistent_cache_CPPFLAGS = \
 tests_daemon_test_persistent_cache_LDADD = $(DAEMON_TEST_LIBS)
 
 dist_noinst_SCRIPTS = \
+	tests/daemon/mock-server.py \
 	tests/launch-mock-dbus-tests.sh \
 	$(NULL)
 

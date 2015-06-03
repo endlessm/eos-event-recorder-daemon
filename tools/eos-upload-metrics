@@ -1,0 +1,12 @@
+#!/bin/bash -e
+
+UPLOAD_EVENTS_OUTPUT=$(gdbus call --system \
+    --dest com.endlessm.Metrics --object-path /com/endlessm/Metrics \
+    --method com.endlessm.Metrics.EventRecorderServer.UploadEvents)
+
+if [ "$UPLOAD_EVENTS_OUTPUT" != '()' ]; then
+  echo "$UPLOAD_EVENTS_OUTPUT" >&2
+  exit 1
+fi
+
+echo "Successfully uploaded all events to servers."

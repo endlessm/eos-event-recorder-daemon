@@ -22,7 +22,6 @@
 
 #include "emer-boot-id-provider.h"
 
-#include <stdio.h>
 #include <string.h>
 #include <uuid/uuid.h>
 

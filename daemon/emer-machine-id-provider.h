@@ -24,6 +24,7 @@
 #define EMER_MACHINE_ID_PROVIDER_H
 
 #include <glib-object.h>
+#include <uuid/uuid.h>
 
 G_BEGIN_DECLS
 
@@ -83,7 +84,7 @@ EmerMachineIdProvider *emer_machine_id_provider_new      (void);
 EmerMachineIdProvider *emer_machine_id_provider_new_full (const gchar           *machine_id_file_path);
 
 gboolean               emer_machine_id_provider_get_id   (EmerMachineIdProvider *self,
-                                                          guchar                 uuid[16]);
+                                                          uuid_t                 machine_id);
 
 G_END_DECLS
 

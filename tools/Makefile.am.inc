@@ -47,6 +47,7 @@ tools_print_persistent_cache_LDADD = $(PERSISTENT_CACHE_TOOL_LIBS)
 dist_bin_SCRIPTS = \
 	tools/eos-enable-metrics-uploading \
 	tools/eos-select-metrics-env \
+	tools/eos-upload-metrics \
 	$(NULL)
 EXTRA_DIST += \
 	tools/eos-enable-metrics-uploading.in \

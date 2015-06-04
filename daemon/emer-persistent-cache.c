@@ -52,11 +52,11 @@
  * the new version number.
  */
 
-typedef struct GVariantWritable
+typedef struct _Writable
 {
   gsize length;
   gpointer data;
-} GVariantWritable;
+} Writable;
 
 typedef struct _EmerPersistentCachePrivate
 {
@@ -793,7 +793,7 @@ drain_metrics_file (EmerPersistentCache *self,
 
   while (TRUE)
     {
-      GVariantWritable writable;
+      Writable writable;
       gssize length_bytes_read = g_input_stream_read (stream,
                                                       &writable.length,
                                                       sizeof (gsize),
@@ -1022,7 +1022,7 @@ append_variant_to_string (EmerPersistentCache *self,
       GVariant *native_endian_variant = swap_bytes_if_big_endian (variant);
       g_variant_unref (variant);
 
-      GVariantWritable writable;
+      Writable writable;
       writable.length = g_variant_get_size (native_endian_variant);
       writable.data = (gpointer) g_variant_get_data (native_endian_variant);
 

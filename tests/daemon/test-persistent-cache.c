@@ -1645,7 +1645,6 @@ test_persistent_cache_wipes_metrics_when_boot_offset_corrupted (gboolean     *un
 
   capacity_t capacity;
 
-  // Insert a metric.
   store_single_singular_event (cache, &capacity);
 
   // Clear in-memory boot offset cache.

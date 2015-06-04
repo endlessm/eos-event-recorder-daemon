@@ -31,6 +31,7 @@
 #include "shared/metrics-util.h"
 
 #include <eosmetrics/eosmetrics.h>
+#include <gio/gio.h>
 #include <glib.h>
 #include <glib-object.h>
 #include <glib/gstdio.h>
@@ -39,6 +40,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/prctl.h>
 
 #define MOCK_SERVER_PATH TEST_DIR "daemon/mock-server.py"
 
@@ -948,17 +950,31 @@ get_server_uri (GSubprocess *mock_server)
   return server_uri;
 }
 
+static void
+reap_when_parent_dies (gpointer unused)
+{
+  g_assert_cmpint (prctl (PR_SET_PDEATHSIG, SIGTERM), ==, 0);
+}
+
 // Setup/Teardown functions next:
 
 static void
 setup (Fixture      *fixture,
        gconstpointer unused)
 {
+  // The mock server should be sent SIGTERM when this process exits.
+  GSubprocessLauncher *subprocess_launcher =
+    g_subprocess_launcher_new (G_SUBPROCESS_FLAGS_STDIN_PIPE |
+                               G_SUBPROCESS_FLAGS_STDOUT_PIPE);
+  g_subprocess_launcher_set_child_setup (subprocess_launcher,
+                                         reap_when_parent_dies,
+                                         NULL /* user data */,
+                                         NULL /* GDestroyNotify */);
   fixture->mock_server =
-    g_subprocess_new (G_SUBPROCESS_FLAGS_STDIN_PIPE |
-                        G_SUBPROCESS_FLAGS_STDOUT_PIPE,
-                      NULL, MOCK_SERVER_PATH, NULL);
+    g_subprocess_launcher_spawn (subprocess_launcher, NULL, MOCK_SERVER_PATH,
+                                 NULL);
   g_assert_nonnull (fixture->mock_server);
+  g_object_unref (subprocess_launcher);
 
   gchar *server_uri = get_server_uri (fixture->mock_server);
 

@@ -36,9 +36,9 @@
 #include <glib/gstdio.h>
 #include <libsoup/soup.h>
 #include <uuid/uuid.h>
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
-#include <signal.h>
 
 #define MOCK_SERVER_PATH TEST_DIR "daemon/mock-server.py"
 

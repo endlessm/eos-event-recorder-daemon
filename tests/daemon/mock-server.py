@@ -18,7 +18,6 @@
 # along with eos-event-recorder-daemon.  If not, see
 # <http://www.gnu.org/licenses/>.
 
-import http.client
 import http.server
 import sys
 
@@ -30,8 +29,9 @@ class PrintingHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         request_body = self.rfile.read(content_length)
         sys.stdout.buffer.write(request_body)
         sys.stdout.buffer.flush()
-        sys.stdin.readline()  # Block until test says to proceed.
-        self.send_response(http.client.OK)
+        status_code_str = sys.stdin.readline()
+        status_code = int(status_code_str)
+        self.send_response(status_code)
         self.end_headers()
 
 # A metrics server that simply prints the requests it receives to stdout

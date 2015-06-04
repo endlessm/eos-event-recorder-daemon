@@ -337,8 +337,8 @@ get_updated_request_body (EmerDaemon *self,
 
   return g_variant_new ("(ixx@ay@a(uayxmv)@a(uayxxmv)@a(uaya(xmv)))",
                         send_number, little_endian_relative_timestamp,
-                        little_endian_absolute_timestamp, &machine_id,
-                        &singulars, &aggregates, &sequences);
+                        little_endian_absolute_timestamp, machine_id,
+                        singulars, aggregates, sequences);
 }
 
 // Handles HTTP or HTTPS responses.

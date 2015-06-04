@@ -34,6 +34,7 @@
 #include <glib.h>
 #include <glib-object.h>
 #include <glib/gstdio.h>
+#include <libsoup/soup.h>
 #include <uuid/uuid.h>
 #include <stdio.h>
 #include <string.h>
@@ -849,24 +850,6 @@ assert_sequence_received (GByteArray *request,
   g_variant_iter_free (sequence_iterator);
 }
 
-/* Writes a single newline character to stdin of the given server, instructing
- * it to stop waiting and respond to the client.
- */
-static void
-tell_server_to_proceed (GSubprocess *server)
-{
-  GOutputStream *output_stream = g_subprocess_get_stdin_pipe (server);
-  gssize num_bytes_written =
-    g_output_stream_write (output_stream, "\n", 1, NULL /* GCancellable */,
-                           NULL /* GError */);
-  g_assert_cmpint (num_bytes_written, ==, 1);
-
-  gboolean flush_succeeded =
-    g_output_stream_flush (output_stream, NULL /* GCancellable */,
-                           NULL /* GError */);
-  g_assert_true (flush_succeeded);
-}
-
 static void
 handle_upload_finished (EmerDaemon *test_object,
                         GMainLoop  *main_loop)
@@ -907,17 +890,45 @@ read_network_request (Fixture               *fixture,
   read_bytes_from_stdout (fixture->mock_server, content_length, source_func,
                           fixture);
   g_free (fixture->request_path);
+}
 
+/* Writes the given HTTP status code to stdin of the given server as a
+ * newline-terminated base-10 string. Assumes the server will respond to the
+ * client with that code.
+ */
+static void
+send_http_response (GSubprocess *server,
+                    gint         status_code)
+{
+  GOutputStream *output_stream = g_subprocess_get_stdin_pipe (server);
+  gchar *status_string = g_strdup_printf ("%d\n", status_code);
+  gsize string_length = strlen (status_string);
+  gboolean write_succeeded =
+    g_output_stream_write_all (output_stream, status_string, string_length,
+                               NULL /* bytes written */,
+                               NULL /* GCancellable */, NULL /* GError */);
+  g_assert_true (write_succeeded);
+  g_free (status_string);
+
+  gboolean flush_succeeded =
+    g_output_stream_flush (output_stream, NULL /* GCancellable */,
+                           NULL /* GError */);
+  g_assert_true (flush_succeeded);
+}
+
+static void
+wait_for_upload_to_finish (Fixture *fixture)
+{
   GMainLoop *main_loop = g_main_loop_new (NULL /* GMainContext */, FALSE);
   guint handler_id =
     g_signal_connect (fixture->test_object, "upload-finished",
                       G_CALLBACK (handle_upload_finished), main_loop);
-  tell_server_to_proceed (server);
+
+  send_http_response (fixture->mock_server, SOUP_STATUS_OK);
 
   guint timeout_id =
     g_timeout_add_seconds (TIMEOUT_SEC, timeout, NULL /* user data */);
 
-  // Wait until client has handled server's acknowledgement.
   g_main_loop_run (main_loop);
 
   g_source_remove (timeout_id);
@@ -1004,6 +1015,7 @@ test_daemon_records_singulars (Fixture      *fixture,
   record_singulars (fixture->test_object);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_singulars_received);
+  wait_for_upload_to_finish (fixture);
 }
 
 static void
@@ -1013,6 +1025,7 @@ test_daemon_records_aggregates (Fixture      *fixture,
   record_aggregates (fixture->test_object);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_aggregates_received);
+  wait_for_upload_to_finish (fixture);
 }
 
 static void
@@ -1022,6 +1035,64 @@ test_daemon_records_sequence (Fixture      *fixture,
   record_sequence (fixture->test_object);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_sequence_received);
+  wait_for_upload_to_finish (fixture);
+}
+
+static void
+test_daemon_retries_singular_uploads (Fixture      *fixture,
+                                      gconstpointer unused)
+{
+  record_singulars (fixture->test_object);
+
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_singulars_received);
+  send_http_response (fixture->mock_server, SOUP_STATUS_INTERNAL_SERVER_ERROR);
+
+  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
+                         "Attempt to upload metrics failed: Internal Server "
+                         "Error.");
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_singulars_received);
+  wait_for_upload_to_finish (fixture);
+  g_test_assert_expected_messages ();
+}
+
+static void
+test_daemon_retries_aggregate_uploads (Fixture      *fixture,
+                                       gconstpointer unused)
+{
+  record_aggregates (fixture->test_object);
+
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_aggregates_received);
+  send_http_response (fixture->mock_server, SOUP_STATUS_INTERNAL_SERVER_ERROR);
+
+  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
+                         "Attempt to upload metrics failed: Internal Server "
+                         "Error.");
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_aggregates_received);
+  wait_for_upload_to_finish (fixture);
+  g_test_assert_expected_messages ();
+}
+
+static void
+test_daemon_retries_sequence_uploads (Fixture      *fixture,
+                                      gconstpointer unused)
+{
+  record_sequence (fixture->test_object);
+
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_sequence_received);
+  send_http_response (fixture->mock_server, SOUP_STATUS_INTERNAL_SERVER_ERROR);
+
+  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
+                         "Attempt to upload metrics failed: Internal Server "
+                         "Error.");
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_sequence_received);
+  wait_for_upload_to_finish (fixture);
+  g_test_assert_expected_messages ();
 }
 
 static void
@@ -1037,6 +1108,7 @@ test_daemon_only_reports_singulars_when_uploading_enabled (Fixture      *fixture
                                                    TRUE);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_singulars_received);
+  wait_for_upload_to_finish (fixture);
 }
 
 static void
@@ -1052,6 +1124,7 @@ test_daemon_only_reports_aggregates_when_uploading_enabled (Fixture      *fixtur
                                                    TRUE);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_aggregates_received);
+  wait_for_upload_to_finish (fixture);
 }
 
 static void
@@ -1067,6 +1140,7 @@ test_daemon_only_reports_sequences_when_uploading_enabled (Fixture      *fixture
                                                    TRUE);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_sequence_received);
+  wait_for_upload_to_finish (fixture);
 }
 
 static void
@@ -1082,6 +1156,7 @@ test_daemon_does_not_record_singulars_when_daemon_disabled (Fixture      *fixtur
                                                 TRUE);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_no_events_received);
+  wait_for_upload_to_finish (fixture);
 }
 
 static void
@@ -1097,6 +1172,7 @@ test_daemon_does_not_record_aggregates_when_daemon_disabled (Fixture      *fixtu
                                                 TRUE);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_no_events_received);
+  wait_for_upload_to_finish (fixture);
 }
 
 static void
@@ -1112,6 +1188,7 @@ test_daemon_does_not_record_sequences_when_daemon_disabled (Fixture      *fixtur
                                                 TRUE);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_no_events_received);
+  wait_for_upload_to_finish (fixture);
 }
 
 static void
@@ -1213,6 +1290,12 @@ main (int                argc,
   ADD_DAEMON_TEST ("/daemon/records-aggregates",
                    test_daemon_records_aggregates);
   ADD_DAEMON_TEST ("/daemon/records-sequence", test_daemon_records_sequence);
+  ADD_DAEMON_TEST ("/daemon/retries-singular-uploads",
+                   test_daemon_retries_singular_uploads);
+  ADD_DAEMON_TEST ("/daemon/retries-aggregate-uploads",
+                   test_daemon_retries_aggregate_uploads);
+  ADD_DAEMON_TEST ("/daemon/retries-sequence-uploads",
+                   test_daemon_retries_sequence_uploads);
   ADD_DAEMON_TEST ("/daemon/only-reports-singulars-when-uploading-enabled",
                    test_daemon_only_reports_singulars_when_uploading_enabled);
   ADD_DAEMON_TEST ("/daemon/only-reports-aggregates-when-uploading-enabled",

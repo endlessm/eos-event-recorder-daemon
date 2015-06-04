@@ -874,12 +874,10 @@ handle_upload_finished (EmerDaemon *test_object,
   g_main_loop_quit (main_loop);
 }
 
-/* Reads a network request from stdout of the given server. Assumes the server
- * prints the path to which the request was made on a single line, followed by
- * the length in bytes of the request received on a single line, followed by the
- * request body without a terminal newline. Assumes the server does not respond
- * to the request until instructed to proceed. Blocks until the client has
- * finished handling the server's acknowledgement of its request. Sets
+/* Reads a network request from stdout of fixture->mock_server. Assumes the
+ * server prints the path to which the request was made on a single line,
+ * followed by the length in bytes of the request received on a single line,
+ * followed by the request body without a terminal newline. Sets
  * fixture->relative_time and fixture->absolute_time to the relative and
  * absolute times at which this function was called. Sets fixture->request_path
  * to the path to which the request was sent. Calls source_func with a
@@ -887,9 +885,8 @@ handle_upload_finished (EmerDaemon *test_object,
  * modified fixture as the second parameter.
  */
 static void
-read_network_request (GSubprocess           *server,
-                      ProcessBytesSourceFunc source_func,
-                      Fixture               *fixture)
+read_network_request (Fixture               *fixture,
+                      ProcessBytesSourceFunc source_func)
 {
   gboolean get_succeeded =
     emtr_util_get_current_time (CLOCK_BOOTTIME, &fixture->relative_time);
@@ -898,14 +895,17 @@ read_network_request (GSubprocess           *server,
     emtr_util_get_current_time (CLOCK_REALTIME, &fixture->absolute_time);
   g_assert_true (get_succeeded);
 
-  read_lines_from_stdout (server, (ProcessLineSourceFunc) remove_last_character,
+  read_lines_from_stdout (fixture->mock_server,
+                          (ProcessLineSourceFunc) remove_last_character,
                           &fixture->request_path);
 
   guint content_length;
-  read_lines_from_stdout (server, (ProcessLineSourceFunc) read_content_length,
+  read_lines_from_stdout (fixture->mock_server,
+                          (ProcessLineSourceFunc) read_content_length,
                           &content_length);
 
-  read_bytes_from_stdout (server, content_length, source_func, fixture);
+  read_bytes_from_stdout (fixture->mock_server, content_length, source_func,
+                          fixture);
   g_free (fixture->request_path);
 
   GMainLoop *main_loop = g_main_loop_new (NULL /* GMainContext */, FALSE);
@@ -1002,9 +1002,8 @@ test_daemon_records_singulars (Fixture      *fixture,
                                gconstpointer unused)
 {
   record_singulars (fixture->test_object);
-  read_network_request (fixture->mock_server,
-                        (ProcessBytesSourceFunc) assert_singulars_received,
-                        fixture);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_singulars_received);
 }
 
 static void
@@ -1012,9 +1011,8 @@ test_daemon_records_aggregates (Fixture      *fixture,
                                 gconstpointer unused)
 {
   record_aggregates (fixture->test_object);
-  read_network_request (fixture->mock_server,
-                        (ProcessBytesSourceFunc) assert_aggregates_received,
-                        fixture);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_aggregates_received);
 }
 
 static void
@@ -1022,9 +1020,8 @@ test_daemon_records_sequence (Fixture      *fixture,
                               gconstpointer unused)
 {
   record_sequence (fixture->test_object);
-  read_network_request (fixture->mock_server,
-                        (ProcessBytesSourceFunc) assert_sequence_received,
-                        fixture);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_sequence_received);
 }
 
 static void
@@ -1038,9 +1035,8 @@ test_daemon_only_reports_singulars_when_uploading_enabled (Fixture      *fixture
 
   mock_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
                                                    TRUE);
-  read_network_request (fixture->mock_server,
-                        (ProcessBytesSourceFunc) assert_singulars_received,
-                        fixture);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_singulars_received);
 }
 
 static void
@@ -1054,9 +1050,8 @@ test_daemon_only_reports_aggregates_when_uploading_enabled (Fixture      *fixtur
 
   mock_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
                                                    TRUE);
-  read_network_request (fixture->mock_server,
-                        (ProcessBytesSourceFunc) assert_aggregates_received,
-                        fixture);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_aggregates_received);
 }
 
 static void
@@ -1070,9 +1065,8 @@ test_daemon_only_reports_sequences_when_uploading_enabled (Fixture      *fixture
 
   mock_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
                                                    TRUE);
-  read_network_request (fixture->mock_server,
-                        (ProcessBytesSourceFunc) assert_sequence_received,
-                        fixture);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_sequence_received);
 }
 
 static void
@@ -1086,9 +1080,8 @@ test_daemon_does_not_record_singulars_when_daemon_disabled (Fixture      *fixtur
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 TRUE);
-  read_network_request (fixture->mock_server,
-                        (ProcessBytesSourceFunc) assert_no_events_received,
-                        fixture);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_no_events_received);
 }
 
 static void
@@ -1102,9 +1095,8 @@ test_daemon_does_not_record_aggregates_when_daemon_disabled (Fixture      *fixtu
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 TRUE);
-  read_network_request (fixture->mock_server,
-                        (ProcessBytesSourceFunc) assert_no_events_received,
-                        fixture);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_no_events_received);
 }
 
 static void
@@ -1118,9 +1110,8 @@ test_daemon_does_not_record_sequences_when_daemon_disabled (Fixture      *fixtur
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 TRUE);
-  read_network_request (fixture->mock_server,
-                        (ProcessBytesSourceFunc) assert_no_events_received,
-                        fixture);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_no_events_received);
 }
 
 static void

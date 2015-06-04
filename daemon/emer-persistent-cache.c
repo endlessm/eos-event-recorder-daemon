@@ -113,8 +113,7 @@ G_DEFINE_TYPE_WITH_CODE (EmerPersistentCache, emer_persistent_cache, G_TYPE_OBJE
 
 /*
  * The amount of time (in seconds) between every periodic update to the boot
- * offset file is made. This will primarily keep our relative timestamps more
- * accurate.
+ * offset file. This will primarily keep our relative timestamps more accurate.
  */
 #define DEFAULT_BOOT_TIMESTAMPS_UPDATE (60u * 60u)
 
@@ -1243,14 +1242,8 @@ emer_persistent_cache_store_metrics (EmerPersistentCache  *self,
   *num_aggregates_stored = 0;
   *num_sequences_stored = 0;
 
-  G_LOCK (update_boot_offset);
-  if (!update_boot_offset (self, FALSE)) // Typically don't update timestamps.
-    {
-      g_critical ("Couldn't update the boot offset, dropping metrics.");
-      G_UNLOCK (update_boot_offset);
-      return FALSE;
-    }
-  G_UNLOCK (update_boot_offset);
+  if (*capacity == CAPACITY_MAX)
+    return TRUE;
 
   gboolean singulars_stored = store_singulars (self,
                                                singular_buffer,
@@ -1609,13 +1602,23 @@ emer_persistent_cache_may_fail_init (GInitable    *self,
                                      GCancellable *cancellable,
                                      GError      **error)
 {
-  gboolean versioning_success = apply_cache_versioning (EMER_PERSISTENT_CACHE (self),
-                                                        cancellable,
-                                                        error);
-  if (!versioning_success)
+  EmerPersistentCache *persistent_cache = EMER_PERSISTENT_CACHE (self);
+
+  if (!apply_cache_versioning (persistent_cache, cancellable, error))
     return FALSE;
 
-  return load_cache_size (EMER_PERSISTENT_CACHE (self), cancellable, error);
+  G_LOCK (update_boot_offset);
+  if (!update_boot_offset (persistent_cache, FALSE))
+    {
+      g_critical ("Couldn't update the boot offset upon initialization.");
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                   "Couldn't update the boot offset upon initialization.");
+      G_UNLOCK (update_boot_offset);
+      return FALSE;
+    }
+  G_UNLOCK (update_boot_offset);
+
+  return load_cache_size (persistent_cache, cancellable, error);
 }
 
 static void

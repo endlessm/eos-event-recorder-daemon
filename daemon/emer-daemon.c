@@ -337,8 +337,8 @@ get_updated_request_body (EmerDaemon *self,
 
   return g_variant_new ("(ixx@ay@a(uayxmv)@a(uayxxmv)@a(uaya(xmv)))",
                         send_number, little_endian_relative_timestamp,
-                        little_endian_absolute_timestamp, &machine_id,
-                        &singulars, &aggregates, &sequences);
+                        little_endian_absolute_timestamp, machine_id,
+                        singulars, aggregates, sequences);
 }
 
 // Handles HTTP or HTTPS responses.
@@ -727,16 +727,14 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
     {
       flush_to_persistent_cache (self);
       g_task_return_error (upload_task, error);
-      g_object_unref (upload_task);
-      return;
+      goto handle_upload_failed;
     }
 
   GVariant *request_body = create_request_body (self, &error);
   if (request_body == NULL)
     {
       g_task_return_error (upload_task, error);
-      g_object_unref (upload_task);
-      return;
+      goto handle_upload_failed;
     }
 
   gconstpointer serialized_request_body = g_variant_get_data (request_body);
@@ -744,8 +742,7 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
     {
       g_task_return_new_error (upload_task, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
                                "Could not serialize network request body.");
-      g_object_unref (upload_task);
-      return;
+      goto handle_upload_failed;
     }
 
   priv->uploading = TRUE;
@@ -770,6 +767,11 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
   soup_session_queue_message (priv->http_session, http_message,
                               (SoupSessionCallback) handle_http_response,
                               callback_data);
+  return;
+
+handle_upload_failed:
+  g_object_unref (upload_task);
+  g_signal_emit (self, emer_daemon_signals[SIGNAL_UPLOAD_FINISHED], 0u);
 }
 
 static GSocketConnectable *
@@ -853,6 +855,7 @@ dequeue_and_do_upload (EmerDaemon  *self,
       GTask *upload_task = g_queue_pop_head (priv->upload_queue);
       g_task_return_error (upload_task, error);
       g_object_unref (upload_task);
+      g_signal_emit (self, emer_daemon_signals[SIGNAL_UPLOAD_FINISHED], 0u);
       return;
     }
 

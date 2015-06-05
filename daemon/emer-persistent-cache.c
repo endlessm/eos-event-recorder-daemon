@@ -1213,9 +1213,6 @@ emer_persistent_cache_store_metrics (EmerPersistentCache  *self,
   *num_aggregates_stored = 0;
   *num_sequences_stored = 0;
 
-  if (*capacity == CAPACITY_MAX)
-    return TRUE;
-
   gboolean singulars_stored = store_singulars (self,
                                                singular_buffer,
                                                num_singulars_buffered,

@@ -778,7 +778,7 @@ drain_metrics_file (EmerPersistentCache *self,
           g_critical ("Cache file ended earlier than expected. Read %"
                       G_GSIZE_FORMAT " bytes, but expected %" G_GSIZE_FORMAT
                       " bytes of event data.", data_bytes_read, variant_length);
-          return FALSE;
+          goto handle_failed_read;
         }
       if (error != NULL)
         {

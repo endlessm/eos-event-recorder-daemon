@@ -776,8 +776,8 @@ drain_metrics_file (EmerPersistentCache *self,
 
       if (error != NULL)
         {
-          g_critical ("Failed to read length of metric from input stream to "
-                      "drain metrics. Error: %s.", error->message);
+          g_critical ("Failed to read length of event in persistent cache. "
+                      "Error: %s.", error->message);
           g_error_free (error);
           g_object_unref (stream);
           g_object_unref (file);
@@ -786,9 +786,9 @@ drain_metrics_file (EmerPersistentCache *self,
         }
       if (length_bytes_read != sizeof (gsize))
         {
-          g_critical ("We read %" G_GSSIZE_FORMAT " bytes but expected %"
-                      G_GSIZE_FORMAT " bytes!", length_bytes_read,
-                      sizeof (gsize));
+          g_critical ("Read %" G_GSSIZE_FORMAT " bytes, but expected length of "
+                      "event to be %" G_GSIZE_FORMAT " bytes.",
+                      length_bytes_read, sizeof (gsize));
           g_object_unref (stream);
           g_object_unref (file);
           g_array_unref (dynamic_array);
@@ -801,15 +801,15 @@ drain_metrics_file (EmerPersistentCache *self,
                              NULL, &error);
       if (data_bytes_read != variant_length)
         {
-          g_critical ("We read %" G_GSSIZE_FORMAT " bytes of metric data when "
-                      "looking for %" G_GSIZE_FORMAT "!", data_bytes_read,
-                      variant_length);
+          g_critical ("Cache file ended earlier than expected. Read %"
+                      G_GSIZE_FORMAT " bytes, but expected %" G_GSIZE_FORMAT
+                      " bytes of event data.", data_bytes_read, variant_length);
           return FALSE;
         }
       if (error != NULL)
         {
-          g_critical ("Failed to read metric from input stream to drain metrics."
-                      " Error: %s.", error->message);
+          g_critical ("Failed to read event in persistent cache. Error: %s.",
+                      error->message);
           g_error_free (error);
           g_object_unref (stream);
           g_object_unref (file);
@@ -1350,8 +1350,8 @@ apply_cache_versioning (EmerPersistentCache *self,
       if (!success)
         {
           if (error != NULL)
-            g_critical ("Failed to update cache version number to %i. "
-                        "Error: %s.", CURRENT_CACHE_VERSION, (*error)->message);
+            g_critical ("Failed to update cache version number to %i. Error: "
+                        "%s.", CURRENT_CACHE_VERSION, (*error)->message);
           else
             g_critical ("Failed to update cache version number to %i.",
                         CURRENT_CACHE_VERSION);

@@ -837,7 +837,7 @@ drain_metrics_file (EmerPersistentCache *self,
                                  writable.data,
                                  writable.length,
                                  FALSE,
-                                 (GDestroyNotify) g_free,
+                                 g_free,
                                  writable.data);
 
       GVariant *regularized_event = regularize_variant (current_event);

@@ -798,8 +798,9 @@ drain_metrics_file (EmerPersistentCache *self,
         }
       if (length_bytes_read != sizeof (gsize))
         {
-          g_critical ("We read %i bytes but expected %u bytes!",
-                      length_bytes_read, sizeof (gsize));
+          g_critical ("We read %" G_GSSIZE_FORMAT " bytes but expected %"
+                      G_GSIZE_FORMAT " bytes!", length_bytes_read,
+                      sizeof (gsize));
           g_object_unref (stream);
           g_object_unref (file);
           g_array_unref (dynamic_array);
@@ -814,8 +815,9 @@ drain_metrics_file (EmerPersistentCache *self,
                                                     &error);
       if (data_bytes_read != writable.length)
         {
-          g_critical ("We read %i bytes of metric data when looking for %u!",
-                      data_bytes_read, writable.length);
+          g_critical ("We read %" G_GSSIZE_FORMAT " bytes of metric data when "
+                      "looking for %" G_GSIZE_FORMAT "!", data_bytes_read,
+                      writable.length);
           return FALSE;
         }
       if (error != NULL)

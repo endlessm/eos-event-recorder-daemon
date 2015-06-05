@@ -190,7 +190,7 @@ make_testing_cache (void)
 }
 
 /*
- * Returns a new GKeyFile associated with the boot timing metadata file.
+ * Returns a new key file associated with the boot timing metadata file.
  * Keyfile should be unref'd via g_key_file_unref().
  */
 static GKeyFile *

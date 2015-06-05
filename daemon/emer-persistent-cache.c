@@ -38,12 +38,12 @@
  * @title: Persistent Cache
  * @short_description: Stores metrics locally (on the user's machine).
  *
- * The Persistent Cache is the sink to which an event recorder flushes
+ * The persistent cache is the sink to which an event recorder flushes
  * metrics. It will store these metrics until a drain operation is
- * requested or the Persistent Cache is purged due to versioning.
+ * requested or the persistent cache is purged due to versioning.
  *
  * Should the cached metrics occupy more than the maximum allowed cache size,
- * the Persistent Cache will begin ignoring new metrics until the old ones have
+ * the persistent cache will begin ignoring new metrics until the old ones have
  * been removed.
  *
  * If the CURRENT_CACHE_VERSION is incremented to indicate
@@ -172,8 +172,7 @@ get_saved_boot_id (EmerPersistentCache *self,
     }
 
   /*
-   * With both the keyfile and the system file, a newline is appended
-   * when a uuid is changed to a string and stored on disk.
+   * A newline is appended when a string is stored in a keyfile.
    * We chomp it off here because uuid_parse will fail otherwise.
    */
   g_strchomp (id_as_string);
@@ -192,8 +191,8 @@ get_saved_boot_id (EmerPersistentCache *self,
 }
 
 /*
- * Reads the Operating System's boot id from disk or cached value, returning it
- * via the out parameter boot_id.  Returns FALSE on failure and sets the GError.
+ * Reads the operating system's boot id from disk or cached value, returning it
+ * via the out parameter boot_id. Returns FALSE on failure and sets the GError.
  * Returns TRUE on success.
  */
 static gboolean
@@ -370,7 +369,7 @@ save_timing_metadata (EmerPersistentCache *self,
  *
  * Completely wipes the persistent cache's stored metrics.
  *
- * Returns FALSE and writes nothing to disk on failure. Returns TRUE on success.
+ * Returns TRUE if successful and FALSE on failure.
  */
 static gboolean
 reset_boot_offset_metadata_file (EmerPersistentCache *self,
@@ -745,9 +744,9 @@ regularize_variant (GVariant *variant)
 
 /*
  * Will transfer all metrics in the corresponding file into the out parameter
- * 'return_list'. The list will be NULL-terminated.  Returns TRUE on success,
- * and FALSE if any I/O error occured. Contents of return_list are undefined if
- * the return value is FALSE.
+ * 'return_list'. The list will be NULL-terminated. Returns TRUE on success, and
+ * FALSE if any I/O error occured. Contents of return_list are undefined if the
+ * return value is FALSE.
  */
 static gboolean
 drain_metrics_file (EmerPersistentCache *self,
@@ -838,7 +837,7 @@ drain_metrics_file (EmerPersistentCache *self,
         g_variant_new_from_data (G_VARIANT_TYPE (variant_type),
                                  writable.data,
                                  writable.length,
-                                 FALSE,
+                                 FALSE /* trusted */,
                                  g_free,
                                  writable.data);
 
@@ -1192,7 +1191,7 @@ store_sequences (EmerPersistentCache *self,
  * the persistent cache's space quota.
  * Will return the capacity of the cache via the out parameter 'capacity'.
  * Returns %TRUE on success, even if the metrics are intentionally dropped due
- * to space limitations.  Returns %FALSE only on I/O error.
+ * to space limitations. Returns %FALSE only on I/O error.
  *
  * Regardless of success or failure, num_singulars_stored,
  * num_aggregates_stored, num_sequences_stored, and capacity will be correctly
@@ -1612,7 +1611,7 @@ emer_persistent_cache_initable_init (GInitableIface *iface)
 }
 
 /*
- * Constructor for creating a new Persistent Cache.
+ * Constructor for creating a new persistent cache.
  * Please use this in production instead of the testing constructor!
  */
 EmerPersistentCache *

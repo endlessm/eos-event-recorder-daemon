@@ -52,12 +52,6 @@
  * the new version number.
  */
 
-typedef struct _Writable
-{
-  gsize length;
-  gpointer data;
-} Writable;
-
 typedef struct _EmerPersistentCachePrivate
 {
   EmerCacheSizeProvider *cache_size_provider;
@@ -773,12 +767,10 @@ drain_metrics_file (EmerPersistentCache *self,
 
   while (TRUE)
     {
-      Writable writable;
-      gssize length_bytes_read = g_input_stream_read (stream,
-                                                      &writable.length,
-                                                      sizeof (gsize),
-                                                      NULL,
-                                                      &error);
+      gsize variant_length;
+      gssize length_bytes_read =
+        g_input_stream_read (stream, &variant_length, sizeof (gsize),
+                             NULL, &error);
       if (length_bytes_read == 0) // EOF
         break;
 
@@ -806,17 +798,15 @@ drain_metrics_file (EmerPersistentCache *self,
           return FALSE;
         }
 
-      writable.data = g_new (guchar, writable.length);
-      gssize data_bytes_read = g_input_stream_read (stream,
-                                                    writable.data,
-                                                    writable.length,
-                                                    NULL,
-                                                    &error);
-      if (data_bytes_read != writable.length)
+      gpointer variant_data = g_new (guchar, variant_length);
+      gssize data_bytes_read =
+        g_input_stream_read (stream, variant_data, variant_length,
+                             NULL, &error);
+      if (data_bytes_read != variant_length)
         {
           g_critical ("We read %" G_GSSIZE_FORMAT " bytes of metric data when "
                       "looking for %" G_GSIZE_FORMAT "!", data_bytes_read,
-                      writable.length);
+                      variant_length);
           return FALSE;
         }
       if (error != NULL)
@@ -834,12 +824,9 @@ drain_metrics_file (EmerPersistentCache *self,
 
       // Deserialize
       GVariant *current_event =
-        g_variant_new_from_data (G_VARIANT_TYPE (variant_type),
-                                 writable.data,
-                                 writable.length,
-                                 FALSE /* trusted */,
-                                 g_free,
-                                 writable.data);
+        g_variant_new_from_data (G_VARIANT_TYPE (variant_type), variant_data,
+                                 variant_length, FALSE /* trusted */, g_free,
+                                 variant_data);
 
       GVariant *regularized_event = regularize_variant (current_event);
       g_array_append_val (dynamic_array, regularized_event);
@@ -997,21 +984,22 @@ append_variant_to_string (EmerPersistentCache *self,
                           GString             *variant_string,
                           GVariant            *variant)
 {
-  gsize event_size_on_disk = sizeof (gsize) + g_variant_get_size (variant);
+  gsize variant_length = g_variant_get_size (variant);
+  gsize event_size_on_disk = sizeof (gsize) + variant_length;
   if (cache_has_room (self, event_size_on_disk))
     {
       g_variant_ref_sink (variant);
       GVariant *native_endian_variant = swap_bytes_if_big_endian (variant);
       g_variant_unref (variant);
 
-      Writable writable;
-      writable.length = g_variant_get_size (native_endian_variant);
-      writable.data = (gpointer) g_variant_get_data (native_endian_variant);
+      gconstpointer serialized_variant =
+        g_variant_get_data (native_endian_variant);
 
       g_string_append_len (variant_string,
-                           (const gchar *) &writable.length,
-                           sizeof (writable.length));
-      g_string_append_len (variant_string, writable.data, writable.length);
+                           (const gchar *) &variant_length,
+                           sizeof (variant_length));
+      g_string_append_len (variant_string, serialized_variant,
+                           variant_length);
 
       g_variant_unref (native_endian_variant);
       return TRUE;

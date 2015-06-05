@@ -382,25 +382,7 @@ reset_boot_offset_metadata_file (EmerPersistentCache *self,
   priv->boot_offset_initialized = FALSE;
   priv->boot_id_initialized = FALSE;
 
-  GFile *metadata_file = g_file_new_for_path (priv->boot_metadata_file_path);
-
-  // We only want to 'touch' the file; we don't need the stream.
   GError *error = NULL;
-  GFileOutputStream *unused_stream =
-    g_file_replace (metadata_file, NULL, FALSE,
-                    G_FILE_CREATE_REPLACE_DESTINATION,
-                    NULL, &error);
-  g_object_unref (metadata_file);
-  if (unused_stream == NULL)
-    {
-      g_critical ("Failed to create new metadata file at %s. Error: %s.",
-                  priv->boot_metadata_file_path, error->message);
-      g_error_free (error);
-      return FALSE;
-    }
-  g_object_unref (unused_stream);
-
-  // Wipe persistent cache if we had to reset the timing metadata.
   if (!purge_cache_files (self, NULL, &error))
     {
       g_error_free (error); // Error already reported.

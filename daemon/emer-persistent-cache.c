@@ -776,11 +776,8 @@ drain_metrics_file (EmerPersistentCache *self,
 
       if (error != NULL)
         {
-          gchar *fpath = g_file_get_path (file);
           g_critical ("Failed to read length of metric from input stream to "
-                      "drain metrics. File: %s. Error: %s.", fpath,
-                      error->message);
-          g_free (fpath);
+                      "drain metrics. Error: %s.", error->message);
           g_error_free (error);
           g_object_unref (stream);
           g_object_unref (file);
@@ -811,10 +808,8 @@ drain_metrics_file (EmerPersistentCache *self,
         }
       if (error != NULL)
         {
-          gchar *fpath = g_file_get_path (file);
           g_critical ("Failed to read metric from input stream to drain metrics."
-                      " File: %s. Error: %s.", fpath, error->message);
-          g_free (fpath);
+                      " Error: %s.", error->message);
           g_error_free (error);
           g_object_unref (stream);
           g_object_unref (file);
@@ -1027,10 +1022,8 @@ write_variant_string_to_file (EmerPersistentCache *self,
                                                 &error);
   if (stream == NULL)
     {
-      gchar *path = g_file_get_path (file);
-      g_critical ("Failed to open stream to cache file: %s. Error: %s.",
-                  path, error->message);
-      g_free (path);
+      g_critical ("Failed to open stream to cache file. Error: %s.",
+                  error->message);
       g_error_free (error);
       return FALSE;
     }
@@ -1043,11 +1036,8 @@ write_variant_string_to_file (EmerPersistentCache *self,
                                                 &error);
   if (!success)
     {
-      gchar *path = g_file_get_path (file);
-      g_critical ("Failed to write to cache file: %s. Error: %s.",
-                  path, error->message);
+      g_critical ("Failed to write to cache file. Error: %s.", error->message);
       g_object_unref (stream);
-      g_free (path);
       g_error_free (error);
       return FALSE;
     }

@@ -749,7 +749,7 @@ drain_metrics_file (EmerPersistentCache *self,
     {
       gsize variant_length;
       gssize length_bytes_read =
-        g_input_stream_read (stream, &variant_length, sizeof (gsize),
+        g_input_stream_read (stream, &variant_length, sizeof (variant_length),
                              NULL, &error);
       if (error != NULL)
         {
@@ -762,11 +762,11 @@ drain_metrics_file (EmerPersistentCache *self,
       if (length_bytes_read == 0) // EOF
         break;
 
-      if (length_bytes_read != sizeof (gsize))
+      if (length_bytes_read != sizeof (variant_length))
         {
           g_critical ("Read %" G_GSSIZE_FORMAT " bytes, but expected length of "
                       "event to be %" G_GSIZE_FORMAT " bytes.",
-                      length_bytes_read, sizeof (gsize));
+                      length_bytes_read, sizeof (variant_length));
           goto handle_failed_read;
         }
 
@@ -957,7 +957,7 @@ append_variant_to_string (EmerPersistentCache *self,
                           GVariant            *variant)
 {
   gsize variant_length = g_variant_get_size (variant);
-  gsize event_size_on_disk = sizeof (gsize) + variant_length;
+  gsize event_size_on_disk = sizeof (variant_length) + variant_length;
   if (cache_has_room (self, event_size_on_disk))
     {
       g_variant_ref_sink (variant);

@@ -214,10 +214,8 @@ set_boot_offset_in_metadata_file (gint64 new_offset)
 {
   GKeyFile *key_file = load_testing_key_file ();
 
-  g_key_file_set_int64 (key_file,
-                        CACHE_TIMING_GROUP_NAME,
-                        CACHE_BOOT_OFFSET_KEY,
-                        new_offset);
+  g_key_file_set_int64 (key_file, CACHE_TIMING_GROUP_NAME,
+                        CACHE_BOOT_OFFSET_KEY, new_offset);
 
   gboolean save_succeeded =
     g_key_file_save_to_file (key_file, TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE,
@@ -255,10 +253,8 @@ set_boot_id_in_metadata_file (gchar *boot_id)
 {
   GKeyFile *key_file = load_testing_key_file ();
 
-  g_key_file_set_string (key_file,
-                         CACHE_TIMING_GROUP_NAME,
-                         CACHE_LAST_BOOT_ID_KEY,
-                         boot_id);
+  g_key_file_set_string (key_file, CACHE_TIMING_GROUP_NAME,
+                         CACHE_LAST_BOOT_ID_KEY, boot_id);
 
   gboolean save_succeeded =
     g_key_file_save_to_file (key_file, TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE,
@@ -295,10 +291,9 @@ read_offset (void)
 {
   GKeyFile *key_file = load_testing_key_file ();
   GError *error = NULL;
-  gint64 stored_offset = g_key_file_get_int64 (key_file,
-                                               CACHE_TIMING_GROUP_NAME,
-                                               CACHE_BOOT_OFFSET_KEY,
-                                               &error);
+  gint64 stored_offset =
+    g_key_file_get_int64 (key_file, CACHE_TIMING_GROUP_NAME,
+                          CACHE_BOOT_OFFSET_KEY, &error);
   g_key_file_unref (key_file);
   g_assert_no_error (error);
   return stored_offset;
@@ -313,10 +308,9 @@ boot_offset_was_reset (void)
 {
   GKeyFile *key_file = load_testing_key_file ();
   GError *error = NULL;
-  gboolean was_reset = g_key_file_get_boolean (key_file,
-                                               CACHE_TIMING_GROUP_NAME,
-                                               CACHE_WAS_RESET_KEY,
-                                               &error);
+  gboolean was_reset =
+    g_key_file_get_boolean (key_file, CACHE_TIMING_GROUP_NAME,
+                            CACHE_WAS_RESET_KEY, &error);
   g_key_file_unref (key_file);
   g_assert_no_error (error);
   return was_reset && (read_offset() == 0);
@@ -330,10 +324,9 @@ read_relative_time (void)
 {
   GKeyFile *key_file = load_testing_key_file ();
   GError *error = NULL;
-  gint64 stored_offset = g_key_file_get_int64 (key_file,
-                                               CACHE_TIMING_GROUP_NAME,
-                                               CACHE_RELATIVE_TIME_KEY,
-                                               &error);
+  gint64 stored_offset =
+    g_key_file_get_int64 (key_file, CACHE_TIMING_GROUP_NAME,
+                          CACHE_RELATIVE_TIME_KEY, &error);
   g_key_file_unref (key_file);
   g_assert_no_error (error);
   return stored_offset;
@@ -347,10 +340,9 @@ read_absolute_time (void)
 {
   GKeyFile *key_file = load_testing_key_file ();
   GError *error = NULL;
-  gint64 stored_offset = g_key_file_get_int64 (key_file,
-                                               CACHE_TIMING_GROUP_NAME,
-                                               CACHE_ABSOLUTE_TIME_KEY,
-                                               &error);
+  gint64 stored_offset =
+    g_key_file_get_int64 (key_file, CACHE_TIMING_GROUP_NAME,
+                          CACHE_ABSOLUTE_TIME_KEY, &error);
   g_key_file_unref (key_file);
   g_assert_no_error (error);
   return stored_offset;

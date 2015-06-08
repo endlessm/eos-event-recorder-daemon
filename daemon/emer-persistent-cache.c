@@ -418,10 +418,9 @@ compute_boot_offset (EmerPersistentCache *self,
    * This is the amount of time elapsed between the origin boot and the boot
    * with the stored ID.
    */
-  gint64 stored_offset = g_key_file_get_int64 (priv->boot_offset_key_file,
-                                               CACHE_TIMING_GROUP_NAME,
-                                               CACHE_BOOT_OFFSET_KEY,
-                                               &error);
+  gint64 stored_offset =
+    g_key_file_get_int64 (priv->boot_offset_key_file, CACHE_TIMING_GROUP_NAME,
+                          CACHE_BOOT_OFFSET_KEY, &error);
   if (error != NULL)
     {
       g_critical ("Failed to read relative offset from metadata file %s. "
@@ -1005,10 +1004,8 @@ write_byte_array (EmerPersistentCache *self,
     emer_persistent_cache_get_instance_private (self);
 
   GError *error = NULL;
-  GFileOutputStream *stream = g_file_append_to (file,
-                                                G_FILE_CREATE_NONE,
-                                                NULL,
-                                                &error);
+  GFileOutputStream *stream =
+    g_file_append_to (file, G_FILE_CREATE_NONE, NULL, &error);
   if (stream == NULL)
     {
       g_critical ("Failed to open stream to cache file. Error: %s.",
@@ -1283,19 +1280,15 @@ emer_persistent_cache_store_metrics (EmerPersistentCache  *self,
   *num_aggregates_stored = 0;
   *num_sequences_stored = 0;
 
-  gboolean singulars_stored = store_singulars (self,
-                                               singular_buffer,
-                                               num_singulars_buffered,
-                                               num_singulars_stored,
-                                               capacity);
+  gboolean singulars_stored =
+    store_singulars (self, singular_buffer, num_singulars_buffered,
+                     num_singulars_stored, capacity);
   if (!singulars_stored || *capacity == CAPACITY_MAX)
     return singulars_stored;
 
-  gboolean aggregates_stored = store_aggregates (self,
-                                                 aggregate_buffer,
-                                                 num_aggregates_buffered,
-                                                 num_aggregates_stored,
-                                                 capacity);
+  gboolean aggregates_stored =
+    store_aggregates (self, aggregate_buffer, num_aggregates_buffered,
+                      num_aggregates_stored, capacity);
   if (!aggregates_stored || *capacity == CAPACITY_MAX)
     return aggregates_stored;
 

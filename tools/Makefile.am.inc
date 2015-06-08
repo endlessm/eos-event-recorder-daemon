@@ -26,7 +26,6 @@ PERSISTENT_CACHE_TOOL_FLAGS = \
 	-I$(top_srcdir)/daemon \
 	-I$(top_srcdir)/shared \
 	-I$(top_srcdir)/tools \
-	-D_POSIX_C_SOURCE=200112L \
 	-DCONFIG_DIR="\"$(configdir)\"" \
 	-DPERMISSIONS_FILE="\"$(permissions_file)\"" \
 	-DPERSISTENT_CACHE_DIR="\"$(persistentcachedir)\"" \

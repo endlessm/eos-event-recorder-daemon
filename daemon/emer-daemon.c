@@ -20,11 +20,6 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-/* For CLOCK_BOOTTIME */
-#if !defined(_POSIX_C_SOURCE) || _POSIX_C_SOURCE < 200112L
-#error "This code requires _POSIX_C_SOURCE to be 200112L or later."
-#endif
-
 #include <byteswap.h>
 #include <string.h>
 #include <time.h>

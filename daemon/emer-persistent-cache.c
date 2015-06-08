@@ -1033,6 +1033,9 @@ store_singulars (EmerPersistentCache *self,
                  gint                *num_singulars_stored,
                  capacity_t          *capacity)
 {
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
   GByteArray *serialized_variants = g_byte_array_new ();
   gboolean will_fit = TRUE;
   gint i;
@@ -1057,8 +1060,8 @@ store_singulars (EmerPersistentCache *self,
 
   g_byte_array_unref (serialized_variants);
 
-  gboolean set_to_max = !will_fit && write_successful;
-  *capacity = update_capacity (self, set_to_max);
+  *capacity =
+    write_successful ? update_capacity (self, !will_fit) : priv->capacity;
 
   *num_singulars_stored = i;
   return write_successful;
@@ -1071,6 +1074,9 @@ store_aggregates (EmerPersistentCache *self,
                   gint                *num_aggregates_stored,
                   capacity_t          *capacity)
 {
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
   GByteArray *serialized_variants = g_byte_array_new ();
   gboolean will_fit = TRUE;
   gint i;
@@ -1095,8 +1101,8 @@ store_aggregates (EmerPersistentCache *self,
 
   g_byte_array_unref (serialized_variants);
 
-  gboolean set_to_max = !will_fit && write_successful;
-  *capacity = update_capacity (self, set_to_max);
+  *capacity =
+    write_successful ? update_capacity (self, !will_fit) : priv->capacity;
 
   *num_aggregates_stored = i;
   return write_successful;
@@ -1109,6 +1115,9 @@ store_sequences (EmerPersistentCache *self,
                  gint                *num_sequences_stored,
                  capacity_t          *capacity)
 {
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
   GByteArray *serialized_variants = g_byte_array_new ();
   gboolean will_fit = TRUE;
   gint i;
@@ -1133,8 +1142,8 @@ store_sequences (EmerPersistentCache *self,
 
   g_byte_array_unref (serialized_variants);
 
-  gboolean set_to_max = !will_fit && write_successful;
-  *capacity = update_capacity (self, set_to_max);
+  *capacity =
+    write_successful ? update_capacity (self, !will_fit) : priv->capacity;
 
   *num_sequences_stored = i;
   return write_successful;

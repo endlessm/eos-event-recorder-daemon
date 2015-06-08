@@ -747,11 +747,12 @@ drain_metrics_file (EmerPersistentCache *self,
 
   while (TRUE)
     {
-      gsize variant_length;
-      gssize length_bytes_read =
-        g_input_stream_read (stream, &variant_length, sizeof (variant_length),
-                             NULL, &error);
-      if (error != NULL)
+      gsize variant_length, length_bytes_read;
+      gboolean read_succeeded =
+        g_input_stream_read_all (stream, &variant_length, sizeof (variant_length),
+                                 &length_bytes_read, NULL /* GCancellable */,
+                                 &error);
+      if (!read_succeeded)
         {
           g_critical ("Failed to read length of event in persistent cache. "
                       "Error: %s.", error->message);
@@ -764,17 +765,19 @@ drain_metrics_file (EmerPersistentCache *self,
 
       if (length_bytes_read != sizeof (variant_length))
         {
-          g_critical ("Read %" G_GSSIZE_FORMAT " bytes, but expected length of "
+          g_critical ("Read %" G_GSIZE_FORMAT " bytes, but expected length of "
                       "event to be %" G_GSIZE_FORMAT " bytes.",
                       length_bytes_read, sizeof (variant_length));
           goto handle_failed_read;
         }
 
       gpointer variant_data = g_new (guchar, variant_length);
-      gssize data_bytes_read =
-        g_input_stream_read (stream, variant_data, variant_length,
-                             NULL, &error);
-      if (error != NULL)
+      gsize data_bytes_read;
+      read_succeeded =
+        g_input_stream_read_all (stream, variant_data, variant_length,
+                                 &data_bytes_read, NULL /* GCancellable */,
+                                 &error);
+      if (!read_succeeded)
         {
           g_free (variant_data);
           g_critical ("Failed to read event in persistent cache. Error: %s.",

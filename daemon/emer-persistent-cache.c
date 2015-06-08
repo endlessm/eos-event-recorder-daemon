@@ -239,6 +239,7 @@ purge_cache_files (EmerPersistentCache *self,
     g_file_replace_contents (ind_file, "", 0, NULL, FALSE,
                              G_FILE_CREATE_REPLACE_DESTINATION,
                              NULL, cancellable, error);
+  g_object_unref (ind_file);
   if (!success)
     {
       if (error != NULL)
@@ -246,16 +247,15 @@ purge_cache_files (EmerPersistentCache *self,
                     (*error)->message);
       else
         g_critical ("Failed to purge cache files.");
-      g_object_unref (ind_file);
       return FALSE;
     }
-  g_object_unref (ind_file);
 
   GFile *agg_file = get_cache_file (self, AGGREGATE_SUFFIX);
   success =
     g_file_replace_contents (agg_file, "", 0, NULL, FALSE,
                              G_FILE_CREATE_REPLACE_DESTINATION,
                              NULL, cancellable, error);
+  g_object_unref (agg_file);
   if (!success)
     {
       if (error != NULL)
@@ -263,16 +263,15 @@ purge_cache_files (EmerPersistentCache *self,
                     (*error)->message);
       else
         g_critical ("Failed to purge cache files.");
-      g_object_unref (agg_file);
       return FALSE;
     }
-  g_object_unref (agg_file);
 
   GFile *seq_file = get_cache_file (self, SEQUENCE_SUFFIX);
   success =
     g_file_replace_contents (seq_file, "", 0, NULL, FALSE,
                              G_FILE_CREATE_REPLACE_DESTINATION,
                              NULL, cancellable, error);
+  g_object_unref (seq_file);
   if (!success)
     {
       if (error != NULL)
@@ -280,10 +279,8 @@ purge_cache_files (EmerPersistentCache *self,
                     (*error)->message);
       else
         g_critical ("Failed to purge cache files.");
-      g_object_unref (seq_file);
       return FALSE;
     }
-  g_object_unref (seq_file);
 
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
@@ -1034,10 +1031,11 @@ write_variant_string_to_file (EmerPersistentCache *self,
                                                 NULL,
                                                 NULL,
                                                 &error);
+  g_object_unref (stream);
+
   if (!success)
     {
       g_critical ("Failed to write to cache file. Error: %s.", error->message);
-      g_object_unref (stream);
       g_error_free (error);
       return FALSE;
     }
@@ -1045,8 +1043,6 @@ write_variant_string_to_file (EmerPersistentCache *self,
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
   priv->cache_size += variant_string->len;
-
-  g_object_unref (stream);
   return TRUE;
 }
 

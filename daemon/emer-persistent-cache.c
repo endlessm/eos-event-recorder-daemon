@@ -235,6 +235,9 @@ purge_cache_files (EmerPersistentCache *self,
                    GCancellable        *cancellable,
                    GError             **error)
 {
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
   GFile *ind_file = get_cache_file (self, INDIVIDUAL_SUFFIX);
   GError *local_error = NULL;
   gboolean success =
@@ -263,8 +266,6 @@ purge_cache_files (EmerPersistentCache *self,
   if (!success)
     goto handle_failed_write;
 
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
   priv->cache_size = 0L;
   priv->capacity = CAPACITY_LOW;
 
@@ -408,9 +409,10 @@ compute_boot_offset (EmerPersistentCache *self,
                      gint64               absolute_time,
                      gint64              *boot_offset)
 {
-  GError *error = NULL;
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
+
+  GError *error = NULL;
 
   /*
    * This is the amount of time elapsed between the origin boot and the boot
@@ -999,6 +1001,9 @@ write_byte_array (EmerPersistentCache *self,
                   GFile               *file,
                   GByteArray          *byte_array)
 {
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
   GError *error = NULL;
   GFileOutputStream *stream = g_file_append_to (file,
                                                 G_FILE_CREATE_NONE,
@@ -1024,8 +1029,6 @@ write_byte_array (EmerPersistentCache *self,
       return FALSE;
     }
 
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
   priv->cache_size += byte_array->len;
   return TRUE;
 }
@@ -1314,6 +1317,9 @@ load_cache_size (EmerPersistentCache *self,
                  GCancellable        *cancellable,
                  GError             **error)
 {
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
   GFile *singular_file = get_cache_file (self, INDIVIDUAL_SUFFIX);
   guint64 singular_disk_used;
   GError *local_error = NULL;
@@ -1360,8 +1366,6 @@ load_cache_size (EmerPersistentCache *self,
   if (!success)
     goto handle_failed_read;
 
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
   priv->cache_size =
     singular_disk_used + aggregate_disk_used + sequence_disk_used;
   update_capacity (self, FALSE);

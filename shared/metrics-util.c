@@ -23,10 +23,10 @@
 #include "metrics-util.h"
 
 #include <errno.h>
+#include <uuid/uuid.h>
 
 #include <glib.h>
 #include <gio/gio.h>
-#include <uuid/uuid.h>
 
 static void
 trash_event_value (EventValue *event_value)

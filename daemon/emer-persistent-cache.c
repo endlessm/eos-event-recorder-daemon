@@ -751,9 +751,6 @@ drain_metrics_file (EmerPersistentCache *self,
       gssize length_bytes_read =
         g_input_stream_read (stream, &variant_length, sizeof (gsize),
                              NULL, &error);
-      if (length_bytes_read == 0) // EOF
-        break;
-
       if (error != NULL)
         {
           g_critical ("Failed to read length of event in persistent cache. "
@@ -761,6 +758,10 @@ drain_metrics_file (EmerPersistentCache *self,
           g_error_free (error);
           goto handle_failed_read;
         }
+
+      if (length_bytes_read == 0) // EOF
+        break;
+
       if (length_bytes_read != sizeof (gsize))
         {
           g_critical ("Read %" G_GSSIZE_FORMAT " bytes, but expected length of "
@@ -773,18 +774,19 @@ drain_metrics_file (EmerPersistentCache *self,
       gssize data_bytes_read =
         g_input_stream_read (stream, variant_data, variant_length,
                              NULL, &error);
-      if (data_bytes_read != variant_length)
-        {
-          g_critical ("Cache file ended earlier than expected. Read %"
-                      G_GSIZE_FORMAT " bytes, but expected %" G_GSIZE_FORMAT
-                      " bytes of event data.", data_bytes_read, variant_length);
-          goto handle_failed_read;
-        }
       if (error != NULL)
         {
           g_critical ("Failed to read event in persistent cache. Error: %s.",
                       error->message);
           g_error_free (error);
+          goto handle_failed_read;
+        }
+
+      if (data_bytes_read != variant_length)
+        {
+          g_critical ("Cache file ended earlier than expected. Read %"
+                      G_GSIZE_FORMAT " bytes, but expected %" G_GSIZE_FORMAT
+                      " bytes of event data.", data_bytes_read, variant_length);
           goto handle_failed_read;
         }
 

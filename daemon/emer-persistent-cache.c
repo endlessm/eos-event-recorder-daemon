@@ -961,7 +961,8 @@ append_variant (EmerPersistentCache *self,
 {
   gsize variant_length = g_variant_get_size (variant);
   gsize event_size_on_disk = sizeof (variant_length) + variant_length;
-  if (cache_has_room (self, event_size_on_disk))
+  gsize byte_array_size_on_disk = serialized_variants->len + event_size_on_disk;
+  if (cache_has_room (self, byte_array_size_on_disk))
     {
       g_variant_ref_sink (variant);
       GVariant *native_endian_variant = swap_bytes_if_big_endian (variant);

@@ -28,7 +28,6 @@
 #error "This code requires _POSIX_C_SOURCE to be 199309L or later."
 #endif
 
-#include <sys/types.h>
 
 #include <glib.h>
 #include <gio/gio.h>

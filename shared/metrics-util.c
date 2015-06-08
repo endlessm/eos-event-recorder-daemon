@@ -23,8 +23,6 @@
 #include "metrics-util.h"
 
 #include <errno.h>
-#include <time.h>
-#include <inttypes.h>
 
 #include <glib.h>
 #include <gio/gio.h>

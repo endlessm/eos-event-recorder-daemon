@@ -383,12 +383,6 @@ reset_boot_offset_metadata_file (EmerPersistentCache *self,
   priv->boot_id_initialized = FALSE;
 
   GError *error = NULL;
-  if (!purge_cache_files (self, NULL, &error))
-    {
-      g_error_free (error); // Error already reported.
-      return FALSE;
-    }
-
   uuid_t system_boot_id;
   if (!get_system_boot_id (self, system_boot_id, &error))
     {
@@ -398,6 +392,12 @@ reset_boot_offset_metadata_file (EmerPersistentCache *self,
     }
   gchar system_boot_id_string[BOOT_ID_FILE_LENGTH];
   uuid_unparse_lower (system_boot_id, system_boot_id_string);
+
+  if (!purge_cache_files (self, NULL, &error))
+    {
+      g_error_free (error); // Error already reported.
+      return FALSE;
+    }
 
   gint64 reset_offset = 0;
   gboolean was_reset = TRUE;

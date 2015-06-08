@@ -178,17 +178,6 @@ finish_network_callback (NetworkCallbackData *callback_data)
   g_signal_emit (self, emer_daemon_signals[SIGNAL_UPLOAD_FINISHED], 0u);
 }
 
-static gint64
-swap_bytes_64_if_big_endian (gint64 value)
-{
-  if (G_BYTE_ORDER == G_BIG_ENDIAN)
-    return bswap_64 (value);
-  if (G_BYTE_ORDER != G_LITTLE_ENDIAN)
-    g_error ("This machine is neither big endian nor little endian. Mixed-"
-             "endian machines are not supported by the metrics system.");
-  return value;
-}
-
 static void
 release_shutdown_inhibitor (EmerDaemon *self)
 {

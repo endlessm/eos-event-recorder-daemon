@@ -71,33 +71,35 @@ typedef struct SequenceEvent
   gsize num_event_values;
 } SequenceEvent;
 
-void      trash_singular_event     (SingularEvent   *singular);
+void      trash_singular_event         (SingularEvent   *singular);
 
-void      trash_aggregate_event    (AggregateEvent  *aggregate);
+void      trash_aggregate_event        (AggregateEvent  *aggregate);
 
-void      trash_sequence_event     (SequenceEvent   *sequence);
+void      trash_sequence_event         (SequenceEvent   *sequence);
 
-void      free_singular_buffer     (SingularEvent   *singular_buffer,
-                                    gint             num_singulars_buffered);
+void      free_singular_buffer         (SingularEvent   *singular_buffer,
+                                        gint             num_singulars_buffered);
 
-void      free_aggregate_buffer    (AggregateEvent  *aggregate_buffer,
-                                    gint             num_aggregates_buffered);
+void      free_aggregate_buffer        (AggregateEvent  *aggregate_buffer,
+                                        gint             num_aggregates_buffered);
 
-void      free_sequence_buffer     (SequenceEvent   *sequence_buffer,
-                                    gint             num_sequences_buffered);
+void      free_sequence_buffer         (SequenceEvent   *sequence_buffer,
+                                        gint             num_sequences_buffered);
 
-void      free_variant_array       (GVariant       **variant_array);
+void      free_variant_array           (GVariant       **variant_array);
 
-GVariant *singular_to_variant      (SingularEvent   *singular);
+GVariant *singular_to_variant          (SingularEvent   *singular);
 
-GVariant *aggregate_to_variant     (AggregateEvent  *aggregate);
+GVariant *aggregate_to_variant         (AggregateEvent  *aggregate);
 
-GVariant *sequence_to_variant      (SequenceEvent   *sequence);
+GVariant *sequence_to_variant          (SequenceEvent   *sequence);
 
-GVariant *swap_bytes_if_big_endian (GVariant        *variant);
+guint64    swap_bytes_64_if_big_endian (guint64          value);
 
-void      get_uuid_builder         (uuid_t           uuid,
-                                    GVariantBuilder *uuid_builder);
+GVariant *swap_bytes_if_big_endian     (GVariant        *variant);
+
+void      get_uuid_builder             (uuid_t           uuid,
+                                        GVariantBuilder *uuid_builder);
 
 G_END_DECLS
 

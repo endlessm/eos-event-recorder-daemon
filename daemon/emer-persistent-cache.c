@@ -87,7 +87,7 @@ G_DEFINE_TYPE_WITH_CODE (EmerPersistentCache, emer_persistent_cache, G_TYPE_OBJE
  * they will be purged from the system, and the file indicating which
  * version the persisted metrics currently have will be updated.
  */
-#define CURRENT_CACHE_VERSION 2
+#define CURRENT_CACHE_VERSION 3
 
 /*
  * The point at which the capacity switches fron LOW to HIGH.
@@ -750,10 +750,14 @@ drain_metrics_file (EmerPersistentCache *self,
 
   while (TRUE)
     {
-      gsize variant_length, length_bytes_read;
+      guint64 little_endian_length;
+      gsize length_bytes_read;
       gboolean read_succeeded =
-        g_input_stream_read_all (stream, &variant_length, sizeof (variant_length),
-                                 &length_bytes_read, NULL /* GCancellable */,
+        g_input_stream_read_all (stream,
+                                 &little_endian_length,
+                                 sizeof (little_endian_length),
+                                 &length_bytes_read,
+                                 NULL /* GCancellable */,
                                  &error);
       if (!read_succeeded)
         {
@@ -766,14 +770,16 @@ drain_metrics_file (EmerPersistentCache *self,
       if (length_bytes_read == 0) // EOF
         break;
 
-      if (length_bytes_read != sizeof (variant_length))
+      if (length_bytes_read != sizeof (little_endian_length))
         {
           g_critical ("Read %" G_GSIZE_FORMAT " bytes, but expected length of "
                       "event to be %" G_GSIZE_FORMAT " bytes.",
-                      length_bytes_read, sizeof (variant_length));
+                      length_bytes_read, sizeof (little_endian_length));
           goto handle_failed_read;
         }
 
+      guint64 variant_length =
+        swap_bytes_64_if_big_endian (little_endian_length);
       gpointer variant_data = g_new (guchar, variant_length);
       gsize data_bytes_read;
       read_succeeded =
@@ -793,7 +799,7 @@ drain_metrics_file (EmerPersistentCache *self,
         {
           g_free (variant_data);
           g_critical ("Cache file ended earlier than expected. Read %"
-                      G_GSIZE_FORMAT " bytes, but expected %" G_GSIZE_FORMAT
+                      G_GSIZE_FORMAT " bytes, but expected %" G_GUINT64_FORMAT
                       " bytes of event data.", data_bytes_read, variant_length);
           goto handle_failed_read;
         }
@@ -950,7 +956,7 @@ update_capacity (EmerPersistentCache *self,
 
 /*
  * Serializes the given variant little-endian with its length in bytes as a
- * native-endian gsize prepended to it. Appends the entire serialized blob to
+ * little-endian guint64 prepended to it. Appends the entire serialized blob to
  * the end of the given byte array.
  *
  * If there is not enough room in the persistent cache to store the given byte
@@ -963,12 +969,15 @@ append_variant (EmerPersistentCache *self,
                 GByteArray          *serialized_variants,
                 GVariant            *variant)
 {
-  gsize variant_length = g_variant_get_size (variant);
+  guint64 variant_length = g_variant_get_size (variant);
   gsize event_size_on_disk = sizeof (variant_length) + variant_length;
   gsize byte_array_size_on_disk = serialized_variants->len + event_size_on_disk;
   g_variant_ref_sink (variant);
   if (cache_has_room (self, byte_array_size_on_disk))
     {
+      guint64 little_endian_length =
+        swap_bytes_64_if_big_endian (variant_length);
+
       GVariant *native_endian_variant = swap_bytes_if_big_endian (variant);
       g_variant_unref (variant);
 
@@ -976,8 +985,8 @@ append_variant (EmerPersistentCache *self,
         g_variant_get_data (native_endian_variant);
 
       g_byte_array_append (serialized_variants,
-                           (const guint8 *) &variant_length,
-                           sizeof (variant_length));
+                           (const guint8 *) &little_endian_length,
+                           sizeof (little_endian_length));
       g_byte_array_append (serialized_variants, serialized_variant,
                            variant_length);
 

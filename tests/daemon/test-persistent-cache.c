@@ -233,7 +233,7 @@ set_boot_offset_in_metadata_file (gint64 new_offset)
  * instance has been constructed).
  */
 static void
-write_default_boot_offset_key_file_to_disk (void)
+write_default_boot_offset_key_file (void)
 {
   GKeyFile *key_file = g_key_file_new ();
   gboolean load_succeeded =
@@ -1637,7 +1637,7 @@ test_persistent_cache_wipes_metrics_when_boot_offset_corrupted (gboolean     *un
 {
   EmerPersistentCache *cache = make_testing_cache ();
 
-  write_default_boot_offset_key_file_to_disk ();
+  write_default_boot_offset_key_file ();
 
   capacity_t capacity;
 
@@ -1686,7 +1686,7 @@ static void
 test_persistent_cache_resets_boot_metadata_file_when_boot_offset_corrupted (gboolean     *unused,
                                                                             gconstpointer dontuseme)
 {
-  write_default_boot_offset_key_file_to_disk ();
+  write_default_boot_offset_key_file ();
 
   // Corrupt metadata file.
   remove_offset ();
@@ -1715,7 +1715,7 @@ test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
                                                 gconstpointer dontuseme)
 {
   EmerPersistentCache *cache = make_testing_cache ();
-  write_default_boot_offset_key_file_to_disk ();
+  write_default_boot_offset_key_file ();
 
   gint64 first_offset;
   GError *error = NULL;
@@ -1770,7 +1770,7 @@ test_persistent_cache_get_offset_wont_update_timestamps_if_it_isnt_supposed_to (
                                                                                 gconstpointer dontuseme)
 {
   EmerPersistentCache *cache = make_testing_cache ();
-  write_default_boot_offset_key_file_to_disk ();
+  write_default_boot_offset_key_file ();
 
   GError *error = NULL;
 
@@ -1812,7 +1812,7 @@ test_persistent_cache_get_offset_updates_timestamps_when_requested (gboolean    
                                                                     gconstpointer dontuseme)
 {
   EmerPersistentCache *cache = make_testing_cache ();
-  write_default_boot_offset_key_file_to_disk ();
+  write_default_boot_offset_key_file ();
 
   GError *error = NULL;
 
@@ -1849,7 +1849,7 @@ test_persistent_cache_updates_timestamps_on_finalize (gboolean     *unused,
                                                       gconstpointer dontuseme)
 {
   EmerPersistentCache *cache = make_testing_cache ();
-  write_default_boot_offset_key_file_to_disk ();
+  write_default_boot_offset_key_file ();
 
   GError *error = NULL;
 

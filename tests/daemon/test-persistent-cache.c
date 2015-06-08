@@ -1640,7 +1640,6 @@ test_persistent_cache_wipes_metrics_when_boot_offset_corrupted (gboolean     *un
   write_default_boot_offset_key_file ();
 
   capacity_t capacity;
-
   store_single_singular_event (cache, &capacity);
 
   // Clear in-memory boot offset cache.
@@ -1795,6 +1794,7 @@ test_persistent_cache_get_offset_wont_update_timestamps_if_it_isnt_supposed_to (
   // These timestamps should not have changed.
   g_assert_cmpint (relative_time, ==, read_relative_time ());
   g_assert_cmpint (absolute_time, ==, read_absolute_time ());
+
   g_object_unref (cache);
 }
 

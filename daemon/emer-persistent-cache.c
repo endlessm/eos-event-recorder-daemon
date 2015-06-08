@@ -216,6 +216,7 @@ get_cache_file (EmerPersistentCache *self,
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
+
   gchar *path =
     g_strconcat (priv->cache_directory, CACHE_PREFIX, path_ending, NULL);
   GFile *file = g_file_new_for_path (path);
@@ -355,6 +356,7 @@ reset_boot_offset_metadata_file (EmerPersistentCache *self,
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
+
   priv->boot_offset_initialized = FALSE;
   priv->boot_id_initialized = FALSE;
 
@@ -848,6 +850,7 @@ emer_persistent_cache_drain_metrics (EmerPersistentCache  *self,
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
+
   if (priv->cache_size == 0)
     {
       set_to_empty_list (list_of_individual_metrics);
@@ -905,6 +908,7 @@ cache_has_room (EmerPersistentCache *self,
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
+
   if (priv->capacity == CAPACITY_MAX)
     return FALSE;
 
@@ -942,7 +946,6 @@ update_capacity (EmerPersistentCache *self,
 
   return priv->capacity;
 }
-
 
 /*
  * Serializes the given variant little-endian with its length in bytes as a
@@ -1436,6 +1439,7 @@ set_cache_directory (EmerPersistentCache *self,
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
+
   priv->cache_directory = g_strdup (directory);
 }
 
@@ -1618,6 +1622,7 @@ emer_persistent_cache_init (EmerPersistentCache *self)
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
+
   priv->cache_size = 0L;
   priv->capacity = CAPACITY_LOW;
   priv->boot_offset_key_file = g_key_file_new ();

@@ -241,14 +241,7 @@ purge_cache_files (EmerPersistentCache *self,
                              NULL, cancellable, error);
   g_object_unref (ind_file);
   if (!success)
-    {
-      if (error != NULL)
-        g_critical ("Failed to purge cache files. Error: %s.",
-                    (*error)->message);
-      else
-        g_critical ("Failed to purge cache files.");
-      return FALSE;
-    }
+    goto handle_failed_write;
 
   GFile *agg_file = get_cache_file (self, AGGREGATE_SUFFIX);
   success =
@@ -257,14 +250,7 @@ purge_cache_files (EmerPersistentCache *self,
                              NULL, cancellable, error);
   g_object_unref (agg_file);
   if (!success)
-    {
-      if (error != NULL)
-        g_critical ("Failed to purge cache files. Error: %s.",
-                    (*error)->message);
-      else
-        g_critical ("Failed to purge cache files.");
-      return FALSE;
-    }
+    goto handle_failed_write;
 
   GFile *seq_file = get_cache_file (self, SEQUENCE_SUFFIX);
   success =
@@ -273,14 +259,7 @@ purge_cache_files (EmerPersistentCache *self,
                              NULL, cancellable, error);
   g_object_unref (seq_file);
   if (!success)
-    {
-      if (error != NULL)
-        g_critical ("Failed to purge cache files. Error: %s.",
-                    (*error)->message);
-      else
-        g_critical ("Failed to purge cache files.");
-      return FALSE;
-    }
+    goto handle_failed_write;
 
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
@@ -288,6 +267,13 @@ purge_cache_files (EmerPersistentCache *self,
   priv->capacity = CAPACITY_LOW;
 
   return TRUE;
+
+handle_failed_write:
+  if (error != NULL)
+    g_critical ("Failed to purge cache files. Error: %s.", (*error)->message);
+  else
+    g_critical ("Failed to purge cache files.");
+  return FALSE;
 }
 
 /*
@@ -776,20 +762,14 @@ drain_metrics_file (EmerPersistentCache *self,
           g_critical ("Failed to read length of event in persistent cache. "
                       "Error: %s.", error->message);
           g_error_free (error);
-          g_object_unref (stream);
-          g_object_unref (file);
-          g_array_unref (dynamic_array);
-          return FALSE;
+          goto handle_failed_read;
         }
       if (length_bytes_read != sizeof (gsize))
         {
           g_critical ("Read %" G_GSSIZE_FORMAT " bytes, but expected length of "
                       "event to be %" G_GSIZE_FORMAT " bytes.",
                       length_bytes_read, sizeof (gsize));
-          g_object_unref (stream);
-          g_object_unref (file);
-          g_array_unref (dynamic_array);
-          return FALSE;
+          goto handle_failed_read;
         }
 
       gpointer variant_data = g_new (guchar, variant_length);
@@ -808,10 +788,7 @@ drain_metrics_file (EmerPersistentCache *self,
           g_critical ("Failed to read event in persistent cache. Error: %s.",
                       error->message);
           g_error_free (error);
-          g_object_unref (stream);
-          g_object_unref (file);
-          g_array_unref (dynamic_array);
-          return FALSE;
+          goto handle_failed_read;
         }
 
       // Deserialize
@@ -830,6 +807,12 @@ drain_metrics_file (EmerPersistentCache *self,
   *return_list = (GVariant **) g_array_free (dynamic_array, FALSE);
 
   return TRUE;
+
+handle_failed_read:
+  g_object_unref (stream);
+  g_object_unref (file);
+  g_array_unref (dynamic_array);
+  return FALSE;
 }
 
 /*
@@ -1245,48 +1228,38 @@ load_cache_size (EmerPersistentCache *self,
                                                 NULL,
                                                 error);
   g_object_unref (singular_file);
+  if (!success)
+    goto handle_failed_read;
 
   guint64 aggregate_disk_used;
-  if (success)
-    {
-      GFile *aggregate_file = get_cache_file (self, AGGREGATE_SUFFIX);
-      success = g_file_measure_disk_usage (aggregate_file,
-                                           G_FILE_MEASURE_REPORT_ANY_ERROR,
-                                           NULL,
-                                           NULL,
-                                           NULL,
-                                           &aggregate_disk_used,
-                                           NULL,
-                                           NULL,
-                                           error);
-      g_object_unref (aggregate_file);
-    }
+  GFile *aggregate_file = get_cache_file (self, AGGREGATE_SUFFIX);
+  success = g_file_measure_disk_usage (aggregate_file,
+                                       G_FILE_MEASURE_REPORT_ANY_ERROR,
+                                       NULL,
+                                       NULL,
+                                       NULL,
+                                       &aggregate_disk_used,
+                                       NULL,
+                                       NULL,
+                                       error);
+  g_object_unref (aggregate_file);
+  if (!success)
+    goto handle_failed_read;
 
   guint64 sequence_disk_used;
-  if (success)
-    {
-      GFile *sequence_file = get_cache_file (self, SEQUENCE_SUFFIX);
-      success = g_file_measure_disk_usage (sequence_file,
-                                           G_FILE_MEASURE_REPORT_ANY_ERROR,
-                                           NULL,
-                                           NULL,
-                                           NULL,
-                                           &sequence_disk_used,
-                                           NULL,
-                                           NULL,
-                                           error);
-      g_object_unref (sequence_file);
-    }
-
+  GFile *sequence_file = get_cache_file (self, SEQUENCE_SUFFIX);
+  success = g_file_measure_disk_usage (sequence_file,
+                                       G_FILE_MEASURE_REPORT_ANY_ERROR,
+                                       NULL,
+                                       NULL,
+                                       NULL,
+                                       &sequence_disk_used,
+                                       NULL,
+                                       NULL,
+                                       error);
+  g_object_unref (sequence_file);
   if (!success)
-    {
-      if (error != NULL)
-        g_critical ("Failed to measure disk usage. Error: %s.",
-                    (*error)->message);
-      else
-        g_critical ("Failed to measure disk usage.");
-      return FALSE;
-    }
+    goto handle_failed_read;
 
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
@@ -1294,6 +1267,13 @@ load_cache_size (EmerPersistentCache *self,
     singular_disk_used + aggregate_disk_used + sequence_disk_used;
   update_capacity (self, FALSE);
   return TRUE;
+
+handle_failed_read:
+  if (error != NULL)
+    g_critical ("Failed to measure disk usage. Error: %s.", (*error)->message);
+  else
+    g_critical ("Failed to measure disk usage.");
+  return FALSE;
 }
 
 /*

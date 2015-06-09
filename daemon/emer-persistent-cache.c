@@ -160,7 +160,7 @@ get_saved_boot_id (EmerPersistentCache *self,
                                                error);
   if (id_as_string == NULL)
     {
-      g_prefix_error (error, "Failed to read boot_id from %s.",
+      g_prefix_error (error, "Failed to read boot_id from %s. ",
                       priv->boot_metadata_file_path);
       return FALSE;
     }
@@ -172,7 +172,7 @@ get_saved_boot_id (EmerPersistentCache *self,
   g_strchomp (id_as_string);
   if (uuid_parse (id_as_string, priv->saved_boot_id) != 0)
     {
-      g_prefix_error (error, "Failed to parse the saved boot id: %s.",
+      g_prefix_error (error, "Failed to parse the saved boot id: %s. ",
                       id_as_string);
       g_free (id_as_string);
       return FALSE;
@@ -330,7 +330,7 @@ save_timing_metadata (EmerPersistentCache *self,
   if (!g_key_file_save_to_file (priv->boot_offset_key_file,
                                 priv->boot_metadata_file_path, out_error))
     {
-      g_prefix_error (out_error, "Failed to write to metadata file: %s.",
+      g_prefix_error (out_error, "Failed to write to metadata file: %s. ",
                       priv->boot_metadata_file_path);
       return FALSE;
     }

@@ -776,6 +776,7 @@ drain_metrics_file (EmerPersistentCache *self,
                              NULL, &error);
       if (error != NULL)
         {
+          g_free (variant_data);
           g_critical ("Failed to read event in persistent cache. Error: %s.",
                       error->message);
           g_error_free (error);
@@ -784,6 +785,7 @@ drain_metrics_file (EmerPersistentCache *self,
 
       if (data_bytes_read != variant_length)
         {
+          g_free (variant_data);
           g_critical ("Cache file ended earlier than expected. Read %"
                       G_GSIZE_FORMAT " bytes, but expected %" G_GSIZE_FORMAT
                       " bytes of event data.", data_bytes_read, variant_length);

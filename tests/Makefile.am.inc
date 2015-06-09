@@ -34,6 +34,7 @@ DAEMON_TEST_FLAGS = \
 	-DCONFIG_DIR="\"$(configdir)\"" \
 	-DPERMISSIONS_FILE="\"$(permissions_file)\"" \
 	-DPERSISTENT_CACHE_DIR="\"$(persistentcachedir)\"" \
+	-DTEST_DIR="\"$(srcdir)/tests/\"" \
 	$(NULL)
 DAEMON_TEST_LIBS = @EOS_EVENT_RECORDER_DAEMON_LIBS@
 
@@ -73,11 +74,7 @@ tests_daemon_test_daemon_dbusdaemon_SOURCES = \
 	tests/daemon/mock-persistent-cache.c tests/daemon/mock-persistent-cache.h \
 	shared/metrics-util.c shared/metrics-util.h \
 	$(NULL)
-tests_daemon_test_daemon_dbusdaemon_CPPFLAGS = \
-	$(DAEMON_TEST_FLAGS) \
-	-D_POSIX_C_SOURCE=200112L \
-	-DTEST_DIR="\"$(srcdir)/tests/\"" \
-	$(NULL)
+tests_daemon_test_daemon_dbusdaemon_CPPFLAGS = $(DAEMON_TEST_FLAGS)
 tests_daemon_test_daemon_dbusdaemon_LDADD = $(DAEMON_TEST_LIBS)
 
 tests_daemon_test_machine_id_provider_SOURCES = \
@@ -109,10 +106,7 @@ tests_daemon_test_persistent_cache_SOURCES = \
 	daemon/emer-cache-version-provider.c daemon/emer-cache-version-provider.h \
 	shared/metrics-util.c shared/metrics-util.h \
 	$(NULL)
-tests_daemon_test_persistent_cache_CPPFLAGS = \
-	$(DAEMON_TEST_FLAGS) \
-	-D_POSIX_C_SOURCE=200112L \
-	$(NULL)
+tests_daemon_test_persistent_cache_CPPFLAGS = $(DAEMON_TEST_FLAGS)
 tests_daemon_test_persistent_cache_LDADD = $(DAEMON_TEST_LIBS)
 
 dist_noinst_SCRIPTS = \

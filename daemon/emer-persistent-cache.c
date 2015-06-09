@@ -38,12 +38,12 @@
  * @title: Persistent Cache
  * @short_description: Stores metrics locally (on the user's machine).
  *
- * The Persistent Cache is the sink to which an event recorder flushes
+ * The persistent cache is the sink to which an event recorder flushes
  * metrics. It will store these metrics until a drain operation is
- * requested or the Persistent Cache is purged due to versioning.
+ * requested or the persistent cache is purged due to versioning.
  *
  * Should the cached metrics occupy more than the maximum allowed cache size,
- * the Persistent Cache will begin ignoring new metrics until the old ones have
+ * the persistent cache will begin ignoring new metrics until the old ones have
  * been removed.
  *
  * If the CURRENT_CACHE_VERSION is incremented to indicate
@@ -51,12 +51,6 @@
  * the file indicating the local cache version will be updated to the reflect
  * the new version number.
  */
-
-typedef struct _Writable
-{
-  gsize length;
-  gpointer data;
-} Writable;
 
 typedef struct _EmerPersistentCachePrivate
 {
@@ -93,7 +87,7 @@ G_DEFINE_TYPE_WITH_CODE (EmerPersistentCache, emer_persistent_cache, G_TYPE_OBJE
  * they will be purged from the system, and the file indicating which
  * version the persisted metrics currently have will be updated.
  */
-#define CURRENT_CACHE_VERSION 2
+#define CURRENT_CACHE_VERSION 3
 
 /*
  * The point at which the capacity switches fron LOW to HIGH.
@@ -166,20 +160,19 @@ get_saved_boot_id (EmerPersistentCache *self,
                                                error);
   if (id_as_string == NULL)
     {
-      g_prefix_error (error, "Failed to read boot_id from %s.",
+      g_prefix_error (error, "Failed to read boot_id from %s. ",
                       priv->boot_metadata_file_path);
       return FALSE;
     }
 
   /*
-   * With both the keyfile and the system file, a newline is appended
-   * when a uuid is changed to a string and stored on disk.
+   * A newline is appended when a string is stored in a keyfile.
    * We chomp it off here because uuid_parse will fail otherwise.
    */
   g_strchomp (id_as_string);
   if (uuid_parse (id_as_string, priv->saved_boot_id) != 0)
     {
-      g_prefix_error (error, "Failed to parse the saved boot id: %s.",
+      g_prefix_error (error, "Failed to parse the saved boot id: %s. ",
                       id_as_string);
       g_free (id_as_string);
       return FALSE;
@@ -192,8 +185,8 @@ get_saved_boot_id (EmerPersistentCache *self,
 }
 
 /*
- * Reads the Operating System's boot id from disk or cached value, returning it
- * via the out parameter boot_id.  Returns FALSE on failure and sets the GError.
+ * Reads the operating system's boot id from disk or cached value, returning it
+ * via the out parameter boot_id. Returns FALSE on failure and sets the GError.
  * Returns TRUE on success.
  */
 static gboolean
@@ -223,6 +216,7 @@ get_cache_file (EmerPersistentCache *self,
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
+
   gchar *path =
     g_strconcat (priv->cache_directory, CACHE_PREFIX, path_ending, NULL);
   GFile *file = g_file_new_for_path (path);
@@ -241,63 +235,47 @@ purge_cache_files (EmerPersistentCache *self,
                    GCancellable        *cancellable,
                    GError             **error)
 {
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
   GFile *ind_file = get_cache_file (self, INDIVIDUAL_SUFFIX);
+  GError *local_error = NULL;
   gboolean success =
     g_file_replace_contents (ind_file, "", 0, NULL, FALSE,
                              G_FILE_CREATE_REPLACE_DESTINATION,
-                             NULL, cancellable, error);
-  if (!success)
-    {
-      if (error != NULL)
-        g_critical ("Failed to purge cache files. Error: %s.",
-                    (*error)->message);
-      else
-        g_critical ("Failed to purge cache files.");
-      g_object_unref (ind_file);
-      return FALSE;
-    }
+                             NULL, cancellable, &local_error);
   g_object_unref (ind_file);
+  if (!success)
+    goto handle_failed_write;
 
   GFile *agg_file = get_cache_file (self, AGGREGATE_SUFFIX);
   success =
     g_file_replace_contents (agg_file, "", 0, NULL, FALSE,
                              G_FILE_CREATE_REPLACE_DESTINATION,
-                             NULL, cancellable, error);
-  if (!success)
-    {
-      if (error != NULL)
-        g_critical ("Failed to purge cache files. Error: %s.",
-                    (*error)->message);
-      else
-        g_critical ("Failed to purge cache files.");
-      g_object_unref (agg_file);
-      return FALSE;
-    }
+                             NULL, cancellable, &local_error);
   g_object_unref (agg_file);
+  if (!success)
+    goto handle_failed_write;
 
   GFile *seq_file = get_cache_file (self, SEQUENCE_SUFFIX);
   success =
     g_file_replace_contents (seq_file, "", 0, NULL, FALSE,
                              G_FILE_CREATE_REPLACE_DESTINATION,
-                             NULL, cancellable, error);
-  if (!success)
-    {
-      if (error != NULL)
-        g_critical ("Failed to purge cache files. Error: %s.",
-                    (*error)->message);
-      else
-        g_critical ("Failed to purge cache files.");
-      g_object_unref (seq_file);
-      return FALSE;
-    }
+                             NULL, cancellable, &local_error);
   g_object_unref (seq_file);
+  if (!success)
+    goto handle_failed_write;
 
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
   priv->cache_size = 0L;
   priv->capacity = CAPACITY_LOW;
 
   return TRUE;
+
+handle_failed_write:
+  g_prefix_error (&local_error, "Failed to purge cache files. ");
+  g_critical ("%s.", local_error->message);
+  g_propagate_error (error, local_error);
+  return FALSE;
 }
 
 /*
@@ -354,7 +332,7 @@ save_timing_metadata (EmerPersistentCache *self,
   if (!g_key_file_save_to_file (priv->boot_offset_key_file,
                                 priv->boot_metadata_file_path, out_error))
     {
-      g_prefix_error (out_error, "Failed to write to metadata file: %s.",
+      g_prefix_error (out_error, "Failed to write to metadata file: %s. ",
                       priv->boot_metadata_file_path);
       return FALSE;
     }
@@ -370,7 +348,7 @@ save_timing_metadata (EmerPersistentCache *self,
  *
  * Completely wipes the persistent cache's stored metrics.
  *
- * Returns FALSE and writes nothing to disk on failure. Returns TRUE on success.
+ * Returns TRUE if successful and FALSE on failure.
  */
 static gboolean
 reset_boot_offset_metadata_file (EmerPersistentCache *self,
@@ -379,34 +357,11 @@ reset_boot_offset_metadata_file (EmerPersistentCache *self,
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
+
   priv->boot_offset_initialized = FALSE;
   priv->boot_id_initialized = FALSE;
 
-  GFile *metadata_file = g_file_new_for_path (priv->boot_metadata_file_path);
-
-  // We only want to 'touch' the file; we don't need the stream.
   GError *error = NULL;
-  GFileOutputStream *unused_stream =
-    g_file_replace (metadata_file, NULL, FALSE,
-                    G_FILE_CREATE_REPLACE_DESTINATION,
-                    NULL, &error);
-  g_object_unref (metadata_file);
-  if (unused_stream == NULL)
-    {
-      g_critical ("Failed to create new metadata file at %s. Error: %s.",
-                  priv->boot_metadata_file_path, error->message);
-      g_error_free (error);
-      return FALSE;
-    }
-  g_object_unref (unused_stream);
-
-  // Wipe persistent cache if we had to reset the timing metadata.
-  if (!purge_cache_files (self, NULL, &error))
-    {
-      g_error_free (error); // Error already reported.
-      return FALSE;
-    }
-
   uuid_t system_boot_id;
   if (!get_system_boot_id (self, system_boot_id, &error))
     {
@@ -416,6 +371,9 @@ reset_boot_offset_metadata_file (EmerPersistentCache *self,
     }
   gchar system_boot_id_string[BOOT_ID_FILE_LENGTH];
   uuid_unparse_lower (system_boot_id, system_boot_id_string);
+
+  if (!purge_cache_files (self, NULL, NULL))
+    return FALSE;
 
   gint64 reset_offset = 0;
   gboolean was_reset = TRUE;
@@ -451,18 +409,18 @@ compute_boot_offset (EmerPersistentCache *self,
                      gint64               absolute_time,
                      gint64              *boot_offset)
 {
-  GError *error = NULL;
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
+
+  GError *error = NULL;
 
   /*
    * This is the amount of time elapsed between the origin boot and the boot
    * with the stored ID.
    */
-  gint64 stored_offset = g_key_file_get_int64 (priv->boot_offset_key_file,
-                                               CACHE_TIMING_GROUP_NAME,
-                                               CACHE_BOOT_OFFSET_KEY,
-                                               &error);
+  gint64 stored_offset =
+    g_key_file_get_int64 (priv->boot_offset_key_file, CACHE_TIMING_GROUP_NAME,
+                          CACHE_BOOT_OFFSET_KEY, &error);
   if (error != NULL)
     {
       g_critical ("Failed to read relative offset from metadata file %s. "
@@ -763,9 +721,9 @@ regularize_variant (GVariant *variant)
 
 /*
  * Will transfer all metrics in the corresponding file into the out parameter
- * 'return_list'. The list will be NULL-terminated.  Returns TRUE on success,
- * and FALSE if any I/O error occured. Contents of return_list are undefined if
- * the return value is FALSE.
+ * 'return_list'. The list will be NULL-terminated. Returns TRUE on success, and
+ * FALSE if any I/O error occured. Contents of return_list are undefined if the
+ * return value is FALSE.
  */
 static gboolean
 drain_metrics_file (EmerPersistentCache *self,
@@ -792,71 +750,65 @@ drain_metrics_file (EmerPersistentCache *self,
 
   while (TRUE)
     {
-      Writable writable;
-      gssize length_bytes_read = g_input_stream_read (stream,
-                                                      &writable.length,
-                                                      sizeof (gsize),
-                                                      NULL,
-                                                      &error);
+      guint64 little_endian_length;
+      gsize length_bytes_read;
+      gboolean read_succeeded =
+        g_input_stream_read_all (stream,
+                                 &little_endian_length,
+                                 sizeof (little_endian_length),
+                                 &length_bytes_read,
+                                 NULL /* GCancellable */,
+                                 &error);
+      if (!read_succeeded)
+        {
+          g_critical ("Failed to read length of event in persistent cache. "
+                      "Error: %s.", error->message);
+          g_error_free (error);
+          goto handle_failed_read;
+        }
+
       if (length_bytes_read == 0) // EOF
         break;
 
-      if (error != NULL)
+      if (length_bytes_read != sizeof (little_endian_length))
         {
-          gchar *fpath = g_file_get_path (file);
-          g_critical ("Failed to read length of metric from input stream to "
-                      "drain metrics. File: %s. Error: %s.", fpath,
-                      error->message);
-          g_free (fpath);
-          g_error_free (error);
-          g_object_unref (stream);
-          g_object_unref (file);
-          g_array_unref (dynamic_array);
-          return FALSE;
-        }
-      if (length_bytes_read != sizeof (gsize))
-        {
-          g_critical ("We read %i bytes but expected %u bytes!",
-                      length_bytes_read, sizeof (gsize));
-          g_object_unref (stream);
-          g_object_unref (file);
-          g_array_unref (dynamic_array);
-          return FALSE;
+          g_critical ("Read %" G_GSIZE_FORMAT " bytes, but expected length of "
+                      "event to be %" G_GSIZE_FORMAT " bytes.",
+                      length_bytes_read, sizeof (little_endian_length));
+          goto handle_failed_read;
         }
 
-      writable.data = g_new (guchar, writable.length);
-      gssize data_bytes_read = g_input_stream_read (stream,
-                                                    writable.data,
-                                                    writable.length,
-                                                    NULL,
-                                                    &error);
-      if (data_bytes_read != writable.length)
+      guint64 variant_length =
+        swap_bytes_64_if_big_endian (little_endian_length);
+      gpointer variant_data = g_new (guchar, variant_length);
+      gsize data_bytes_read;
+      read_succeeded =
+        g_input_stream_read_all (stream, variant_data, variant_length,
+                                 &data_bytes_read, NULL /* GCancellable */,
+                                 &error);
+      if (!read_succeeded)
         {
-          g_critical ("We read %i bytes of metric data when looking for %u!",
-                      data_bytes_read, writable.length);
-          return FALSE;
-        }
-      if (error != NULL)
-        {
-          gchar *fpath = g_file_get_path (file);
-          g_critical ("Failed to read metric from input stream to drain metrics."
-                      " File: %s. Error: %s.", fpath, error->message);
-          g_free (fpath);
+          g_free (variant_data);
+          g_critical ("Failed to read event in persistent cache. Error: %s.",
+                      error->message);
           g_error_free (error);
-          g_object_unref (stream);
-          g_object_unref (file);
-          g_array_unref (dynamic_array);
-          return FALSE;
+          goto handle_failed_read;
+        }
+
+      if (data_bytes_read != variant_length)
+        {
+          g_free (variant_data);
+          g_critical ("Cache file ended earlier than expected. Read %"
+                      G_GSIZE_FORMAT " bytes, but expected %" G_GUINT64_FORMAT
+                      " bytes of event data.", data_bytes_read, variant_length);
+          goto handle_failed_read;
         }
 
       // Deserialize
       GVariant *current_event =
-        g_variant_new_from_data (G_VARIANT_TYPE (variant_type),
-                                 writable.data,
-                                 writable.length,
-                                 FALSE,
-                                 (GDestroyNotify) g_free,
-                                 writable.data);
+        g_variant_new_from_data (G_VARIANT_TYPE (variant_type), variant_data,
+                                 variant_length, FALSE /* trusted */, g_free,
+                                 variant_data);
 
       GVariant *regularized_event = regularize_variant (current_event);
       g_array_append_val (dynamic_array, regularized_event);
@@ -868,6 +820,12 @@ drain_metrics_file (EmerPersistentCache *self,
   *return_list = (GVariant **) g_array_free (dynamic_array, FALSE);
 
   return TRUE;
+
+handle_failed_read:
+  g_object_unref (stream);
+  g_object_unref (file);
+  g_array_unref (dynamic_array);
+  return FALSE;
 }
 
 /*
@@ -899,6 +857,7 @@ emer_persistent_cache_drain_metrics (EmerPersistentCache  *self,
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
+
   if (priv->cache_size == 0)
     {
       set_to_empty_list (list_of_individual_metrics);
@@ -935,12 +894,8 @@ emer_persistent_cache_drain_metrics (EmerPersistentCache  *self,
       return FALSE;
     }
 
-  GError *error = NULL;
-  if (!purge_cache_files (self, NULL, &error))
+  if (!purge_cache_files (self, NULL, NULL))
     {
-      // The error has served its purpose in the previous call.
-      g_error_free (error);
-
       free_variant_array (*list_of_individual_metrics);
       free_variant_array (*list_of_aggregate_metrics);
       free_variant_array (*list_of_sequence_metrics);
@@ -960,6 +915,7 @@ cache_has_room (EmerPersistentCache *self,
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
+
   if (priv->capacity == CAPACITY_MAX)
     return FALSE;
 
@@ -998,95 +954,111 @@ update_capacity (EmerPersistentCache *self,
   return priv->capacity;
 }
 
-
 /*
- * Converts the given GVariant to a string via serialization and byte swapping
- * (if necessary), prepends its length to the front of it, and appends the
- * the entire string to the end of the given GString.
+ * Serializes the given variant little-endian with its length in bytes as a
+ * little-endian guint64 prepended to it. Appends the entire serialized blob to
+ * the end of the given byte array.
  *
- * If there is not enough room in the cache to store the string that would
- * normally be the result of this function, the given GString is not mutated,
+ * If there is not enough room in the persistent cache to store the given byte
+ * array with the given variant appended, the given byte array is not mutated,
  * and the function returns FALSE. Otherwise, it will mutate it as described and
  * return TRUE.
  */
 static gboolean
-append_variant_to_string (EmerPersistentCache *self,
-                          GString             *variant_string,
-                          GVariant            *variant)
+append_variant (EmerPersistentCache *self,
+                GByteArray          *serialized_variants,
+                GVariant            *variant)
 {
-  gsize event_size_on_disk = sizeof (gsize) + g_variant_get_size (variant);
-  if (cache_has_room (self, event_size_on_disk))
+  guint64 variant_length = g_variant_get_size (variant);
+  gsize event_size_on_disk = sizeof (variant_length) + variant_length;
+  gsize byte_array_size_on_disk = serialized_variants->len + event_size_on_disk;
+  g_variant_ref_sink (variant);
+  if (cache_has_room (self, byte_array_size_on_disk))
     {
-      g_variant_ref_sink (variant);
+      guint64 little_endian_length =
+        swap_bytes_64_if_big_endian (variant_length);
+
       GVariant *native_endian_variant = swap_bytes_if_big_endian (variant);
       g_variant_unref (variant);
 
-      Writable writable;
-      writable.length = g_variant_get_size (native_endian_variant);
-      writable.data = (gpointer) g_variant_get_data (native_endian_variant);
+      gconstpointer serialized_variant =
+        g_variant_get_data (native_endian_variant);
 
-      g_string_append_len (variant_string,
-                           (const gchar *) &writable.length,
-                           sizeof (writable.length));
-      g_string_append_len (variant_string, writable.data, writable.length);
+      g_byte_array_append (serialized_variants,
+                           (const guint8 *) &little_endian_length,
+                           sizeof (little_endian_length));
+      g_byte_array_append (serialized_variants, serialized_variant,
+                           variant_length);
 
       g_variant_unref (native_endian_variant);
       return TRUE;
     }
 
+  g_variant_unref (variant);
   return FALSE;
 }
 
 /*
- * Attempts to append (cache) one or more metrics in the form of a single
- * GString to the end of a file. Updates the size of the cache if the store
- * was successful.
+ * Appends the given byte array to the end of the given file. Updates the size
+ * of the cache if the store was successful.
  *
  * Returns TRUE on success and FALSE on failure.
  */
 static gboolean
-write_variant_string_to_file (EmerPersistentCache *self,
-                              GFile               *file,
-                              GString             *variant_string)
+write_byte_array (EmerPersistentCache *self,
+                  GFile               *file,
+                  GByteArray          *byte_array)
 {
-  GError *error = NULL;
-  GFileOutputStream *stream = g_file_append_to (file,
-                                                G_FILE_CREATE_NONE,
-                                                NULL,
-                                                &error);
-  if (stream == NULL)
-    {
-      gchar *path = g_file_get_path (file);
-      g_critical ("Failed to open stream to cache file: %s. Error: %s.",
-                  path, error->message);
-      g_free (path);
-      g_error_free (error);
-      return FALSE;
-    }
-
-  gboolean success = g_output_stream_write_all (G_OUTPUT_STREAM (stream),
-                                                variant_string->str,
-                                                variant_string->len,
-                                                NULL,
-                                                NULL,
-                                                &error);
-  if (!success)
-    {
-      gchar *path = g_file_get_path (file);
-      g_critical ("Failed to write to cache file: %s. Error: %s.",
-                  path, error->message);
-      g_object_unref (stream);
-      g_free (path);
-      g_error_free (error);
-      return FALSE;
-    }
-
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
-  priv->cache_size += variant_string->len;
 
+  GError *error = NULL;
+  GFileOutputStream *stream =
+    g_file_append_to (file, G_FILE_CREATE_NONE, NULL, &error);
+  if (stream == NULL)
+    {
+      g_critical ("Failed to open stream to cache file. Error: %s.",
+                  error->message);
+      g_error_free (error);
+      return FALSE;
+    }
+
+  gboolean success =
+    g_output_stream_write_all (G_OUTPUT_STREAM (stream), byte_array->data,
+                               byte_array->len, NULL, NULL, &error);
   g_object_unref (stream);
+
+  if (!success)
+    {
+      g_critical ("Failed to write to cache file. Error: %s.", error->message);
+      g_error_free (error);
+      return FALSE;
+    }
+
+  priv->cache_size += byte_array->len;
   return TRUE;
+}
+
+static GVariant *
+replace_payload_with_copy (EventValue *event_value)
+{
+  GVariant *auxiliary_payload = event_value->auxiliary_payload;
+  if (auxiliary_payload == NULL)
+    return NULL;
+
+  event_value->auxiliary_payload = deep_copy_variant (auxiliary_payload);
+  return auxiliary_payload;
+}
+
+static void
+consume_floating_ref (EventValue *event_value)
+{
+  GVariant *auxiliary_payload = event_value->auxiliary_payload;
+  if (auxiliary_payload == NULL)
+    return;
+
+  g_variant_ref_sink (auxiliary_payload);
+  g_variant_unref (auxiliary_payload);
 }
 
 static gboolean
@@ -1096,16 +1068,22 @@ store_singulars (EmerPersistentCache *self,
                  gint                *num_singulars_stored,
                  capacity_t          *capacity)
 {
-  GString *variant_string = g_string_new ("");
-  gboolean string_fit = TRUE;
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  GByteArray *serialized_variants = g_byte_array_new ();
+  gboolean will_fit = TRUE;
   gint i;
   for (i = 0; i < num_singulars_buffered; i++)
     {
       SingularEvent *curr_singular = singular_buffer + i;
+      EventValue *curr_event_value = &curr_singular->event_value;
+      GVariant *curr_payload = replace_payload_with_copy (curr_event_value);
       GVariant *curr_singular_variant = singular_to_variant (curr_singular);
-      string_fit =
-        append_variant_to_string (self, variant_string, curr_singular_variant);
-      if (!string_fit)
+      curr_event_value->auxiliary_payload = curr_payload;
+      will_fit =
+        append_variant (self, serialized_variants, curr_singular_variant);
+      if (!will_fit)
         break;
     }
 
@@ -1114,16 +1092,30 @@ store_singulars (EmerPersistentCache *self,
     {
       GFile *singulars_file = get_cache_file (self, INDIVIDUAL_SUFFIX);
       write_successful =
-        write_variant_string_to_file (self, singulars_file, variant_string);
+        write_byte_array (self, singulars_file, serialized_variants);
       g_object_unref (singulars_file);
     }
 
-  g_string_free (variant_string, TRUE);
+  g_byte_array_unref (serialized_variants);
 
-  gboolean set_to_max = !string_fit && write_successful;
-  *capacity = update_capacity (self, set_to_max);
+  if (write_successful)
+    {
+      for (gint j = 0; j < i; j++)
+        {
+          SingularEvent *curr_singular = singular_buffer + j;
+          EventValue *curr_event_value = &curr_singular->event_value;
+          consume_floating_ref (curr_event_value);
+        }
 
-  *num_singulars_stored = i;
+      *num_singulars_stored = i;
+      *capacity = update_capacity (self, !will_fit);
+    }
+  else
+    {
+      *num_singulars_stored = 0;
+      *capacity = priv->capacity;
+    }
+
   return write_successful;
 }
 
@@ -1134,16 +1126,22 @@ store_aggregates (EmerPersistentCache *self,
                   gint                *num_aggregates_stored,
                   capacity_t          *capacity)
 {
-  GString *variant_string = g_string_new ("");
-  gboolean string_fit = TRUE;
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  GByteArray *serialized_variants = g_byte_array_new ();
+  gboolean will_fit = TRUE;
   gint i;
   for (i = 0; i < num_aggregates_buffered; i++)
     {
       AggregateEvent *curr_aggregate = aggregate_buffer + i;
+      EventValue *curr_event_value = &curr_aggregate->event.event_value;
+      GVariant *curr_payload = replace_payload_with_copy (curr_event_value);
       GVariant *curr_aggregate_variant = aggregate_to_variant (curr_aggregate);
-      string_fit =
-        append_variant_to_string (self, variant_string, curr_aggregate_variant);
-      if (!string_fit)
+      curr_event_value->auxiliary_payload = curr_payload;
+      will_fit =
+        append_variant (self, serialized_variants, curr_aggregate_variant);
+      if (!will_fit)
         break;
     }
 
@@ -1152,16 +1150,30 @@ store_aggregates (EmerPersistentCache *self,
     {
       GFile *aggregate_file = get_cache_file (self, AGGREGATE_SUFFIX);
       write_successful =
-        write_variant_string_to_file (self, aggregate_file, variant_string);
+        write_byte_array (self, aggregate_file, serialized_variants);
       g_object_unref (aggregate_file);
     }
 
-  g_string_free (variant_string, TRUE);
+  g_byte_array_unref (serialized_variants);
 
-  gboolean set_to_max = !string_fit && write_successful;
-  *capacity = update_capacity (self, set_to_max);
+  if (write_successful)
+    {
+      for (gint j = 0; j < i; j++)
+        {
+          AggregateEvent *curr_aggregate = aggregate_buffer + j;
+          EventValue *curr_event_value = &curr_aggregate->event.event_value;
+          consume_floating_ref (curr_event_value);
+        }
 
-  *num_aggregates_stored = i;
+      *num_aggregates_stored = i;
+      *capacity = update_capacity (self, !will_fit);
+    }
+  else
+    {
+      *num_aggregates_stored = 0;
+      *capacity = priv->capacity;
+    }
+
   return write_successful;
 }
 
@@ -1172,16 +1184,34 @@ store_sequences (EmerPersistentCache *self,
                  gint                *num_sequences_stored,
                  capacity_t          *capacity)
 {
-  GString *variant_string = g_string_new ("");
-  gboolean string_fit = TRUE;
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  GByteArray *serialized_variants = g_byte_array_new ();
+  gboolean will_fit = TRUE;
   gint i;
   for (i = 0; i < num_sequences_buffered; i++)
     {
       SequenceEvent *curr_sequence = sequence_buffer + i;
+
+      GVariant *curr_payloads[curr_sequence->num_event_values];
+      for (gint j = 0; j < curr_sequence->num_event_values; j++)
+        {
+          EventValue *curr_event_value = curr_sequence->event_values + j;
+          curr_payloads[j] = replace_payload_with_copy (curr_event_value);
+        }
+
       GVariant *curr_sequence_variant = sequence_to_variant (curr_sequence);
-      string_fit =
-        append_variant_to_string (self, variant_string, curr_sequence_variant);
-      if (!string_fit)
+
+      for (gint j = 0; j < curr_sequence->num_event_values; j++)
+        {
+          EventValue *curr_event_value = curr_sequence->event_values + j;
+          curr_event_value->auxiliary_payload = curr_payloads[j];
+        }
+
+      will_fit =
+        append_variant (self, serialized_variants, curr_sequence_variant);
+      if (!will_fit)
         break;
     }
 
@@ -1190,16 +1220,33 @@ store_sequences (EmerPersistentCache *self,
     {
       GFile *sequences_file = get_cache_file (self, SEQUENCE_SUFFIX);
       write_successful =
-        write_variant_string_to_file (self, sequences_file, variant_string);
+        write_byte_array (self, sequences_file, serialized_variants);
       g_object_unref (sequences_file);
     }
 
-  g_string_free (variant_string, TRUE);
+  g_byte_array_unref (serialized_variants);
 
-  gboolean set_to_max = !string_fit && write_successful;
-  *capacity = update_capacity (self, set_to_max);
+  if (write_successful)
+    {
+      for (gint j = 0; j < i; j++)
+        {
+          SequenceEvent *curr_sequence = sequence_buffer + j;
+          for (gint k = 0; k < curr_sequence->num_event_values; k++)
+            {
+              EventValue *curr_event_value = curr_sequence->event_values + k;
+              consume_floating_ref (curr_event_value);
+            }
+        }
 
-  *num_sequences_stored = i;
+      *num_sequences_stored = i;
+      *capacity = update_capacity (self, !will_fit);
+    }
+  else
+    {
+      *num_sequences_stored = 0;
+      *capacity = priv->capacity;
+    }
+
   return write_successful;
 }
 
@@ -1208,7 +1255,7 @@ store_sequences (EmerPersistentCache *self,
  * the persistent cache's space quota.
  * Will return the capacity of the cache via the out parameter 'capacity'.
  * Returns %TRUE on success, even if the metrics are intentionally dropped due
- * to space limitations.  Returns %FALSE only on I/O error.
+ * to space limitations. Returns %FALSE only on I/O error.
  *
  * Regardless of success or failure, num_singulars_stored,
  * num_aggregates_stored, num_sequences_stored, and capacity will be correctly
@@ -1242,22 +1289,15 @@ emer_persistent_cache_store_metrics (EmerPersistentCache  *self,
   *num_aggregates_stored = 0;
   *num_sequences_stored = 0;
 
-  if (*capacity == CAPACITY_MAX)
-    return TRUE;
-
-  gboolean singulars_stored = store_singulars (self,
-                                               singular_buffer,
-                                               num_singulars_buffered,
-                                               num_singulars_stored,
-                                               capacity);
+  gboolean singulars_stored =
+    store_singulars (self, singular_buffer, num_singulars_buffered,
+                     num_singulars_stored, capacity);
   if (!singulars_stored || *capacity == CAPACITY_MAX)
     return singulars_stored;
 
-  gboolean aggregates_stored = store_aggregates (self,
-                                                 aggregate_buffer,
-                                                 num_aggregates_buffered,
-                                                 num_aggregates_stored,
-                                                 capacity);
+  gboolean aggregates_stored =
+    store_aggregates (self, aggregate_buffer, num_aggregates_buffered,
+                      num_aggregates_stored, capacity);
   if (!aggregates_stored || *capacity == CAPACITY_MAX)
     return aggregates_stored;
 
@@ -1279,8 +1319,12 @@ load_cache_size (EmerPersistentCache *self,
                  GCancellable        *cancellable,
                  GError             **error)
 {
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
   GFile *singular_file = get_cache_file (self, INDIVIDUAL_SUFFIX);
   guint64 singular_disk_used;
+  GError *local_error = NULL;
   gboolean success = g_file_measure_disk_usage (singular_file,
                                                 G_FILE_MEASURE_REPORT_ANY_ERROR,
                                                 NULL,
@@ -1289,57 +1333,51 @@ load_cache_size (EmerPersistentCache *self,
                                                 &singular_disk_used,
                                                 NULL,
                                                 NULL,
-                                                error);
+                                                &local_error);
   g_object_unref (singular_file);
+  if (!success)
+    goto handle_failed_read;
 
   guint64 aggregate_disk_used;
-  if (success)
-    {
-      GFile *aggregate_file = get_cache_file (self, AGGREGATE_SUFFIX);
-      success = g_file_measure_disk_usage (aggregate_file,
-                                           G_FILE_MEASURE_REPORT_ANY_ERROR,
-                                           NULL,
-                                           NULL,
-                                           NULL,
-                                           &aggregate_disk_used,
-                                           NULL,
-                                           NULL,
-                                           error);
-      g_object_unref (aggregate_file);
-    }
+  GFile *aggregate_file = get_cache_file (self, AGGREGATE_SUFFIX);
+  success = g_file_measure_disk_usage (aggregate_file,
+                                       G_FILE_MEASURE_REPORT_ANY_ERROR,
+                                       NULL,
+                                       NULL,
+                                       NULL,
+                                       &aggregate_disk_used,
+                                       NULL,
+                                       NULL,
+                                       &local_error);
+  g_object_unref (aggregate_file);
+  if (!success)
+    goto handle_failed_read;
 
   guint64 sequence_disk_used;
-  if (success)
-    {
-      GFile *sequence_file = get_cache_file (self, SEQUENCE_SUFFIX);
-      success = g_file_measure_disk_usage (sequence_file,
-                                           G_FILE_MEASURE_REPORT_ANY_ERROR,
-                                           NULL,
-                                           NULL,
-                                           NULL,
-                                           &sequence_disk_used,
-                                           NULL,
-                                           NULL,
-                                           error);
-      g_object_unref (sequence_file);
-    }
-
+  GFile *sequence_file = get_cache_file (self, SEQUENCE_SUFFIX);
+  success = g_file_measure_disk_usage (sequence_file,
+                                       G_FILE_MEASURE_REPORT_ANY_ERROR,
+                                       NULL,
+                                       NULL,
+                                       NULL,
+                                       &sequence_disk_used,
+                                       NULL,
+                                       NULL,
+                                       &local_error);
+  g_object_unref (sequence_file);
   if (!success)
-    {
-      if (error != NULL)
-        g_critical ("Failed to measure disk usage. Error: %s.",
-                    (*error)->message);
-      else
-        g_critical ("Failed to measure disk usage.");
-      return FALSE;
-    }
+    goto handle_failed_read;
 
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
   priv->cache_size =
     singular_disk_used + aggregate_disk_used + sequence_disk_used;
   update_capacity (self, FALSE);
   return TRUE;
+
+handle_failed_read:
+  g_prefix_error (&local_error, "Failed to measure disk usage. ");
+  g_critical ("%s.", local_error->message);
+  g_propagate_error (error, local_error);
+  return FALSE;
 }
 
 /*
@@ -1374,15 +1412,14 @@ apply_cache_versioning (EmerPersistentCache *self,
 
   if (!read_success || CURRENT_CACHE_VERSION != old_version)
     {
-      gboolean success = purge_cache_files (self, cancellable, error);
+      GError *local_error = NULL;
+      gboolean success = purge_cache_files (self, cancellable, &local_error);
       if (!success)
         {
-          if (error != NULL)
-            g_critical ("Failed to purge cache files! Will not update version "
-                        "number. Error: %s.", (*error)->message);
-          else
-            g_critical ("Failed to purge cache files! Will not update version "
-                        "number.");
+          g_prefix_error (&local_error, "Failed to purge cache files! Will not "
+                          "update version number. ");
+          g_critical ("%s.", local_error->message);
+          g_propagate_error (error, local_error);
           return FALSE;
         }
 
@@ -1391,12 +1428,10 @@ apply_cache_versioning (EmerPersistentCache *self,
                                                  CURRENT_CACHE_VERSION, error);
       if (!success)
         {
-          if (error != NULL)
-            g_critical ("Failed to update cache version number to %i. "
-                        "Error: %s.", CURRENT_CACHE_VERSION, (*error)->message);
-          else
-            g_critical ("Failed to update cache version number to %i.",
-                        CURRENT_CACHE_VERSION);
+          g_prefix_error (&local_error, "Failed to update cache version number "
+                          "to %i. ", CURRENT_CACHE_VERSION);
+          g_critical ("%s.", local_error->message);
+          g_propagate_error (error, local_error);
           return FALSE;
         }
     }
@@ -1410,6 +1445,7 @@ set_cache_directory (EmerPersistentCache *self,
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
+
   priv->cache_directory = g_strdup (directory);
 }
 
@@ -1592,6 +1628,7 @@ emer_persistent_cache_init (EmerPersistentCache *self)
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
+
   priv->cache_size = 0L;
   priv->capacity = CAPACITY_LOW;
   priv->boot_offset_key_file = g_key_file_new ();
@@ -1628,7 +1665,7 @@ emer_persistent_cache_initable_init (GInitableIface *iface)
 }
 
 /*
- * Constructor for creating a new Persistent Cache.
+ * Constructor for creating a new persistent cache.
  * Please use this in production instead of the testing constructor!
  */
 EmerPersistentCache *

@@ -20,11 +20,6 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-/* For CLOCK_BOOTTIME */
-#if !defined(_POSIX_C_SOURCE) || _POSIX_C_SOURCE < 200112L
-#error "This code requires _POSIX_C_SOURCE to be 200112L or later."
-#endif
-
 #include <byteswap.h>
 #include <string.h>
 #include <time.h>
@@ -181,17 +176,6 @@ finish_network_callback (NetworkCallbackData *callback_data)
 
   priv->uploading = FALSE;
   g_signal_emit (self, emer_daemon_signals[SIGNAL_UPLOAD_FINISHED], 0u);
-}
-
-static gint64
-swap_bytes_64_if_big_endian (gint64 value)
-{
-  if (G_BYTE_ORDER == G_BIG_ENDIAN)
-    return bswap_64 (value);
-  if (G_BYTE_ORDER != G_LITTLE_ENDIAN)
-    g_error ("This machine is neither big endian nor little endian. Mixed-"
-             "endian machines are not supported by the metrics system.");
-  return value;
 }
 
 static void

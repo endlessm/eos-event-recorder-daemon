@@ -22,13 +22,12 @@
 
 #include "metrics-util.h"
 
+#include <byteswap.h>
 #include <errno.h>
-#include <time.h>
-#include <inttypes.h>
+#include <uuid/uuid.h>
 
 #include <glib.h>
 #include <gio/gio.h>
-#include <uuid/uuid.h>
 
 static void
 trash_event_value (EventValue *event_value)
@@ -142,6 +141,17 @@ sequence_to_variant (SequenceEvent *sequence)
   return g_variant_new ("(uaya(xmv))", sequence->user_id, &event_id_builder,
                         &event_values_builder);
 
+}
+
+guint64
+swap_bytes_64_if_big_endian (guint64 value)
+{
+  if (G_BYTE_ORDER == G_BIG_ENDIAN)
+    return bswap_64 (value);
+  if (G_BYTE_ORDER != G_LITTLE_ENDIAN)
+    g_error ("This machine is neither big endian nor little endian. Mixed-"
+             "endian machines are not supported by the metrics system.");
+  return value;
 }
 
 /*

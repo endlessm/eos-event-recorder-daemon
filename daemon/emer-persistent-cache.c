@@ -235,10 +235,11 @@ purge_cache_files (EmerPersistentCache *self,
                    GError             **error)
 {
   GFile *ind_file = get_cache_file (self, INDIVIDUAL_SUFFIX);
+  GError *local_error = NULL;
   gboolean success =
     g_file_replace_contents (ind_file, "", 0, NULL, FALSE,
                              G_FILE_CREATE_REPLACE_DESTINATION,
-                             NULL, cancellable, error);
+                             NULL, cancellable, &local_error);
   g_object_unref (ind_file);
   if (!success)
     goto handle_failed_write;
@@ -247,7 +248,7 @@ purge_cache_files (EmerPersistentCache *self,
   success =
     g_file_replace_contents (agg_file, "", 0, NULL, FALSE,
                              G_FILE_CREATE_REPLACE_DESTINATION,
-                             NULL, cancellable, error);
+                             NULL, cancellable, &local_error);
   g_object_unref (agg_file);
   if (!success)
     goto handle_failed_write;
@@ -256,7 +257,7 @@ purge_cache_files (EmerPersistentCache *self,
   success =
     g_file_replace_contents (seq_file, "", 0, NULL, FALSE,
                              G_FILE_CREATE_REPLACE_DESTINATION,
-                             NULL, cancellable, error);
+                             NULL, cancellable, &local_error);
   g_object_unref (seq_file);
   if (!success)
     goto handle_failed_write;
@@ -269,10 +270,9 @@ purge_cache_files (EmerPersistentCache *self,
   return TRUE;
 
 handle_failed_write:
-  if (error != NULL)
-    g_critical ("Failed to purge cache files. Error: %s.", (*error)->message);
-  else
-    g_critical ("Failed to purge cache files.");
+  g_prefix_error (&local_error, "Failed to purge cache files. ");
+  g_critical ("%s.", local_error->message);
+  g_propagate_error (error, local_error);
   return FALSE;
 }
 
@@ -369,11 +369,8 @@ reset_boot_offset_metadata_file (EmerPersistentCache *self,
   gchar system_boot_id_string[BOOT_ID_FILE_LENGTH];
   uuid_unparse_lower (system_boot_id, system_boot_id_string);
 
-  if (!purge_cache_files (self, NULL, &error))
-    {
-      g_error_free (error); // Error already reported.
-      return FALSE;
-    }
+  if (!purge_cache_files (self, NULL, NULL))
+    return FALSE;
 
   gint64 reset_offset = 0;
   gboolean was_reset = TRUE;
@@ -880,12 +877,8 @@ emer_persistent_cache_drain_metrics (EmerPersistentCache  *self,
       return FALSE;
     }
 
-  GError *error = NULL;
-  if (!purge_cache_files (self, NULL, &error))
+  if (!purge_cache_files (self, NULL, NULL))
     {
-      // The error has served its purpose in the previous call.
-      g_error_free (error);
-
       free_variant_array (*list_of_individual_metrics);
       free_variant_array (*list_of_aggregate_metrics);
       free_variant_array (*list_of_sequence_metrics);
@@ -1218,6 +1211,7 @@ load_cache_size (EmerPersistentCache *self,
 {
   GFile *singular_file = get_cache_file (self, INDIVIDUAL_SUFFIX);
   guint64 singular_disk_used;
+  GError *local_error = NULL;
   gboolean success = g_file_measure_disk_usage (singular_file,
                                                 G_FILE_MEASURE_REPORT_ANY_ERROR,
                                                 NULL,
@@ -1226,7 +1220,7 @@ load_cache_size (EmerPersistentCache *self,
                                                 &singular_disk_used,
                                                 NULL,
                                                 NULL,
-                                                error);
+                                                &local_error);
   g_object_unref (singular_file);
   if (!success)
     goto handle_failed_read;
@@ -1241,7 +1235,7 @@ load_cache_size (EmerPersistentCache *self,
                                        &aggregate_disk_used,
                                        NULL,
                                        NULL,
-                                       error);
+                                       &local_error);
   g_object_unref (aggregate_file);
   if (!success)
     goto handle_failed_read;
@@ -1256,7 +1250,7 @@ load_cache_size (EmerPersistentCache *self,
                                        &sequence_disk_used,
                                        NULL,
                                        NULL,
-                                       error);
+                                       &local_error);
   g_object_unref (sequence_file);
   if (!success)
     goto handle_failed_read;
@@ -1269,10 +1263,9 @@ load_cache_size (EmerPersistentCache *self,
   return TRUE;
 
 handle_failed_read:
-  if (error != NULL)
-    g_critical ("Failed to measure disk usage. Error: %s.", (*error)->message);
-  else
-    g_critical ("Failed to measure disk usage.");
+  g_prefix_error (&local_error, "Failed to measure disk usage. ");
+  g_critical ("%s.", local_error->message);
+  g_propagate_error (error, local_error);
   return FALSE;
 }
 
@@ -1308,15 +1301,14 @@ apply_cache_versioning (EmerPersistentCache *self,
 
   if (!read_success || CURRENT_CACHE_VERSION != old_version)
     {
-      gboolean success = purge_cache_files (self, cancellable, error);
+      GError *local_error = NULL;
+      gboolean success = purge_cache_files (self, cancellable, &local_error);
       if (!success)
         {
-          if (error != NULL)
-            g_critical ("Failed to purge cache files! Will not update version "
-                        "number. Error: %s.", (*error)->message);
-          else
-            g_critical ("Failed to purge cache files! Will not update version "
-                        "number.");
+          g_prefix_error (&local_error, "Failed to purge cache files! Will not "
+                          "update version number. ");
+          g_critical ("%s.", local_error->message);
+          g_propagate_error (error, local_error);
           return FALSE;
         }
 
@@ -1325,12 +1317,10 @@ apply_cache_versioning (EmerPersistentCache *self,
                                                  CURRENT_CACHE_VERSION, error);
       if (!success)
         {
-          if (error != NULL)
-            g_critical ("Failed to update cache version number to %i. Error: "
-                        "%s.", CURRENT_CACHE_VERSION, (*error)->message);
-          else
-            g_critical ("Failed to update cache version number to %i.",
-                        CURRENT_CACHE_VERSION);
+          g_prefix_error (&local_error, "Failed to update cache version number "
+                          "to %i. ", CURRENT_CACHE_VERSION);
+          g_critical ("%s.", local_error->message);
+          g_propagate_error (error, local_error);
           return FALSE;
         }
     }

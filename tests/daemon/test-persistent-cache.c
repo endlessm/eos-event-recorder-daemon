@@ -1682,7 +1682,6 @@ test_persistent_cache_resets_boot_metadata_file_when_boot_offset_corrupted (gboo
   // Corrupt metadata file.
   remove_offset ();
 
-  GError *error = NULL;
   g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING, "Could not find a "
                          "valid boot offset in the metadata file. Error: *.");
 
@@ -1690,7 +1689,6 @@ test_persistent_cache_resets_boot_metadata_file_when_boot_offset_corrupted (gboo
   EmerPersistentCache *cache = make_testing_cache ();
 
   g_test_assert_expected_messages ();
-  g_assert_no_error (error);
 
   g_assert_true (boot_offset_was_reset ());
 

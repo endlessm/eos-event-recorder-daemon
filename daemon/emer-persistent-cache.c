@@ -962,9 +962,9 @@ append_variant (EmerPersistentCache *self,
   gsize variant_length = g_variant_get_size (variant);
   gsize event_size_on_disk = sizeof (variant_length) + variant_length;
   gsize byte_array_size_on_disk = serialized_variants->len + event_size_on_disk;
+  g_variant_ref_sink (variant);
   if (cache_has_room (self, byte_array_size_on_disk))
     {
-      g_variant_ref_sink (variant);
       GVariant *native_endian_variant = swap_bytes_if_big_endian (variant);
       g_variant_unref (variant);
 
@@ -981,6 +981,7 @@ append_variant (EmerPersistentCache *self,
       return TRUE;
     }
 
+  g_variant_unref (variant);
   return FALSE;
 }
 
@@ -1026,6 +1027,28 @@ write_byte_array (EmerPersistentCache *self,
   return TRUE;
 }
 
+static GVariant *
+replace_payload_with_copy (EventValue *event_value)
+{
+  GVariant *auxiliary_payload = event_value->auxiliary_payload;
+  if (auxiliary_payload == NULL)
+    return NULL;
+
+  event_value->auxiliary_payload = deep_copy_variant (auxiliary_payload);
+  return auxiliary_payload;
+}
+
+static void
+consume_floating_ref (EventValue *event_value)
+{
+  GVariant *auxiliary_payload = event_value->auxiliary_payload;
+  if (auxiliary_payload == NULL)
+    return;
+
+  g_variant_ref_sink (auxiliary_payload);
+  g_variant_unref (auxiliary_payload);
+}
+
 static gboolean
 store_singulars (EmerPersistentCache *self,
                  SingularEvent       *singular_buffer,
@@ -1042,7 +1065,10 @@ store_singulars (EmerPersistentCache *self,
   for (i = 0; i < num_singulars_buffered; i++)
     {
       SingularEvent *curr_singular = singular_buffer + i;
+      EventValue *curr_event_value = &curr_singular->event_value;
+      GVariant *curr_payload = replace_payload_with_copy (curr_event_value);
       GVariant *curr_singular_variant = singular_to_variant (curr_singular);
+      curr_event_value->auxiliary_payload = curr_payload;
       will_fit =
         append_variant (self, serialized_variants, curr_singular_variant);
       if (!will_fit)
@@ -1060,10 +1086,24 @@ store_singulars (EmerPersistentCache *self,
 
   g_byte_array_unref (serialized_variants);
 
-  *capacity =
-    write_successful ? update_capacity (self, !will_fit) : priv->capacity;
+  if (write_successful)
+    {
+      for (gint j = 0; j < i; j++)
+        {
+          SingularEvent *curr_singular = singular_buffer + j;
+          EventValue *curr_event_value = &curr_singular->event_value;
+          consume_floating_ref (curr_event_value);
+        }
 
-  *num_singulars_stored = i;
+      *num_singulars_stored = i;
+      *capacity = update_capacity (self, !will_fit);
+    }
+  else
+    {
+      *num_singulars_stored = 0;
+      *capacity = priv->capacity;
+    }
+
   return write_successful;
 }
 
@@ -1083,7 +1123,10 @@ store_aggregates (EmerPersistentCache *self,
   for (i = 0; i < num_aggregates_buffered; i++)
     {
       AggregateEvent *curr_aggregate = aggregate_buffer + i;
+      EventValue *curr_event_value = &curr_aggregate->event.event_value;
+      GVariant *curr_payload = replace_payload_with_copy (curr_event_value);
       GVariant *curr_aggregate_variant = aggregate_to_variant (curr_aggregate);
+      curr_event_value->auxiliary_payload = curr_payload;
       will_fit =
         append_variant (self, serialized_variants, curr_aggregate_variant);
       if (!will_fit)
@@ -1101,10 +1144,24 @@ store_aggregates (EmerPersistentCache *self,
 
   g_byte_array_unref (serialized_variants);
 
-  *capacity =
-    write_successful ? update_capacity (self, !will_fit) : priv->capacity;
+  if (write_successful)
+    {
+      for (gint j = 0; j < i; j++)
+        {
+          AggregateEvent *curr_aggregate = aggregate_buffer + j;
+          EventValue *curr_event_value = &curr_aggregate->event.event_value;
+          consume_floating_ref (curr_event_value);
+        }
 
-  *num_aggregates_stored = i;
+      *num_aggregates_stored = i;
+      *capacity = update_capacity (self, !will_fit);
+    }
+  else
+    {
+      *num_aggregates_stored = 0;
+      *capacity = priv->capacity;
+    }
+
   return write_successful;
 }
 
@@ -1124,7 +1181,22 @@ store_sequences (EmerPersistentCache *self,
   for (i = 0; i < num_sequences_buffered; i++)
     {
       SequenceEvent *curr_sequence = sequence_buffer + i;
+
+      GVariant *curr_payloads[curr_sequence->num_event_values];
+      for (gint j = 0; j < curr_sequence->num_event_values; j++)
+        {
+          EventValue *curr_event_value = curr_sequence->event_values + j;
+          curr_payloads[j] = replace_payload_with_copy (curr_event_value);
+        }
+
       GVariant *curr_sequence_variant = sequence_to_variant (curr_sequence);
+
+      for (gint j = 0; j < curr_sequence->num_event_values; j++)
+        {
+          EventValue *curr_event_value = curr_sequence->event_values + j;
+          curr_event_value->auxiliary_payload = curr_payloads[j];
+        }
+
       will_fit =
         append_variant (self, serialized_variants, curr_sequence_variant);
       if (!will_fit)
@@ -1142,10 +1214,27 @@ store_sequences (EmerPersistentCache *self,
 
   g_byte_array_unref (serialized_variants);
 
-  *capacity =
-    write_successful ? update_capacity (self, !will_fit) : priv->capacity;
+  if (write_successful)
+    {
+      for (gint j = 0; j < i; j++)
+        {
+          SequenceEvent *curr_sequence = sequence_buffer + j;
+          for (gint k = 0; k < curr_sequence->num_event_values; k++)
+            {
+              EventValue *curr_event_value = curr_sequence->event_values + k;
+              consume_floating_ref (curr_event_value);
+            }
+        }
 
-  *num_sequences_stored = i;
+      *num_sequences_stored = i;
+      *capacity = update_capacity (self, !will_fit);
+    }
+  else
+    {
+      *num_sequences_stored = 0;
+      *capacity = priv->capacity;
+    }
+
   return write_successful;
 }
 

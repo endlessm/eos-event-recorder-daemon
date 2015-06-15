@@ -26,7 +26,7 @@
 
 #include <glib.h>
 #include <gio/gio.h>
-#include <ostree-1/ostree-repo.h>
+#include <ostree-repo.h>
 
 #include "shared/metrics-util.h"
 
@@ -209,7 +209,7 @@ get_ostree_url_from_ostree_repo (void)
   OstreeRepo *ostree_repo = ostree_repo_new_default ();
 
   GError *error = NULL;
-  if (!ostree_repo_check (ostree_repo, &error))
+  if (!ostree_repo_open (ostree_repo, NULL /* GCancellable */, &error))
     {
       g_warning ("Unable to open OSTree repo. Error: %s.", error->message);
       g_clear_error (&error);

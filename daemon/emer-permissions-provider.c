@@ -26,7 +26,7 @@
 
 #include <glib.h>
 #include <gio/gio.h>
-#include <ostree-1/ostree-repo.h>
+#include <ostree-repo.h>
 
 #include "shared/metrics-util.h"
 

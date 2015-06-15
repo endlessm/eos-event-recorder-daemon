@@ -16,7 +16,6 @@ Build-Depends: autotools-dev,
                python3-dbusmock,
                systemd,
                uuid-dev
-Build-Conflicts: libostree-dev (>= 2013.7)
 Standards-Version: 3.9.4
 Section: non-free/libs
 Homepage: http://www.endlessm.com

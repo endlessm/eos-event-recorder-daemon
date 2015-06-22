@@ -116,8 +116,6 @@ G_DEFINE_TYPE_WITH_CODE (EmerPersistentCache, emer_persistent_cache, G_TYPE_OBJE
  */
 #define SYSTEM_BOOT_ID_FILE "/proc/sys/kernel/random/boot_id"
 
-G_LOCK_DEFINE_STATIC (update_boot_offset);
-
 enum
 {
   PROP_0,
@@ -499,9 +497,6 @@ compute_boot_offset (EmerPersistentCache *self,
  * The net effect of the entire system is that the most plausible way to trick
  * it is to adjust the system clock and yank the power cord before the next
  * network send occurs (an hourly event).
- *
- * Callers of this function need to acquire a lock on update_boot_offset before
- * calling this function and should free that lock immediately after it returns.
  */
 static gboolean
 update_boot_offset (EmerPersistentCache *self,
@@ -626,9 +621,7 @@ update_boot_offset (EmerPersistentCache *self,
 static gboolean
 update_boot_offset_source_func (EmerPersistentCache *self)
 {
-  G_LOCK (update_boot_offset);
   update_boot_offset (self, TRUE);
-  G_UNLOCK (update_boot_offset);
 
   return G_SOURCE_CONTINUE;
 }
@@ -651,7 +644,6 @@ emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
 {
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
-  G_LOCK (update_boot_offset);
 
   /* When always_update_timestamps is FALSE, the timestamps won't be written
    * unless the boot offset in the metadata file is being overwritten.
@@ -660,11 +652,8 @@ emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
                    "Couldn't read boot offset.");
-      G_UNLOCK (update_boot_offset);
       return FALSE;
     }
-
-  G_UNLOCK (update_boot_offset);
 
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
@@ -1638,16 +1627,13 @@ emer_persistent_cache_initable_init (GInitable    *self,
   if (!apply_cache_versioning (persistent_cache, cancellable, error))
     return FALSE;
 
-  G_LOCK (update_boot_offset);
   if (!update_boot_offset (persistent_cache, FALSE))
     {
       g_critical ("Couldn't update the boot offset upon initialization.");
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
                    "Couldn't update the boot offset upon initialization.");
-      G_UNLOCK (update_boot_offset);
       return FALSE;
     }
-  G_UNLOCK (update_boot_offset);
 
   return load_cache_size (persistent_cache, cancellable, error);
 }

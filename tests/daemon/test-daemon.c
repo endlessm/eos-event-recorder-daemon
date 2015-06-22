@@ -984,7 +984,7 @@ setup (Fixture      *fixture,
   fixture->test_object =
     emer_daemon_new_full (g_rand_new_with_seed (18),
                           server_uri,
-                          2, // Network Send Interval
+                          2 /* network send interval */,
                           fixture->mock_machine_id_provider,
                           fixture->mock_network_send_provider,
                           fixture->mock_permissions_provider,
@@ -1256,7 +1256,7 @@ test_daemon_flushes_to_persistent_cache_on_shutdown (Fixture      *fixture,
                           NULL /* user_data */);
   emit_shutdown_signal (TRUE);
 
-  // Wait for EmerDaemon to handle the signal.
+  /* Wait for daemon to handle the signal. */
   while (g_main_context_pending (NULL))
     g_main_context_iteration (NULL, TRUE);
 

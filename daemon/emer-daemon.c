@@ -1384,7 +1384,6 @@ emer_daemon_class_init (EmerDaemonClass *klass)
    * An #EmerMachineIdProvider for retrieving the UUID of this machine.
    * If this property is not specified, the default machine ID provider (from
    * emer_machine_id_provider_new()) will be used.
-   * You should only set this property to something else for testing purposes.
    */
   emer_daemon_props[PROP_MACHINE_ID_PROVIDER] =
     g_param_spec_object ("machine-id-provider", "Machine ID provider",
@@ -1399,7 +1398,6 @@ emer_daemon_class_init (EmerDaemonClass *klass)
    * An #EmerNetworkSendProvider for getting and setting the network send
    * metadata. If this property is not specified, the default network send
    * provider will be used (from emer_network_send_provider_new()).
-   * You should only set this property to something else for testing purposes.
    */
   emer_daemon_props[PROP_NETWORK_SEND_PROVIDER] =
     g_param_spec_object ("network-send-provider", "Network send provider",
@@ -1411,6 +1409,9 @@ emer_daemon_class_init (EmerDaemonClass *klass)
   /*
    * EmerDaemon:permissions-provider:
    *
+   * An #EmerPermissionsProvider for getting the user's preferences regarding
+   * the metrics system. If this property is not specified, the default
+   * permissions provider will be used (from emer_permissions_provider_new()).
    */
   emer_daemon_props[PROP_PERMISSIONS_PROVIDER] =
     g_param_spec_object ("permissions-provider", "Permissions provider",
@@ -1426,7 +1427,6 @@ emer_daemon_class_init (EmerDaemonClass *klass)
    * proxy server.
    * If this property is not specified, a default persistent cache (created by
    * emer_persistent_cache_new ()) will be used.
-   * You should only set this property to something else for testing purposes.
    */
   emer_daemon_props[PROP_PERSISTENT_CACHE] =
     g_param_spec_object ("persistent-cache", "Persistent cache",
@@ -1503,9 +1503,7 @@ emer_daemon_init (EmerDaemon *self)
 /*
  * emer_daemon_new:
  *
- * Creates a new EOS Metrics Daemon.
- *
- * Returns: (transfer full): a new #EmerDaemon.
+ * Returns: (transfer full): a new #EmerDaemon with the default configuration.
  */
 EmerDaemon *
 emer_daemon_new (void)
@@ -1537,10 +1535,8 @@ emer_daemon_new (void)
  *   in-memory buffers. There are three in-memory buffers, one for singulars,
  *   for aggregates, and one for sequences.
  *
- * Testing function for creating a new EOS Metrics daemon.
- * You should only need to use this for unit testing.
- *
- * Returns: (transfer full): a new #EmerDaemon.
+ * Returns: (transfer full): a new customized #EmerDaemon. Use emer_daemon_new
+ * to use the default configuration.
  */
 EmerDaemon *
 emer_daemon_new_full (GRand                   *rand,

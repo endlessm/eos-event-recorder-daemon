@@ -1337,7 +1337,6 @@ static void
 test_persistent_cache_drain_empty_succeeds (gboolean     *unused,
                                             gconstpointer dontuseme)
 {
-  // Don't store anything.
   EmerPersistentCache *cache = make_testing_cache ();
   GVariant **singulars_drained, **aggregates_drained, **sequences_drained;
   gboolean success = emer_persistent_cache_drain_metrics (cache,

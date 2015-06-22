@@ -33,8 +33,7 @@
 
 #include "shared/metrics-util.h"
 
-/*
- * SECTION:emer-persistent-cache.c
+/* SECTION:emer-persistent-cache.c
  * @title: Persistent Cache
  * @short_description: Stores metrics locally (on the user's machine).
  *
@@ -112,7 +111,7 @@ G_DEFINE_TYPE_WITH_CODE (EmerPersistentCache, emer_persistent_cache, G_TYPE_OBJE
 #define DEFAULT_BOOT_TIMESTAMPS_UPDATE (60u * 60u)
 
 /*
- * The path to the file containing the boot-id used to determine if this is the
+ * The path to the file containing the boot ID used to determine if this is the
  * same boot as previous metrics were recorded in or not.
  */
 #define SYSTEM_BOOT_ID_FILE "/proc/sys/kernel/random/boot_id"
@@ -634,8 +633,7 @@ update_boot_offset_source_func (EmerPersistentCache *self)
   return G_SOURCE_CONTINUE;
 }
 
-/*
- * Gets the boot time offset and stores it in the out parameter offset.
+/* Gets the boot time offset and stores it in the out parameter offset.
  * If the always_update_timestamps parameter is FALSE, does not write to disk
  * solely to update the timestamps during this operation unless the boot id is
  * out of date or some corruption is detected that prompts a total rewrite of
@@ -655,8 +653,7 @@ emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
 
   G_LOCK (update_boot_offset);
 
-  /*
-   * When always_update_timestamps is FALSE, the timestamps won't be written
+  /* When always_update_timestamps is FALSE, the timestamps won't be written
    * unless the boot offset in the metadata file is being overwritten.
    */
   if (!update_boot_offset (self, always_update_timestamps))
@@ -1394,7 +1391,7 @@ apply_cache_versioning (EmerPersistentCache *self,
 
   if (g_mkdir_with_parents (priv->cache_directory, 02774) != 0)
     {
-      const gchar *err_str = g_strerror (errno); // Don't free.
+      const gchar *err_str = g_strerror (errno);
       g_critical ("Failed to create directory: %s. Error: %s.",
                   priv->cache_directory, err_str);
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
@@ -1661,9 +1658,7 @@ emer_persistent_cache_initable_init (GInitableIface *iface)
   iface->init = emer_persistent_cache_may_fail_init;
 }
 
-/*
- * Constructor for creating a new persistent cache.
- * Please use this in production instead of the testing constructor!
+/* Returns a new persistent cache with the default configuration.
  */
 EmerPersistentCache *
 emer_persistent_cache_new (GCancellable *cancellable,
@@ -1672,10 +1667,8 @@ emer_persistent_cache_new (GCancellable *cancellable,
   return g_initable_new (EMER_TYPE_PERSISTENT_CACHE, cancellable, error, NULL);
 }
 
-/*
- * You should use emer_persistent_cache_new() instead of this function.
- * Function should only be used in testing code, NOT in production code.
- * Should always use a custom directory.
+/* Returns a customized persistent cache. Use emer_persistent_cache_new to use
+ * the default configuration.
  */
 EmerPersistentCache *
 emer_persistent_cache_new_full (GCancellable             *cancellable,

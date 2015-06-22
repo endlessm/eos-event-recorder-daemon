@@ -565,8 +565,7 @@ update_boot_offset (EmerPersistentCache *self,
       g_warning ("Could not find a valid boot offset in the metadata file. "
                  "Error: %s.", error->message);
       g_error_free (error);
-      return reset_boot_offset_metadata_file (self, &relative_time,
-                                              &absolute_time);
+      return FALSE;
     }
 
   uuid_t saved_boot_id, system_boot_id;
@@ -614,8 +613,7 @@ update_boot_offset (EmerPersistentCache *self,
       g_warning ("Failed to write computed boot offset. Resetting cache. "
                  "Error: %s.", error->message);
       g_error_free (error);
-      return reset_boot_offset_metadata_file (self, &relative_time,
-                                              &absolute_time);
+      return FALSE;
     }
 
   priv->boot_offset = boot_offset;

@@ -235,26 +235,6 @@ set_boot_id_in_metadata_file (gchar *boot_id)
 }
 
 /*
- * Removes the offset key/value pair from the boot metadata file to simulate
- * corruption and writes that change to disk.
- */
-static void
-remove_offset (void)
-{
-  GKeyFile *boot_offset_key_file = load_boot_offset_key_file ();
-  gboolean remove_succeeded =
-    g_key_file_remove_key (boot_offset_key_file, CACHE_TIMING_GROUP_NAME,
-                           CACHE_BOOT_OFFSET_KEY, NULL);
-  g_assert_true (remove_succeeded);
-
-  gboolean save_succeeded =
-    g_key_file_save_to_file (boot_offset_key_file,
-                             TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE, NULL);
-  g_assert_true (save_succeeded);
-  g_key_file_unref (boot_offset_key_file);
-}
-
-/*
  * Gets the stored offset from the metadata file.
  */
 static gint64
@@ -1589,82 +1569,6 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
 }
 
 /*
- * Stores a single event, then corrupts the metadata file by removing the offset
- * from it. Then releases and reinstantiates the persistent cache, prompting it
- * to detect the corruption and purge the existing event.
- */
-static void
-test_persistent_cache_wipes_metrics_when_boot_offset_corrupted (gboolean     *unused,
-                                                                gconstpointer dontuseme)
-{
-  EmerPersistentCache *cache = make_testing_cache ();
-
-  capacity_t capacity;
-  store_single_singular_event (cache, &capacity);
-
-  // Clear in-memory boot offset cache.
-  g_object_unref (cache);
-
-  // Corrupt metadata file.
-  remove_offset ();
-
-  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING, "Could not find a "
-                         "valid boot offset in the metadata file. Error: *.");
-
-  /*
-   * This call should detect corruption and wipe the persistent cache of all
-   * previous events.
-   */
-  EmerPersistentCache *cache2 = make_testing_cache ();
-
-  g_test_assert_expected_messages ();
-
-  GVariant **singulars_drained, **aggregates_drained, **sequences_drained;
-  emer_persistent_cache_drain_metrics (cache2, &singulars_drained,
-                                       &aggregates_drained, &sequences_drained,
-                                       MAX_BYTES_TO_READ);
-
-  // Stored event should have been purged.
-  g_assert_cmpint (c_array_len (singulars_drained), ==, 0);
-  g_assert_cmpint (c_array_len (aggregates_drained), ==, 0);
-  g_assert_cmpint (c_array_len (sequences_drained), ==, 0);
-
-  free_variant_c_array (singulars_drained);
-  free_variant_c_array (aggregates_drained);
-  free_variant_c_array (sequences_drained);
-
-  g_object_unref (cache2);
-}
-
-/*
- * Creates a metadata file by initializating and releasing a persistent cache.
- * Then corrupts the metadata file by removing the offset from it. Finally,
- * initializes a second persistent cache, prompting the detection of the
- * corruption and a reset of the metadata file.
- */
-static void
-test_persistent_cache_resets_boot_metadata_file_when_boot_offset_corrupted (gboolean     *unused,
-                                                                            gconstpointer dontuseme)
-{
-  g_object_unref (make_testing_cache ());
-
-  // Corrupt metadata file.
-  remove_offset ();
-
-  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING, "Could not find a "
-                         "valid boot offset in the metadata file. Error: *.");
-
-  // This call should detect corruption and reset the metadata file.
-  EmerPersistentCache *cache = make_testing_cache ();
-
-  g_test_assert_expected_messages ();
-
-  g_assert_true (boot_offset_was_reset ());
-
-  g_object_unref (cache);
-}
-
-/*
  * Tests that the in-memory cache is used when present by changing the boot
  * offset on disk between calls to the same instance of a persistent cache.
  */
@@ -1919,10 +1823,6 @@ main (int                argc,
                        test_persistent_cache_computes_reasonable_offset);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/does-not-compute-offset-when-boot-id-is-same",
                        test_persistent_cache_does_not_compute_offset_when_boot_id_is_same);
-  ADD_CACHE_TEST_FUNC ("/persistent-cache/wipes-metrics-when-boot-offset-corrupted",
-                       test_persistent_cache_wipes_metrics_when_boot_offset_corrupted);
-  ADD_CACHE_TEST_FUNC ("/persistent-cache/resets-boot-metadata-file-when-boot-offset-corrupted",
-                       test_persistent_cache_resets_boot_metadata_file_when_boot_offset_corrupted);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/reads-cached-boot-offset",
                        test_persistent_cache_reads_cached_boot_offset);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/get-offset-wont-update-timestamps-if-it-isnt-supposed-to",

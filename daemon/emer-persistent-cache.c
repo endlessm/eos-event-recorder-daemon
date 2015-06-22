@@ -22,12 +22,12 @@
 
 #include "emer-persistent-cache.h"
 
+#include <errno.h>
+
 #include <gio/gio.h>
 #include <glib.h>
 #include <glib/gprintf.h>
 #include <glib-object.h>
-
-#include <errno.h>
 
 #include <eosmetrics/eosmetrics.h>
 

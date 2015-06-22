@@ -75,11 +75,11 @@ typedef struct _EmerPersistentCachePrivate
   GKeyFile *boot_offset_key_file;
 } EmerPersistentCachePrivate;
 
-static void emer_persistent_cache_initable_init (GInitableIface *iface);
+static void emer_persistent_cache_initable_iface_init (GInitableIface *iface);
 
 G_DEFINE_TYPE_WITH_CODE (EmerPersistentCache, emer_persistent_cache, G_TYPE_OBJECT,
                          G_ADD_PRIVATE (EmerPersistentCache)
-                         G_IMPLEMENT_INTERFACE (G_TYPE_INITABLE, emer_persistent_cache_initable_init))
+                         G_IMPLEMENT_INTERFACE (G_TYPE_INITABLE, emer_persistent_cache_initable_iface_init))
 
 /*
  * If this version is greater than the version of the persisted metrics,
@@ -1629,7 +1629,7 @@ emer_persistent_cache_init (EmerPersistentCache *self)
 }
 
 static gboolean
-emer_persistent_cache_may_fail_init (GInitable    *self,
+emer_persistent_cache_initable_init (GInitable    *self,
                                      GCancellable *cancellable,
                                      GError      **error)
 {
@@ -1653,9 +1653,9 @@ emer_persistent_cache_may_fail_init (GInitable    *self,
 }
 
 static void
-emer_persistent_cache_initable_init (GInitableIface *iface)
+emer_persistent_cache_initable_iface_init (GInitableIface *iface)
 {
-  iface->init = emer_persistent_cache_may_fail_init;
+  iface->init = emer_persistent_cache_initable_init;
 }
 
 /* Returns a new persistent cache with the default configuration.

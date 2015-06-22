@@ -83,6 +83,14 @@
 #define MODE "delay"
 #define INHIBIT_ARGS "('" WHAT "', '" WHO "', '" WHY "', '" MODE "')"
 
+#define METRICS_DISABLED_MESSAGE "Could not upload events because the " \
+  "metrics system is disabled. You may enable the metrics system via " \
+  "Settings > Privacy > Metrics."
+
+#define UPLOADING_DISABLED_MESSAGE "Could not upload events because " \
+  "uploading is disabled. You may enable uploading by setting " \
+  "uploading_enabled to true in " PERMISSIONS_FILE "."
+
 typedef struct _NetworkCallbackData
 {
   EmerDaemon *daemon;
@@ -806,9 +814,7 @@ upload_permitted (EmerDaemon *self,
   if (!priv->recording_enabled)
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED,
-                   "Could not upload events because the metrics system is "
-                   "disabled. You may enable the metrics system via "
-                   "Settings > Privacy > Metrics.");
+                   METRICS_DISABLED_MESSAGE);
       return FALSE;
     }
 
@@ -818,9 +824,7 @@ upload_permitted (EmerDaemon *self,
     {
       flush_to_persistent_cache (self);
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED,
-                   "Could not upload events because uploading is disabled. You "
-                   "may enable uploading by setting uploading_enabled to true "
-                   "in " PERMISSIONS_FILE ".");
+                   UPLOADING_DISABLED_MESSAGE);
       return FALSE;
     }
 
@@ -881,8 +885,11 @@ log_upload_error (EmerDaemon   *self,
   GError *error = NULL;
   if (!emer_daemon_upload_events_finish (self, result, &error))
     {
-      g_warning ("Dropped events because they could not be uploaded: %s.",
-                 error->message);
+      if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED) ||
+          (g_strcmp0 (error->message, METRICS_DISABLED_MESSAGE) != 0 &&
+           g_strcmp0 (error->message, UPLOADING_DISABLED_MESSAGE) != 0))
+        g_warning ("Dropped events because they could not be uploaded: %s.",
+                   error->message);
       g_error_free (error);
     }
 }

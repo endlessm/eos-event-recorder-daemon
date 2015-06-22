@@ -808,8 +808,7 @@ upload_permitted (EmerDaemon *self,
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED,
                    "Could not upload events because the metrics system is "
                    "disabled. You may enable the metrics system via "
-                   "Settings/Configuración > Privacy/Privacidad > "
-                   "Metrics/Métricas.");
+                   "Settings > Privacy > Metrics.");
       return FALSE;
     }
 

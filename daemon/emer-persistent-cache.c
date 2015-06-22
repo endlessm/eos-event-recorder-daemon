@@ -160,7 +160,7 @@ get_saved_boot_id (EmerPersistentCache *self,
                                                error);
   if (id_as_string == NULL)
     {
-      g_prefix_error (error, "Failed to read boot_id from %s. ",
+      g_prefix_error (error, "Failed to read boot ID from %s. ",
                       priv->boot_metadata_file_path);
       return FALSE;
     }
@@ -172,7 +172,7 @@ get_saved_boot_id (EmerPersistentCache *self,
   g_strchomp (id_as_string);
   if (uuid_parse (id_as_string, priv->saved_boot_id) != 0)
     {
-      g_prefix_error (error, "Failed to parse the saved boot id: %s. ",
+      g_prefix_error (error, "Failed to parse saved boot ID: %s. ",
                       id_as_string);
       g_free (id_as_string);
       return FALSE;
@@ -200,7 +200,7 @@ get_system_boot_id (EmerPersistentCache *self,
   if (!emer_boot_id_provider_get_id (priv->boot_id_provider, boot_id))
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                   "Failed to get the boot ID from the EmerBootIdProvider.");
+                   "Failed to get boot ID from EmerBootIdProvider.");
       return FALSE;
     }
   return TRUE;
@@ -423,7 +423,7 @@ compute_boot_offset (EmerPersistentCache *self,
                           CACHE_BOOT_OFFSET_KEY, &error);
   if (error != NULL)
     {
-      g_critical ("Failed to read relative offset from metadata file %s. "
+      g_critical ("Failed to read boot offset from metadata file %s. "
                   "Error: %s.", priv->boot_metadata_file_path, error->message);
       g_error_free (error);
       return FALSE;
@@ -562,8 +562,8 @@ update_boot_offset (EmerPersistentCache *self,
                                              CACHE_BOOT_OFFSET_KEY, &error);
   if (error != NULL)
     {
-      g_warning ("Could not find a valid boot offset in the metadata file. "
-                 "Error: %s.", error->message);
+      g_warning ("Failed to read boot offset from metadata file %s. "
+                 "Error: %s.", priv->boot_metadata_file_path, error->message);
       g_error_free (error);
       return FALSE;
     }
@@ -1414,8 +1414,7 @@ apply_cache_versioning (EmerPersistentCache *self,
       gboolean success = purge_cache_files (self, cancellable, &local_error);
       if (!success)
         {
-          g_prefix_error (&local_error, "Failed to purge cache files! Will not "
-                          "update version number. ");
+          g_prefix_error (&local_error, "Will not update version number. ");
           g_critical ("%s.", local_error->message);
           g_propagate_error (error, local_error);
           return FALSE;

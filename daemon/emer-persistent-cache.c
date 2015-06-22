@@ -153,10 +153,9 @@ get_saved_boot_id (EmerPersistentCache *self,
       return TRUE;
     }
 
-  gchar *id_as_string = g_key_file_get_string (priv->boot_offset_key_file,
-                                               CACHE_TIMING_GROUP_NAME,
-                                               CACHE_LAST_BOOT_ID_KEY,
-                                               error);
+  gchar *id_as_string =
+    g_key_file_get_string (priv->boot_offset_key_file, CACHE_TIMING_GROUP_NAME,
+                           CACHE_LAST_BOOT_ID_KEY, error);
   if (id_as_string == NULL)
     {
       g_prefix_error (error, "Failed to read boot ID from %s. ",
@@ -540,10 +539,11 @@ update_boot_offset (EmerPersistentCache *self,
       return TRUE;
     }
 
-  if (!g_key_file_load_from_file (priv->boot_offset_key_file,
-                                  priv->boot_metadata_file_path,
-                                  G_KEY_FILE_NONE,
-                                  &error))
+  gboolean load_succeeded =
+    g_key_file_load_from_file (priv->boot_offset_key_file,
+                               priv->boot_metadata_file_path, G_KEY_FILE_NONE,
+                               &error);
+  if (!load_succeeded)
     {
       if (!g_error_matches (error, G_KEY_FILE_ERROR,
                             G_KEY_FILE_ERROR_NOT_FOUND) &&
@@ -556,9 +556,9 @@ update_boot_offset (EmerPersistentCache *self,
                                               &absolute_time);
     }
 
-  gint64 boot_offset = g_key_file_get_int64 (priv->boot_offset_key_file,
-                                             CACHE_TIMING_GROUP_NAME,
-                                             CACHE_BOOT_OFFSET_KEY, &error);
+  gint64 boot_offset =
+    g_key_file_get_int64 (priv->boot_offset_key_file, CACHE_TIMING_GROUP_NAME,
+                          CACHE_BOOT_OFFSET_KEY, &error);
   if (error != NULL)
     {
       g_warning ("Failed to read boot offset from metadata file %s. "

@@ -23,11 +23,9 @@
 #include "metrics-util.h"
 
 #include <byteswap.h>
-#include <errno.h>
 #include <uuid/uuid.h>
 
 #include <glib.h>
-#include <gio/gio.h>
 
 static void
 trash_event_value (EventValue *event_value)

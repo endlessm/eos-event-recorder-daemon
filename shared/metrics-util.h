@@ -24,7 +24,6 @@
 #define METRICS_UTIL_H
 
 #include <glib.h>
-#include <gio/gio.h>
 #include <uuid/uuid.h>
 
 /*

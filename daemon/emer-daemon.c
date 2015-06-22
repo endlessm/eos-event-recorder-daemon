@@ -20,7 +20,6 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#include <byteswap.h>
 #include <string.h>
 #include <time.h>
 #include <uuid/uuid.h>

@@ -143,6 +143,7 @@ gboolean             emer_persistent_cache_store_metrics       (EmerPersistentCa
                                                                 gint                     *num_aggregates_stored,
                                                                 gint                     *num_sequences_stored,
                                                                 capacity_t               *capacity);
+
 /*
  * Function should only be used in testing code, NOT in production code.
  */

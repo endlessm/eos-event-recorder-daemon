@@ -81,7 +81,6 @@ write_cache_size_file (void)
   g_key_file_unref (key_file);
 }
 
-
 static void
 write_mock_system_boot_id_file (void)
 {

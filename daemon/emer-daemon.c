@@ -95,9 +95,11 @@ typedef struct _EmerDaemonPrivate
 {
   gint shutdown_inhibitor;
   GDBusProxy *login_manager_proxy;
+
   guint network_send_interval;
   GQueue *upload_queue;
   gboolean uploading;
+
   SoupSession *http_session;
 
   /* Private storage for public properties */
@@ -1214,7 +1216,6 @@ set_sequence_buffer_length (EmerDaemon *self,
   priv->sequence_buffer_length = length;
   priv->sequence_buffer = g_new (SequenceEvent, length);
   priv->num_sequences_buffered = 0;
-
 }
 
 static void
@@ -1303,7 +1304,6 @@ emer_daemon_finalize (GObject *object)
   g_queue_free_full (priv->upload_queue, g_object_unref);
 
   soup_session_abort (priv->http_session);
-
   g_clear_object (&priv->http_session);
 
   g_rand_free (priv->rand);

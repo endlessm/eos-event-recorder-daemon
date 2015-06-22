@@ -552,7 +552,6 @@ static void assert_machine_id_matches (GVariant              *machine_id_variant
   g_assert_cmpint (compare_result, ==, 0);
 }
 
-
 static void
 assert_singular_matches (GVariantIter *singular_iterator,
                          GVariant     *expected_auxiliary_payload)

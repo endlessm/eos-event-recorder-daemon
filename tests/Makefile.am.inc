@@ -38,6 +38,13 @@ DAEMON_TEST_FLAGS = \
 	$(NULL)
 DAEMON_TEST_LIBS = @EOS_EVENT_RECORDER_DAEMON_LIBS@
 
+tests_daemon_test_boot_id_provider_SOURCES = \
+	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
+	tests/daemon/test-boot-id-provider.c \
+	$(NULL)
+tests_daemon_test_boot_id_provider_CPPFLAGS = $(DAEMON_TEST_FLAGS)
+tests_daemon_test_boot_id_provider_LDADD = $(DAEMON_TEST_LIBS)
+
 tests_daemon_test_cache_size_provider_SOURCES = \
 	daemon/emer-cache-size-provider.c daemon/emer-cache-size-provider.h \
 	tests/daemon/test-cache-size-provider.c \
@@ -51,13 +58,6 @@ tests_daemon_test_cache_version_provider_SOURCES = \
 	$(NULL)
 tests_daemon_test_cache_version_provider_CPPFLAGS = $(DAEMON_TEST_FLAGS)
 tests_daemon_test_cache_version_provider_LDADD = $(DAEMON_TEST_LIBS)
-
-tests_daemon_test_boot_id_provider_SOURCES = \
-	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
-	tests/daemon/test-boot-id-provider.c \
-	$(NULL)
-tests_daemon_test_boot_id_provider_CPPFLAGS = $(DAEMON_TEST_FLAGS)
-tests_daemon_test_boot_id_provider_LDADD = $(DAEMON_TEST_LIBS)
 
 tests_daemon_test_daemon_dbusdaemon_SOURCES = \
 	daemon/emer-daemon.c daemon/emer-daemon.h \

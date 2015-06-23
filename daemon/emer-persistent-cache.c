@@ -230,7 +230,7 @@ save_timing_metadata (EmerPersistentCache *self,
                       const gint64        *boot_offset_ptr,
                       const gchar         *boot_id_string,
                       const gboolean      *was_reset_ptr,
-                      GError             **out_error)
+                      GError             **error)
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
@@ -266,9 +266,9 @@ save_timing_metadata (EmerPersistentCache *self,
                             *was_reset_ptr);
 
   if (!g_key_file_save_to_file (priv->boot_offset_key_file,
-                                priv->boot_metadata_file_path, out_error))
+                                priv->boot_metadata_file_path, error))
     {
-      g_prefix_error (out_error, "Failed to write to metadata file: %s. ",
+      g_prefix_error (error, "Failed to write to metadata file: %s. ",
                       priv->boot_metadata_file_path);
       return FALSE;
     }
@@ -310,12 +310,12 @@ reset_boot_offset_metadata_file (EmerPersistentCache *self,
 
   gint64 reset_offset = 0;
   gboolean was_reset = TRUE;
-  gboolean write_success =
+  gboolean write_succeeded =
     save_timing_metadata (self, relative_time_ptr, absolute_time_ptr,
                           &reset_offset, system_boot_id_string, &was_reset,
                           error);
 
-  if (!write_success)
+  if (!write_succeeded)
     return FALSE;
 
   priv->boot_offset = reset_offset;
@@ -516,11 +516,11 @@ update_boot_offset (EmerPersistentCache *self,
   uuid_unparse_lower (system_boot_id, system_boot_id_string);
 
   gboolean was_reset = FALSE;
-  gboolean write_success =
+  gboolean write_succeeded =
     save_timing_metadata (self, &relative_time, &absolute_time, &boot_offset,
                           system_boot_id_string, &was_reset, error);
 
-  if (!write_success)
+  if (!write_succeeded)
     return FALSE;
 
   priv->boot_offset = boot_offset;
@@ -611,19 +611,19 @@ apply_cache_versioning (EmerPersistentCache *self,
 
   if (g_mkdir_with_parents (priv->cache_directory, 02774) != 0)
     {
-      const gchar *err_str = g_strerror (errno);
+      const gchar *error_string = g_strerror (errno);
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
                    "Failed to create directory: %s. Error: %s",
-                   priv->cache_directory, err_str);
+                   priv->cache_directory, error_string);
       return FALSE;
     }
 
   gint old_version;
-  gboolean read_success =
+  gboolean read_succeeded =
     emer_cache_version_provider_get_version (priv->cache_version_provider,
                                              &old_version);
 
-  if (!read_success || CURRENT_CACHE_VERSION != old_version)
+  if (!read_succeeded || CURRENT_CACHE_VERSION != old_version)
     {
       if (old_version < 4)
         unlink_old_files (self);
@@ -851,13 +851,13 @@ emer_persistent_cache_init (EmerPersistentCache *self)
 }
 
 static gboolean
-emer_persistent_cache_initable_init (GInitable    *self,
+emer_persistent_cache_initable_init (GInitable    *initable,
                                      GCancellable *cancellable,
                                      GError      **error)
 {
-  EmerPersistentCache *persistent_cache = EMER_PERSISTENT_CACHE (self);
+  EmerPersistentCache *self = EMER_PERSISTENT_CACHE (initable);
   EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (persistent_cache);
+    emer_persistent_cache_get_instance_private (self);
 
   gchar *variant_file_path =
     g_build_filename (priv->cache_directory, VARIANT_FILENAME, NULL);
@@ -869,10 +869,10 @@ emer_persistent_cache_initable_init (GInitable    *self,
   if (priv->variant_file == NULL)
     return FALSE;
 
-  if (!apply_cache_versioning (persistent_cache, error))
+  if (!apply_cache_versioning (self, error))
     goto handle_failed_init;
 
-  if (!update_boot_offset (persistent_cache, FALSE, error))
+  if (!update_boot_offset (self, FALSE, error))
     goto handle_failed_init;
 
   return TRUE;

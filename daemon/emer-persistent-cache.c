@@ -500,28 +500,34 @@ update_boot_offset (EmerPersistentCache *self,
   if (uuid_compare (saved_boot_id, system_boot_id) == 0)
     {
       if (always_update_timestamps)
-        return save_timing_metadata (self, &relative_time, &absolute_time, NULL,
-                                     NULL, NULL, error);
-
-      return TRUE;
+        {
+          gboolean write_succeeded =
+            save_timing_metadata (self, &relative_time, &absolute_time, NULL,
+                                  NULL, NULL, error);
+          if (!write_succeeded)
+            return FALSE;
+        }
     }
+  else
+    {
+      gboolean compute_succeeded =
+        compute_boot_offset (self, relative_time, absolute_time, &boot_offset,
+                             error);
+      if (!compute_succeeded)
+        return FALSE;
 
-  gboolean compute_succeeded =
-    compute_boot_offset (self, relative_time, absolute_time, &boot_offset,
-                         error);
-  if (!compute_succeeded)
-    return FALSE;
+      gchar system_boot_id_string[BOOT_ID_FILE_LENGTH];
+      uuid_unparse_lower (system_boot_id, system_boot_id_string);
 
-  gchar system_boot_id_string[BOOT_ID_FILE_LENGTH];
-  uuid_unparse_lower (system_boot_id, system_boot_id_string);
+      gboolean was_reset = FALSE;
+      gboolean write_succeeded =
+        save_timing_metadata (self, &relative_time, &absolute_time,
+                              &boot_offset, system_boot_id_string, &was_reset,
+                              error);
 
-  gboolean was_reset = FALSE;
-  gboolean write_succeeded =
-    save_timing_metadata (self, &relative_time, &absolute_time, &boot_offset,
-                          system_boot_id_string, &was_reset, error);
-
-  if (!write_succeeded)
-    return FALSE;
+      if (!write_succeeded)
+        return FALSE;
+    }
 
   priv->boot_offset = boot_offset;
   priv->boot_offset_initialized = TRUE;

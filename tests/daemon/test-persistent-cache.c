@@ -1087,8 +1087,8 @@ test_persistent_cache_store_when_full_succeeds (gboolean     *unused,
   g_assert_no_error (error);
   g_assert_nonnull (cache);
 
-  g_object_unref (cache_version_provider);
   g_object_unref (boot_id_provider);
+  g_object_unref (cache_version_provider);
 
   capacity_t capacity = CAPACITY_LOW;
 

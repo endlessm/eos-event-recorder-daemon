@@ -172,6 +172,7 @@ make_testing_cache (void)
                                     cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL);
   g_assert_no_error (error);
+  g_assert_nonnull (cache);
 
   g_object_unref (cache_size_provider);
   g_object_unref (boot_id_provider);
@@ -1084,6 +1085,7 @@ test_persistent_cache_store_when_full_succeeds (gboolean     *unused,
                                     cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL);
   g_assert_no_error (error);
+  g_assert_nonnull (cache);
 
   g_object_unref (cache_version_provider);
   g_object_unref (boot_id_provider);
@@ -1374,6 +1376,7 @@ test_persistent_cache_purges_when_out_of_date_succeeds (gboolean     *unused,
                                     cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL);
   g_assert_no_error (error);
+  g_assert_nonnull (cache);
 
   g_object_unref (cache_size_provider);
   g_object_unref (boot_id_provider);

@@ -94,7 +94,7 @@ emer_persistent_cache_new_full (GCancellable             *cancellable,
                                 EmerCacheVersionProvider *version_provider,
                                 guint                     boot_offset_update_interval)
 {
-  return g_object_new (EMER_TYPE_PERSISTENT_CACHE, NULL);
+  g_assert_not_reached ();
 }
 
 gboolean

@@ -20,7 +20,6 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#include <string.h>
 #include <time.h>
 #include <uuid/uuid.h>
 
@@ -988,7 +987,7 @@ handle_login_manager_signal (GDBusProxy *dbus_proxy,
                              GVariant   *parameters,
                              EmerDaemon *self)
 {
-  if (strcmp ("PrepareForShutdown", signal_name) == 0)
+  if (g_strcmp0 ("PrepareForShutdown", signal_name) == 0)
     {
       gboolean shutting_down;
       g_variant_get_child (parameters, 0, "b", &shutting_down);

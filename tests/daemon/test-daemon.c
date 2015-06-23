@@ -48,7 +48,7 @@
 #define MEANINGLESS_EVENT_2 "d936cd5c-08de-4d4e-8a87-8df1f4a33cba"
 
 #define USER_ID 4200u
-#define NUM_EVENTS 101
+#define NUM_EVENTS G_GINT64_CONSTANT (101)
 #define RELATIVE_TIMESTAMP G_GINT64_CONSTANT (123456789)
 #define OFFSET_TIMESTAMP (RELATIVE_TIMESTAMP + BOOT_TIME_OFFSET)
 
@@ -522,18 +522,14 @@ assert_uploading_disabled (Fixture *fixture)
 }
 
 static void
-assert_variants_equal (GVariant *variant_one,
-                       GVariant *variant_two)
+assert_variants_equal (GVariant *actual_variant,
+                       GVariant *expected_variant)
 {
-  if (variant_one == NULL)
-    {
-      g_assert_null (variant_two);
-    }
-  else
-    {
-      g_assert_nonnull (variant_two);
-      g_assert_true (g_variant_equal (variant_one, variant_two));
-    }
+  g_assert_nonnull (actual_variant);
+  g_assert_true (g_variant_equal (actual_variant, expected_variant));
+
+  g_variant_unref (actual_variant);
+  g_variant_unref (expected_variant);
 }
 
 static void assert_machine_id_matches (GVariant              *machine_id_variant,
@@ -553,106 +549,62 @@ static void assert_machine_id_matches (GVariant              *machine_id_variant
 }
 
 static void
-assert_singular_matches (GVariantIter *singular_iterator,
-                         GVariant     *expected_auxiliary_payload)
+assert_singular_matches_variant (GVariant *actual_variant,
+                                 GVariant *expected_auxiliary_payload)
 {
-  guint32 user_id;
-  GVariant *actual_event_id;
-  gint64 relative_time;
-  GVariant *actual_auxiliary_payload;
-  gboolean singulars_remain =
-    g_variant_iter_next (singular_iterator, "(u@ayxmv)", &user_id,
-                         &actual_event_id, &relative_time,
-                         &actual_auxiliary_payload);
-
-  g_assert_true (singulars_remain);
-  g_assert_cmpuint (user_id, ==, USER_ID);
-
-  GVariant *expected_event_id = make_event_id_variant ();
-  g_assert_true (g_variant_equal (actual_event_id, expected_event_id));
-  g_clear_pointer (&actual_event_id, g_variant_unref);
-  g_clear_pointer (&expected_event_id, g_variant_unref);
-
-  g_assert_cmpint (relative_time, ==, OFFSET_TIMESTAMP);
-
-  assert_variants_equal (actual_auxiliary_payload, expected_auxiliary_payload);
-  g_clear_pointer (&actual_auxiliary_payload, g_variant_unref);
-  g_clear_pointer (&expected_auxiliary_payload, g_variant_unref);
+  GVariant *expected_variant =
+    g_variant_new ("(u@ayxmv)", USER_ID, make_event_id_variant (),
+                   OFFSET_TIMESTAMP, expected_auxiliary_payload);
+  assert_variants_equal (actual_variant, expected_variant);
 }
 
 static void
-assert_aggregate_matches (GVariantIter *aggregate_iterator,
-                          GVariant     *expected_auxiliary_payload)
+assert_aggregate_matches_variant (GVariant *actual_variant,
+                                  GVariant *expected_auxiliary_payload)
 {
-  guint32 user_id;
-  GVariant *actual_event_id;
-  gint64 num_events;
-  gint64 relative_time;
-  GVariant *actual_auxiliary_payload;
-  gboolean aggregates_remain =
-    g_variant_iter_next (aggregate_iterator, "(u@ayxxmv)", &user_id,
-                         &actual_event_id, &num_events, &relative_time,
-                         &actual_auxiliary_payload);
-
-  g_assert_true (aggregates_remain);
-  g_assert_cmpuint (user_id, ==, USER_ID);
-
-  GVariant *expected_event_id = make_event_id_variant ();
-  g_assert_true (g_variant_equal (actual_event_id, expected_event_id));
-  g_variant_unref (actual_event_id);
-  g_variant_unref (expected_event_id);
-
-  g_assert_cmpint (num_events, ==, NUM_EVENTS);
-  g_assert_cmpint (relative_time, ==, OFFSET_TIMESTAMP);
-
-  assert_variants_equal (actual_auxiliary_payload, expected_auxiliary_payload);
-  g_clear_pointer (&actual_auxiliary_payload, g_variant_unref);
-  g_clear_pointer (&expected_auxiliary_payload, g_variant_unref);
+  GVariant *expected_variant =
+    g_variant_new ("(u@ayxxmv)", USER_ID, make_event_id_variant (),
+                   NUM_EVENTS, OFFSET_TIMESTAMP, expected_auxiliary_payload);
+  assert_variants_equal (actual_variant, expected_variant);
 }
 
 static void
-assert_event_value_matches (GVariantIter *event_value_iterator,
-                            GVariant     *expected_auxiliary_payload)
+assert_sequence_matches_variant (GVariant *actual_variant)
 {
-  gint64 relative_time;
-  GVariant *actual_auxiliary_payload;
-  gboolean event_values_remain =
-    g_variant_iter_next (event_value_iterator, "(xmv)", &relative_time,
-                         &actual_auxiliary_payload);
-  g_assert_true (event_values_remain);
+  GVariantBuilder event_values_builder;
+  g_variant_builder_init (&event_values_builder, G_VARIANT_TYPE ("a(xmv)"));
 
-  g_assert_cmpint (relative_time, ==, OFFSET_TIMESTAMP);
-
-  assert_variants_equal (actual_auxiliary_payload, expected_auxiliary_payload);
-  g_clear_pointer (&actual_auxiliary_payload, g_variant_unref);
-  g_clear_pointer (&expected_auxiliary_payload, g_variant_unref);
+  g_variant_builder_add (&event_values_builder, "(xmv)",
+                         OFFSET_TIMESTAMP, NULL);
+  g_variant_builder_add (&event_values_builder, "(xmv)",
+                         OFFSET_TIMESTAMP, g_variant_new_boolean (TRUE));
+  GVariant *expected_variant =
+    g_variant_new ("(u@aya(xmv))", USER_ID, make_event_id_variant (),
+                   &event_values_builder);
+  assert_variants_equal (actual_variant, expected_variant);
 }
 
 static void
-assert_sequence_matches (GVariantIter *sequence_iterator)
+assert_singular_matches_next_value (GVariantIter *singular_iterator,
+                                    GVariant     *expected_auxiliary_payload)
 {
-  guint32 user_id;
-  GVariant *actual_event_id;
-  GVariantIter *event_values_iterator;
-  gboolean sequences_remain =
-    g_variant_iter_next (sequence_iterator, "(u@aya(xmv))", &user_id,
-                         &actual_event_id, &event_values_iterator);
+  GVariant *singular = g_variant_iter_next_value (singular_iterator);
+  assert_singular_matches_variant (singular, expected_auxiliary_payload);
+}
 
-  g_assert_true (sequences_remain);
-  g_assert_cmpuint (user_id, ==, USER_ID);
+static void
+assert_aggregate_matches_next_value (GVariantIter *aggregate_iterator,
+                                     GVariant     *expected_auxiliary_payload)
+{
+  GVariant *aggregate = g_variant_iter_next_value (aggregate_iterator);
+  assert_aggregate_matches_variant (aggregate, expected_auxiliary_payload);
+}
 
-  GVariant *expected_event_id = make_event_id_variant ();
-  g_assert_true (g_variant_equal (actual_event_id, expected_event_id));
-  g_variant_unref (actual_event_id);
-  g_variant_unref (expected_event_id);
-
-  gsize num_event_values = g_variant_iter_n_children (event_values_iterator);
-  g_assert_cmpuint (num_event_values, ==, 2u);
-  assert_event_value_matches (event_values_iterator,
-                              NULL /* auxiliary_payload */);
-  assert_event_value_matches (event_values_iterator,
-                              g_variant_new_boolean (TRUE));
-  g_variant_iter_free (event_values_iterator);
+static void
+assert_sequence_matches_next_value (GVariantIter *sequence_iterator)
+{
+  GVariant *sequence = g_variant_iter_next_value (sequence_iterator);
+  assert_sequence_matches_variant (sequence);
 }
 
 static void
@@ -800,9 +752,12 @@ assert_singulars_received (GByteArray *request,
                            &aggregate_iterator, &sequence_iterator);
 
   g_assert_cmpuint (g_variant_iter_n_children (singular_iterator), ==, 3u);
-  assert_singular_matches (singular_iterator, NULL /* auxiliary_payload */);
-  assert_singular_matches (singular_iterator, NULL /* auxiliary_payload */);
-  assert_singular_matches (singular_iterator, make_auxiliary_payload ());
+  assert_singular_matches_next_value (singular_iterator,
+                                      NULL /* auxiliary_payload */);
+  assert_singular_matches_next_value (singular_iterator,
+                                      NULL /* auxiliary_payload */);
+  assert_singular_matches_next_value (singular_iterator,
+                                      make_auxiliary_payload ());
   g_variant_iter_free (singular_iterator);
 
   g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 0u);
@@ -824,8 +779,10 @@ assert_aggregates_received (GByteArray *request,
   g_variant_iter_free (singular_iterator);
 
   g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 2u);
-  assert_aggregate_matches (aggregate_iterator, NULL /* auxiliary_payload */);
-  assert_aggregate_matches (aggregate_iterator, make_auxiliary_payload ());
+  assert_aggregate_matches_next_value (aggregate_iterator,
+                                       NULL /* auxiliary_payload */);
+  assert_aggregate_matches_next_value (aggregate_iterator,
+                                       make_auxiliary_payload ());
   g_variant_iter_free (aggregate_iterator);
 
   g_assert_cmpuint (g_variant_iter_n_children (sequence_iterator), ==, 0u);
@@ -847,7 +804,7 @@ assert_sequence_received (GByteArray *request,
   g_variant_iter_free (aggregate_iterator);
 
   g_assert_cmpuint (g_variant_iter_n_children (sequence_iterator), ==, 1u);
-  assert_sequence_matches (sequence_iterator);
+  assert_sequence_matches_next_value (sequence_iterator);
   g_variant_iter_free (sequence_iterator);
 }
 

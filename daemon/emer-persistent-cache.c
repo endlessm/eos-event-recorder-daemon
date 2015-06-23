@@ -956,8 +956,8 @@ emer_persistent_cache_cost (GVariant *variant)
 gboolean
 emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
                                             gint64              *offset,
-                                            GError             **error,
-                                            gboolean             always_update_timestamps)
+                                            gboolean             always_update_timestamps,
+                                            GError             **error)
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);

@@ -859,7 +859,7 @@ test_persistent_cache_builds_boot_metadata_file (gboolean     *unused,
 
   GError *error = NULL;
   gboolean get_succeeded =
-    emer_persistent_cache_get_boot_time_offset (cache, NULL, &error, TRUE);
+    emer_persistent_cache_get_boot_time_offset (cache, NULL, TRUE, &error);
   g_assert_no_error (error);
   g_assert_true (get_succeeded);
 
@@ -870,7 +870,7 @@ test_persistent_cache_builds_boot_metadata_file (gboolean     *unused,
   g_assert_true (emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
 
   get_succeeded =
-    emer_persistent_cache_get_boot_time_offset (cache, NULL, &error, TRUE);
+    emer_persistent_cache_get_boot_time_offset (cache, NULL, TRUE, &error);
   g_assert_no_error (error);
   g_assert_true (get_succeeded);
 
@@ -946,7 +946,7 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
 
   GError *error = NULL;
   gboolean get_succeeded =
-    emer_persistent_cache_get_boot_time_offset (cache, NULL, &error, TRUE);
+    emer_persistent_cache_get_boot_time_offset (cache, NULL, TRUE, &error);
   g_assert_no_error (error);
   g_assert_true (get_succeeded);
   g_assert_true (boot_offset_was_reset ());
@@ -964,7 +964,7 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
 
   // This call should have to compute the boot offset itself.
   get_succeeded =
-    emer_persistent_cache_get_boot_time_offset (cache2, NULL, &error, TRUE);
+    emer_persistent_cache_get_boot_time_offset (cache2, NULL, TRUE, &error);
 
   g_assert_no_error (error);
   g_assert_true (get_succeeded);
@@ -979,7 +979,7 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
   EmerPersistentCache *cache3 = make_testing_cache ();
 
   get_succeeded =
-    emer_persistent_cache_get_boot_time_offset (cache3, NULL, &error, TRUE);
+    emer_persistent_cache_get_boot_time_offset (cache3, NULL, TRUE, &error);
   g_assert_no_error (error);
   g_assert_true (get_succeeded);
 
@@ -1002,8 +1002,8 @@ test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
   gint64 first_offset;
   GError *error = NULL;
   gboolean get_succeeded =
-    emer_persistent_cache_get_boot_time_offset (cache, &first_offset, &error,
-                                                TRUE);
+    emer_persistent_cache_get_boot_time_offset (cache, &first_offset, TRUE,
+                                                &error);
   g_assert_no_error (error);
   g_assert_true (get_succeeded);
 
@@ -1026,8 +1026,8 @@ test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
    * on disk.
    */
   get_succeeded =
-    emer_persistent_cache_get_boot_time_offset (cache, &second_offset, &error,
-                                                TRUE);
+    emer_persistent_cache_get_boot_time_offset (cache, &second_offset, TRUE,
+                                                &error);
   g_assert_no_error (error);
   g_assert_true (get_succeeded);
 
@@ -1058,7 +1058,7 @@ test_persistent_cache_get_offset_wont_update_timestamps_if_it_isnt_supposed_to (
 
   // This call shouldn't update the metadata file.
   gboolean get_succeeded =
-    emer_persistent_cache_get_boot_time_offset (cache, NULL, &error, FALSE);
+    emer_persistent_cache_get_boot_time_offset (cache, NULL, FALSE, &error);
 
   g_assert_no_error (error);
   g_assert_true (get_succeeded);
@@ -1091,7 +1091,7 @@ test_persistent_cache_get_offset_updates_timestamps_when_requested (gboolean    
 
   // This call should update the timestamps in the metadata file.
   gboolean get_succeeded =
-    emer_persistent_cache_get_boot_time_offset (cache, NULL, &error, TRUE);
+    emer_persistent_cache_get_boot_time_offset (cache, NULL, TRUE, &error);
 
   g_assert_no_error (error);
   g_assert_true (get_succeeded);
@@ -1115,7 +1115,7 @@ test_persistent_cache_updates_timestamps_on_finalize (gboolean     *unused,
 
   // Update metadata file to reasonable values.
   gboolean get_succeeded =
-    emer_persistent_cache_get_boot_time_offset (cache, NULL, &error, TRUE);
+    emer_persistent_cache_get_boot_time_offset (cache, NULL, TRUE, &error);
 
   g_assert_no_error (error);
   g_assert_true (get_succeeded);
@@ -1156,7 +1156,7 @@ test_persistent_cache_get_offset_can_build_boot_metadata_file (gboolean     *unu
    * always_update_timestamps parameter is FALSE.
    */
   gboolean get_succeeded =
-    emer_persistent_cache_get_boot_time_offset (cache, NULL, &error, FALSE);
+    emer_persistent_cache_get_boot_time_offset (cache, NULL, FALSE, &error);
 
   g_assert_no_error (error);
   g_assert_true (get_succeeded);

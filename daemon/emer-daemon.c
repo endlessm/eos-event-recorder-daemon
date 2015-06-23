@@ -391,7 +391,7 @@ get_offset_timestamps (EmerDaemon *self,
 
   gint64 boot_offset;
   if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
-                                                   &boot_offset, error, FALSE))
+                                                   &boot_offset, FALSE, error))
     return FALSE;
 
   *rel_timestamp_ptr += boot_offset;
@@ -972,7 +972,7 @@ update_timestamps (EmerDaemon *self)
 
   GError *error = NULL;
   if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
-                                                   NULL, &error, TRUE))
+                                                   NULL, TRUE, &error))
     {
       g_warning ("Persistent cache could not update timestamps: %s.",
                  error->message);
@@ -1525,7 +1525,7 @@ emer_daemon_record_singular_event (EmerDaemon *self,
   gint64 boot_offset;
   GError *error = NULL;
   if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
-                                                   &boot_offset, &error, FALSE))
+                                                   &boot_offset, FALSE, &error))
     {
       g_warning ("Unable to correct event's relative timestamp. Dropping "
                  "event. Error: %s.", error->message);
@@ -1565,7 +1565,7 @@ emer_daemon_record_aggregate_event (EmerDaemon *self,
   gint64 boot_offset;
   GError *error = NULL;
   if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
-                                                   &boot_offset, &error, FALSE))
+                                                   &boot_offset, FALSE, &error))
     {
       g_warning ("Unable to correct event's relative timestamp. Dropping "
                  "event. Error: %s.", error->message);
@@ -1602,7 +1602,7 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
   gint64 boot_offset;
   GError *error = NULL;
   if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
-                                                   &boot_offset, &error, FALSE))
+                                                   &boot_offset, FALSE, &error))
     {
       g_warning ("Unable to correct event's relative timestamp. Dropping "
                  "event. Error: %s.", error->message);

@@ -20,6 +20,7 @@ noinst_PROGRAMS += \
 	tests/daemon/test-boot-id-provider \
 	tests/daemon/test-cache-size-provider \
 	tests/daemon/test-cache-version-provider \
+	tests/daemon/test-circular-file \
 	tests/daemon/test-daemon.dbusdaemon \
 	tests/daemon/test-machine-id-provider \
 	tests/daemon/test-network-send-provider \
@@ -58,6 +59,14 @@ tests_daemon_test_cache_version_provider_SOURCES = \
 	$(NULL)
 tests_daemon_test_cache_version_provider_CPPFLAGS = $(DAEMON_TEST_FLAGS)
 tests_daemon_test_cache_version_provider_LDADD = $(DAEMON_TEST_LIBS)
+
+tests_daemon_test_circular_file_SOURCES = \
+	tests/daemon/test-circular-file.c \
+	daemon/emer-circular-file.c daemon/emer-circular-file.h \
+	shared/metrics-util.c shared/metrics-util.h \
+	$(NULL)
+tests_daemon_test_circular_file_CPPFLAGS = $(DAEMON_TEST_FLAGS)
+tests_daemon_test_circular_file_LDADD = $(DAEMON_TEST_LIBS)
 
 tests_daemon_test_daemon_dbusdaemon_SOURCES = \
 	daemon/emer-daemon.c daemon/emer-daemon.h \
@@ -104,6 +113,7 @@ tests_daemon_test_persistent_cache_SOURCES = \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
 	daemon/emer-cache-size-provider.c daemon/emer-cache-size-provider.h \
 	daemon/emer-cache-version-provider.c daemon/emer-cache-version-provider.h \
+	tests/daemon/mock-circular-file.c daemon/emer-circular-file.h \
 	shared/metrics-util.c shared/metrics-util.h \
 	$(NULL)
 tests_daemon_test_persistent_cache_CPPFLAGS = $(DAEMON_TEST_FLAGS)
@@ -120,6 +130,7 @@ TESTS = \
 	tests/daemon/test-boot-id-provider \
 	tests/daemon/test-cache-size-provider \
 	tests/daemon/test-cache-version-provider \
+	tests/daemon/test-circular-file \
 	tests/daemon/test-daemon.dbusdaemon \
 	tests/daemon/test-machine-id-provider \
 	tests/daemon/test-network-send-provider \

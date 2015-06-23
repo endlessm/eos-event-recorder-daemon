@@ -66,22 +66,39 @@
 #define DEV_NETWORK_SEND_INTERVAL (60u * 15u) // Fifteen minutes
 #define PRODUCTION_NETWORK_SEND_INTERVAL (60u * 60u) // One hour
 
-/*
- * This is the default maximum length for each event buffer. It is set based on
- * the assumption that events average 100 bytes each. The desired maximum
- * capacity of all three event buffers combined is 100 kB. Thus,
- * (10,2400 bytes) / ((100 bytes / event) * 3 buffers) ~= 341 events / buffer.
- *
- * TODO: Use the actual size of the events to determine the limit, not the
- * estimated size.
- */
-#define DEFAULT_METRICS_PER_BUFFER_MAX 341
-
 #define WHAT "shutdown"
 #define WHO "EndlessOS Event Recorder Daemon"
 #define WHY "Flushing events to disk"
 #define MODE "delay"
 #define INHIBIT_ARGS "('" WHAT "', '" WHO "', '" WHY "', '" MODE "')"
+
+#define EVENT_VALUE_TYPE_STRING "(xmv)"
+#define EVENT_VALUE_ARRAY_TYPE_STRING "a" EVENT_VALUE_TYPE_STRING
+#define EVENT_VALUE_ARRAY_TYPE G_VARIANT_TYPE (EVENT_VALUE_ARRAY_TYPE_STRING)
+
+#define SINGULAR_TYPE_STRING "(uayxmv)"
+#define AGGREGATE_TYPE_STRING "(uayxxmv)"
+#define SEQUENCE_TYPE_STRING "(uay" EVENT_VALUE_ARRAY_TYPE_STRING ")"
+
+#define SINGULAR_TYPE G_VARIANT_TYPE (SINGULAR_TYPE_STRING)
+#define AGGREGATE_TYPE G_VARIANT_TYPE (AGGREGATE_TYPE_STRING)
+#define SEQUENCE_TYPE G_VARIANT_TYPE (SEQUENCE_TYPE_STRING)
+
+#define SINGULAR_ARRAY_TYPE_STRING "a" SINGULAR_TYPE_STRING
+#define AGGREGATE_ARRAY_TYPE_STRING "a" AGGREGATE_TYPE_STRING
+#define SEQUENCE_ARRAY_TYPE_STRING "a" SEQUENCE_TYPE_STRING
+
+#define SINGULAR_ARRAY_TYPE G_VARIANT_TYPE (SINGULAR_ARRAY_TYPE_STRING)
+#define AGGREGATE_ARRAY_TYPE G_VARIANT_TYPE (AGGREGATE_ARRAY_TYPE_STRING)
+#define SEQUENCE_ARRAY_TYPE G_VARIANT_TYPE (SEQUENCE_ARRAY_TYPE_STRING)
+
+#define REQUEST_TYPE_STRING "(ixxay" SINGULAR_ARRAY_TYPE_STRING \
+  AGGREGATE_ARRAY_TYPE_STRING SEQUENCE_ARRAY_TYPE_STRING ")"
+
+#define RETRY_TYPE_STRING "(ixx@ay@" SINGULAR_ARRAY_TYPE_STRING "@" \
+  AGGREGATE_ARRAY_TYPE_STRING "@" SEQUENCE_ARRAY_TYPE_STRING ")"
+
+#define MAX_REQUEST_PAYLOAD 100000 /* 100 kB */
 
 #define METRICS_DISABLED_MESSAGE "Could not upload events because the " \
   "metrics system is disabled. You may enable the metrics system via " \
@@ -95,6 +112,8 @@ typedef struct _NetworkCallbackData
 {
   EmerDaemon *daemon;
   GVariant *request_body;
+  guint64 token;
+  gsize num_buffer_events;
   gint attempt_num;
   GTask *upload_task;
 } NetworkCallbackData;
@@ -109,6 +128,10 @@ typedef struct _EmerDaemonPrivate
   gboolean uploading;
 
   SoupSession *http_session;
+
+  GPtrArray *variant_array;
+  gsize num_bytes_buffered;
+  gboolean have_logged_overflow;
 
   /* Private storage for public properties */
 
@@ -127,19 +150,7 @@ typedef struct _EmerDaemonPrivate
 
   gboolean recording_enabled;
 
-  /* Storage buffers for different event types */
-
-  SingularEvent * volatile singular_buffer;
-  gint singular_buffer_length;
-  volatile gint num_singulars_buffered;
-
-  AggregateEvent * volatile aggregate_buffer;
-  gint aggregate_buffer_length;
-  volatile gint num_aggregates_buffered;
-
-  SequenceEvent * volatile sequence_buffer;
-  gint sequence_buffer_length;
-  volatile gint num_sequences_buffered;
+  gsize max_bytes_buffered;
 } EmerDaemonPrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerDaemon, emer_daemon, G_TYPE_OBJECT)
@@ -154,9 +165,7 @@ enum
   PROP_NETWORK_SEND_PROVIDER,
   PROP_PERMISSIONS_PROVIDER,
   PROP_PERSISTENT_CACHE,
-  PROP_SINGULAR_BUFFER_LENGTH,
-  PROP_AGGREGATE_BUFFER_LENGTH,
-  PROP_SEQUENCE_BUFFER_LENGTH,
+  PROP_MAX_BYTES_BUFFERED,
   NPROPS
 };
 
@@ -220,15 +229,101 @@ is_uuid (GVariant *variant)
 }
 
 static void
-uuid_from_variant (GVariant *variant,
-                   uuid_t    uuid)
+buffer_event (EmerDaemon *self,
+              GVariant   *event)
 {
-  g_variant_ref_sink (variant);
-  gsize variant_length;
-  const guchar *array =
-    g_variant_get_fixed_array (variant, &variant_length, sizeof (guchar));
-  uuid_copy (uuid, array);
-  g_variant_unref (variant);
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  g_variant_ref_sink (event);
+  gsize event_cost = emer_persistent_cache_cost (event);
+  gsize new_bytes_buffered = priv->num_bytes_buffered + event_cost;
+  if (event_cost > MAX_REQUEST_PAYLOAD || /* Don't get wedged by large event. */
+      new_bytes_buffered > priv->max_bytes_buffered)
+    {
+      g_variant_unref (event);
+      if (event_cost > MAX_REQUEST_PAYLOAD)
+        {
+          g_warning ("Dropping %" G_GSIZE_FORMAT "-byte event. The maximum "
+                     "permissable event size (including type string with "
+                     "null-terminating byte) is %d bytes.",
+                     event_cost, MAX_REQUEST_PAYLOAD);
+        }
+      else if (!priv->have_logged_overflow)
+        {
+          g_warning ("The event buffer overflowed for the first time in the "
+                     "life of this event recorder daemon. The maximum number "
+                     "of bytes that may be buffered is %" G_GSIZE_FORMAT ".",
+                     priv->max_bytes_buffered);
+          priv->have_logged_overflow = TRUE;
+        }
+      return;
+    }
+
+  g_ptr_array_add (priv->variant_array, event);
+  priv->num_bytes_buffered = new_bytes_buffered;
+}
+
+static void
+remove_events (EmerDaemon *self,
+               gsize       num_events)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  if (num_events == 0)
+    return;
+
+  for (gint i = 0; i < num_events; i++)
+    {
+      GVariant *curr_variant = g_ptr_array_index (priv->variant_array, i);
+      priv->num_bytes_buffered -= emer_persistent_cache_cost (curr_variant);
+    }
+
+  g_ptr_array_remove_range (priv->variant_array, 0u, num_events);
+}
+
+static void
+flush_to_persistent_cache (EmerDaemon *self)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  if (!priv->recording_enabled)
+    return;
+
+  gsize num_events_stored;
+  GError *error = NULL;
+  gboolean store_succeeded =
+    emer_persistent_cache_store (priv->persistent_cache,
+                                 (GVariant **) priv->variant_array->pdata,
+                                 priv->variant_array->len,
+                                 &num_events_stored,
+                                 &error);
+  if (!store_succeeded)
+    {
+      g_warning ("Failed to flush buffer to persistent cache: %s.",
+                 error->message);
+      g_error_free (error);
+      return;
+    }
+
+  remove_events (self, num_events_stored);
+}
+
+static void
+remove_from_persistent_cache (EmerDaemon *self,
+                              guint64     token)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  GError *error = NULL;
+  gboolean remove_succeeded =
+    emer_persistent_cache_remove (priv->persistent_cache, token, &error);
+  if (!remove_succeeded)
+    {
+      g_warning ("Failed to remove events from persistent cache with token %"
+                 G_GUINT64_FORMAT ". They may be resent to the server. Error: "
+                 "%s.", token, error->message);
+      g_error_free (error);
+    }
 }
 
 static void
@@ -311,10 +406,9 @@ get_updated_request_body (EmerDaemon *self,
 {
   gint32 send_number;
   GVariant *machine_id, *singulars, *aggregates, *sequences;
-  g_variant_get (request_body, "(ixx@ay@a(uayxmv)@a(uayxxmv)@a(uaya(xmv)))",
-                 &send_number, NULL /* relative time */,
-                 NULL /* absolute time */, &machine_id, &singulars, &aggregates,
-                 &sequences);
+  g_variant_get (request_body, RETRY_TYPE_STRING, &send_number,
+                 NULL /* relative time */, NULL /* absolute time */,
+                 &machine_id, &singulars, &aggregates, &sequences);
 
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.
@@ -328,10 +422,10 @@ get_updated_request_body (EmerDaemon *self,
   gint64 little_endian_absolute_timestamp =
     swap_bytes_64_if_big_endian (absolute_timestamp);
 
-  return g_variant_new ("(ixx@ay@a(uayxmv)@a(uayxxmv)@a(uaya(xmv)))",
-                        send_number, little_endian_relative_timestamp,
-                        little_endian_absolute_timestamp, machine_id,
-                        singulars, aggregates, sequences);
+  return g_variant_new (RETRY_TYPE_STRING, send_number,
+                        little_endian_relative_timestamp,
+                        little_endian_absolute_timestamp,
+                        machine_id, singulars, aggregates, sequences);
 }
 
 // Handles HTTP or HTTPS responses.
@@ -348,6 +442,9 @@ handle_http_response (SoupSession         *http_session,
   if (SOUP_STATUS_IS_SUCCESSFUL (status_code))
     {
       g_task_return_boolean (callback_data->upload_task, TRUE);
+      remove_from_persistent_cache (self, callback_data->token);
+      remove_events (self, callback_data->num_buffer_events);
+      flush_to_persistent_cache (self);
       finish_network_callback (callback_data);
       return;
     }
@@ -426,131 +523,103 @@ handle_http_response (SoupSession         *http_session,
 }
 
 static void
-drain_singulars_buffer (EmerDaemonPrivate *priv,
-                        GVariantBuilder   *singulars_builder)
+add_events_to_builders (GVariant       **events,
+                        gsize            num_events,
+                        GVariantBuilder *singulars,
+                        GVariantBuilder *aggregates,
+                        GVariantBuilder *sequences)
 {
-  SingularEvent *singular_buffer = priv->singular_buffer;
-  gint num_singulars = priv->num_singulars_buffered;
-  for (gint i = 0; i < num_singulars; ++i)
+  for (gsize i = 0; i < num_events; i++)
     {
-      SingularEvent *curr_singular = singular_buffer + i;
-      GVariantBuilder event_id_builder;
-      get_uuid_builder (curr_singular->event_id, &event_id_builder);
-      EventValue curr_event_value = curr_singular->event_value;
-      g_variant_builder_add (singulars_builder, "(uayxmv)",
-                             curr_singular->user_id,
-                             &event_id_builder,
-                             curr_event_value.relative_timestamp,
-                             curr_event_value.auxiliary_payload);
-      trash_singular_event (curr_singular);
+      GVariant *curr_event = events[i];
+      const GVariantType *event_type = g_variant_get_type (curr_event);
+      if (g_variant_type_equal (event_type, SINGULAR_TYPE))
+        g_variant_builder_add_value (singulars, curr_event);
+      else if (g_variant_type_equal (event_type, AGGREGATE_TYPE))
+        g_variant_builder_add_value (aggregates, curr_event);
+      else if (g_variant_type_equal (event_type, SEQUENCE_TYPE))
+        g_variant_builder_add_value (sequences, curr_event);
+      else
+        g_error ("An event has an unexpected variant type.");
     }
-  priv->num_singulars_buffered = 0;
 }
 
-static void
-drain_aggregates_buffer (EmerDaemonPrivate *priv,
-                         GVariantBuilder   *aggregates_builder)
-{
-  AggregateEvent *aggregate_buffer = priv->aggregate_buffer;
-  gint num_aggregates = priv->num_aggregates_buffered;
-  for (gint i = 0; i < num_aggregates; ++i)
-    {
-      AggregateEvent *curr_aggregate = aggregate_buffer + i;
-      SingularEvent curr_event = curr_aggregate->event;
-      GVariantBuilder event_id_builder;
-      get_uuid_builder (curr_event.event_id, &event_id_builder);
-      EventValue curr_event_value = curr_event.event_value;
-      g_variant_builder_add (aggregates_builder, "(uayxxmv)",
-                             curr_event.user_id,
-                             &event_id_builder,
-                             curr_aggregate->num_events,
-                             curr_event_value.relative_timestamp,
-                             curr_event_value.auxiliary_payload);
-      trash_aggregate_event (curr_aggregate);
-    }
-  priv->num_aggregates_buffered = 0;
-}
-
-static void
-drain_sequences_buffer (EmerDaemonPrivate *priv,
-                        GVariantBuilder   *sequences_builder)
-{
-  SequenceEvent *sequence_buffer = priv->sequence_buffer;
-  gint num_sequences = priv->num_sequences_buffered;
-  for (gint i = 0; i < num_sequences; ++i)
-    {
-      SequenceEvent *curr_sequence = sequence_buffer + i;
-
-      GVariantBuilder event_values_builder;
-      g_variant_builder_init (&event_values_builder, G_VARIANT_TYPE ("a(xmv)"));
-      for (gint j = 0; j < curr_sequence->num_event_values; ++j)
-        {
-          EventValue *curr_event_value = curr_sequence->event_values + j;
-          g_variant_builder_add (&event_values_builder, "(xmv)",
-                                 curr_event_value->relative_timestamp,
-                                 curr_event_value->auxiliary_payload);
-        }
-
-      GVariantBuilder event_id_builder;
-      get_uuid_builder (curr_sequence->event_id, &event_id_builder);
-
-      g_variant_builder_add (sequences_builder, "(uaya(xmv))",
-                             curr_sequence->user_id, &event_id_builder,
-                             &event_values_builder);
-      trash_sequence_event (curr_sequence);
-    }
-  priv->num_sequences_buffered = 0;
-}
-
-/*
- * Populates the given GVariantBuilders with metric events from the persistent
- * cache. Returns TRUE on success even if there were no events found in the
- * persistent cache. Returns FALSE on failure. Regardless of success of failure,
- * the GVariantBuilders are guaranteed to be correctly initialized.
+/* Populates the given variant builders with at most MAX_REQUEST_PAYLOAD bytes
+ * of data from the persistent cache. Returns TRUE if the current network
+ * request should also include data from the in-memory buffer and FALSE
+ * otherwise. Sets read_bytes to the number of bytes of data that were read and
+ * token to a value that can be passed to emer_persistent_cache_remove to remove
+ * the events that were added to the variant builders from the persistent cache.
  */
 static gboolean
-drain_persistent_cache (EmerDaemonPrivate *priv,
-                        GVariantBuilder   *singulars_builder,
-                        GVariantBuilder   *aggregates_builder,
-                        GVariantBuilder   *sequences_builder)
+add_stored_events_to_builders (EmerDaemon        *self,
+                               gsize             *read_bytes,
+                               guint64           *token,
+                               GVariantBuilder   *singulars,
+                               GVariantBuilder   *aggregates,
+                               GVariantBuilder   *sequences)
 {
-  g_variant_builder_init (singulars_builder, G_VARIANT_TYPE ("a(uayxmv)"));
-  g_variant_builder_init (aggregates_builder, G_VARIANT_TYPE ("a(uayxxmv)"));
-  g_variant_builder_init (sequences_builder, G_VARIANT_TYPE ("a(uaya(xmv))"));
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  GVariant **list_of_singulars;
-  GVariant **list_of_aggregates;
-  GVariant **list_of_sequences;
+  GVariant **variants;
+  gsize num_variants;
+  GError *error = NULL;
+  gboolean read_succeeded =
+    emer_persistent_cache_read (priv->persistent_cache, &variants,
+                                MAX_REQUEST_PAYLOAD, &num_variants, token,
+                                &error);
+  if (!read_succeeded)
+    {
+      g_warning ("Could not read from persistent cache: %s.", error->message);
+      g_error_free (error);
+      *read_bytes = 0;
+      *token = 0;
+      return TRUE;
+    }
 
-  /*
-   * TODO: This value is currently unused by the persistent cache, but should be
-   * updated to a sensible value when the PC starts using it.
-   */
-  gint maximum_bytes_to_drain = 92160;
-  if (!emer_persistent_cache_drain_metrics (priv->persistent_cache,
-                                            &list_of_singulars,
-                                            &list_of_aggregates,
-                                            &list_of_sequences,
-                                            maximum_bytes_to_drain))
-    return FALSE;
+  add_events_to_builders (variants, num_variants,
+                          singulars, aggregates, sequences);
 
-  for (gint i = 0; list_of_singulars[i] != NULL; i++)
-    g_variant_builder_add_value (singulars_builder, list_of_singulars[i]);
-  g_free (list_of_singulars);
+  gsize curr_read_bytes = 0;
+  for (gsize i = 0; i < num_variants; i++)
+    curr_read_bytes += emer_persistent_cache_cost (variants[i]);
 
-  for (gint i = 0; list_of_aggregates[i] != NULL; i++)
-    g_variant_builder_add_value (aggregates_builder, list_of_aggregates[i]);
-  g_free (list_of_aggregates);
+  g_free (variants);
 
-  for (gint i = 0; list_of_sequences[i] != NULL; i++)
-    g_variant_builder_add_value (sequences_builder, list_of_sequences[i]);
-  g_free (list_of_sequences);
+  *read_bytes = curr_read_bytes;
 
-  return TRUE;
+  return !emer_persistent_cache_has_more (priv->persistent_cache, *token);
+}
+
+static void
+add_buffered_events_to_builders (EmerDaemon      *self,
+                                 gsize            num_bytes,
+                                 gsize           *num_variants,
+                                 GVariantBuilder *singulars,
+                                 GVariantBuilder *aggregates,
+                                 GVariantBuilder *sequences)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  gsize curr_bytes = 0, curr_num_variants = 0;
+  for (; curr_num_variants < priv->variant_array->len; curr_num_variants++)
+    {
+      GVariant *curr_event =
+        g_ptr_array_index (priv->variant_array, curr_num_variants);
+      curr_bytes += emer_persistent_cache_cost (curr_event);
+      if (curr_bytes > num_bytes)
+        break;
+    }
+
+  add_events_to_builders ((GVariant **) priv->variant_array->pdata,
+                          curr_num_variants, singulars, aggregates, sequences);
+  *num_variants = curr_num_variants;
 }
 
 static GVariant *
 create_request_body (EmerDaemon *self,
+                     guint64    *token,
+                     gsize      *num_buffer_events,
                      GError    **error)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
@@ -572,17 +641,22 @@ create_request_body (EmerDaemon *self,
     emer_network_send_provider_get_send_number (priv->network_send_provider);
   emer_network_send_provider_increment_send_number (priv->network_send_provider);
 
-  GVariantBuilder singulars_builder;
-  GVariantBuilder aggregates_builder;
-  GVariantBuilder sequences_builder;
+  GVariantBuilder singulars, aggregates, sequences;
+  g_variant_builder_init (&singulars, SINGULAR_ARRAY_TYPE);
+  g_variant_builder_init (&aggregates, AGGREGATE_ARRAY_TYPE);
+  g_variant_builder_init (&sequences, SEQUENCE_ARRAY_TYPE);
 
-  // We don't care whether this failed or not and don't check the return value.
-  drain_persistent_cache (priv, &singulars_builder, &aggregates_builder,
-                          &sequences_builder);
+  gsize num_bytes_read;
+  gboolean add_from_buffer =
+    add_stored_events_to_builders (self, &num_bytes_read, token,
+                                   &singulars, &aggregates, &sequences);
 
-  drain_singulars_buffer (priv, &singulars_builder);
-  drain_aggregates_buffer (priv, &aggregates_builder);
-  drain_sequences_buffer (priv, &sequences_builder);
+  if (add_from_buffer)
+    {
+      gsize space_remaining = MAX_REQUEST_PAYLOAD - num_bytes_read;
+      add_buffered_events_to_builders (self, space_remaining, num_buffer_events,
+                                       &singulars, &aggregates, &sequences);
+    }
 
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.
@@ -592,9 +666,9 @@ create_request_body (EmerDaemon *self,
     return NULL;
 
   GVariant *request_body =
-    g_variant_new ("(ixxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))", send_number,
-                   relative_timestamp, absolute_timestamp, &machine_id_builder,
-                   &singulars_builder, &aggregates_builder, &sequences_builder);
+    g_variant_new (REQUEST_TYPE_STRING, send_number,
+                   relative_timestamp, absolute_timestamp,
+                   &machine_id_builder, &singulars, &aggregates, &sequences);
 
   g_variant_ref_sink (request_body);
   GVariant *little_endian_request_body =
@@ -605,11 +679,9 @@ create_request_body (EmerDaemon *self,
 }
 
 static GVariant *
-get_nullable_payload (gboolean  has_payload,
-                      GVariant *payload)
+get_nullable_payload (GVariant *payload,
+                      gboolean  has_payload)
 {
-  g_variant_ref_sink (payload);
-
   if (!has_payload)
     {
       g_variant_unref (payload);
@@ -617,90 +689,6 @@ get_nullable_payload (gboolean  has_payload,
     }
 
   return payload;
-}
-
-/*
- * Trashes the first num_singulars_stored events in the singular buffer and
- * updates the number of singulars buffered accordingly. Slides the remaining
- * events over to the beginning of the buffer. Does not free the singular buffer
- * itself.
- */
-static void
-trash_stored_singulars (EmerDaemon *self,
-                        gint        num_singulars_stored)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  for (gint i = 0; i < num_singulars_stored; i++)
-    trash_singular_event (priv->singular_buffer + i);
-
-  priv->num_singulars_buffered -= num_singulars_stored;
-  memmove (priv->singular_buffer, priv->singular_buffer + num_singulars_stored,
-           sizeof (SingularEvent) * priv->num_singulars_buffered);
-}
-
-/*
- * Behaves like trash_stored_singulars() but for aggregates rather than
- * singulars.
- */
-static void
-trash_stored_aggregates (EmerDaemon *self,
-                         gint        num_aggregates_stored)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  for (gint i = 0; i < num_aggregates_stored; i++)
-    trash_aggregate_event (priv->aggregate_buffer + i);
-
-  priv->num_aggregates_buffered -= num_aggregates_stored;
-  memmove (priv->aggregate_buffer,
-           priv->aggregate_buffer + num_aggregates_stored,
-           sizeof (AggregateEvent) * priv->num_aggregates_buffered);
-}
-
-/*
- * Behaves like trash_stored_singulars() but for sequences rather than
- * singulars.
- */
-static void
-trash_stored_sequences (EmerDaemon *self,
-                        gint        num_sequences_stored)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  for (gint i = 0; i < num_sequences_stored; i++)
-    trash_sequence_event (priv->sequence_buffer + i);
-
-  priv->num_sequences_buffered -= num_sequences_stored;
-  memmove (priv->sequence_buffer, priv->sequence_buffer + num_sequences_stored,
-           sizeof (SequenceEvent) * priv->num_sequences_buffered);
-}
-
-static void
-flush_to_persistent_cache (EmerDaemon *self)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  if (!priv->recording_enabled)
-    return;
-
-  gint num_singulars_stored, num_aggregates_stored, num_sequences_stored;
-  capacity_t capacity;
-  emer_persistent_cache_store_metrics (priv->persistent_cache,
-                                       priv->singular_buffer,
-                                       priv->aggregate_buffer,
-                                       priv->sequence_buffer,
-                                       priv->num_singulars_buffered,
-                                       priv->num_aggregates_buffered,
-                                       priv->num_sequences_buffered,
-                                       &num_singulars_stored,
-                                       &num_aggregates_stored,
-                                       &num_sequences_stored,
-                                       &capacity);
-
-  trash_stored_singulars (self, num_singulars_stored);
-  trash_stored_aggregates (self, num_aggregates_stored);
-  trash_stored_sequences (self, num_sequences_stored);
 }
 
 static void
@@ -723,7 +711,10 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
       goto handle_upload_failed;
     }
 
-  GVariant *request_body = create_request_body (self, &error);
+  guint64 token;
+  gsize num_buffer_events;
+  GVariant *request_body =
+    create_request_body (self, &token, &num_buffer_events, &error);
   if (request_body == NULL)
     {
       g_task_return_error (upload_task, error);
@@ -755,6 +746,8 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
   NetworkCallbackData *callback_data = g_new (NetworkCallbackData, 1);
   callback_data->daemon = self;
   callback_data->request_body = request_body;
+  callback_data->token = token;
+  callback_data->num_buffer_events = num_buffer_events;
   callback_data->attempt_num = 0;
   callback_data->upload_task = upload_task;
   soup_session_queue_message (priv->http_session, http_message,
@@ -1180,9 +1173,10 @@ set_persistent_cache (EmerDaemon          *self,
     {
       GError *error = NULL;
       priv->persistent_cache =
-        emer_persistent_cache_new (NULL /* GCancellable */, &error);
+        emer_persistent_cache_new (PERSISTENT_CACHE_DIR, &error);
       if (priv->persistent_cache == NULL)
         {
+          g_warning ("Could not create persistent cache: %s.", error->message);
           g_error_free (error);
         }
     }
@@ -1193,30 +1187,11 @@ set_persistent_cache (EmerDaemon          *self,
 }
 
 static void
-set_singular_buffer_length (EmerDaemon *self,
-                            gint        length)
+set_max_bytes_buffered (EmerDaemon *self,
+                        gsize       max_bytes_buffered)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  priv->singular_buffer_length = length;
-  priv->singular_buffer = g_new (SingularEvent, length);
-}
-
-static void
-set_aggregate_buffer_length (EmerDaemon *self,
-                             gint        length)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  priv->aggregate_buffer_length = length;
-  priv->aggregate_buffer = g_new (AggregateEvent, length);
-}
-
-static void
-set_sequence_buffer_length (EmerDaemon *self,
-                            gint        length)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  priv->sequence_buffer_length = length;
-  priv->sequence_buffer = g_new (SequenceEvent, length);
+  priv->max_bytes_buffered = max_bytes_buffered;
 }
 
 static void
@@ -1271,16 +1246,8 @@ emer_daemon_set_property (GObject      *object,
       set_persistent_cache (self, g_value_get_object (value));
       break;
 
-    case PROP_SINGULAR_BUFFER_LENGTH:
-      set_singular_buffer_length (self, g_value_get_int (value));
-      break;
-
-    case PROP_AGGREGATE_BUFFER_LENGTH:
-      set_aggregate_buffer_length (self, g_value_get_int (value));
-      break;
-
-    case PROP_SEQUENCE_BUFFER_LENGTH:
-      set_sequence_buffer_length (self, g_value_get_int (value));
+    case PROP_MAX_BYTES_BUFFERED:
+      set_max_bytes_buffered (self, g_value_get_ulong (value));
       break;
 
     default:
@@ -1307,15 +1274,13 @@ emer_daemon_finalize (GObject *object)
   soup_session_abort (priv->http_session);
   g_clear_object (&priv->http_session);
 
+  g_clear_pointer (&priv->variant_array, g_ptr_array_unref);
+
   g_rand_free (priv->rand);
   g_free (priv->server_uri);
   g_clear_object (&priv->machine_id_provider);
   g_clear_object (&priv->network_send_provider);
   g_clear_object (&priv->permissions_provider);
-
-  free_singular_buffer (priv->singular_buffer, priv->num_singulars_buffered);
-  free_aggregate_buffer (priv->aggregate_buffer, priv->num_aggregates_buffered);
-  free_sequence_buffer (priv->sequence_buffer, priv->num_sequences_buffered);
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->finalize (object);
 }
@@ -1432,31 +1397,13 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                          G_PARAM_STATIC_STRINGS);
 
   /* Blurb string is good enough default documentation for this */
-  emer_daemon_props[PROP_SINGULAR_BUFFER_LENGTH] =
-    g_param_spec_int ("singular-buffer-length", "Buffer length singular",
-                       "The number of events allowed to be stored in the "
-                       "individual metric buffer",
-                       -1, G_MAXINT, DEFAULT_METRICS_PER_BUFFER_MAX,
-                       G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
-                       G_PARAM_STATIC_STRINGS);
-
-  /* Blurb string is good enough default documentation for this */
-  emer_daemon_props[PROP_AGGREGATE_BUFFER_LENGTH] =
-    g_param_spec_int ("aggregate-buffer-length", "Buffer length aggregate",
-                      "The number of events allowed to be stored in the "
-                      "aggregate metric buffer",
-                      -1, G_MAXINT, DEFAULT_METRICS_PER_BUFFER_MAX,
-                      G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
-                      G_PARAM_STATIC_STRINGS);
-
-  /* Blurb string is good enough default documentation for this */
-  emer_daemon_props[PROP_SEQUENCE_BUFFER_LENGTH] =
-    g_param_spec_int ("sequence-buffer-length", "Buffer length sequence",
-                      "The number of events allowed to be stored in the "
-                      "sequence metric buffer",
-                      -1, G_MAXINT, DEFAULT_METRICS_PER_BUFFER_MAX,
-                      G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
-                      G_PARAM_STATIC_STRINGS);
+  emer_daemon_props[PROP_MAX_BYTES_BUFFERED] =
+    g_param_spec_ulong ("max-bytes-buffered", "Max bytes buffered",
+                        "The maximum number of bytes of event data that may be "
+                        "buffered in memory. Does not include overhead.",
+                        0ul, G_MAXULONG, 100000ul /* 100 kB */,
+                        G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
+                        G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, NPROPS, emer_daemon_props);
 
@@ -1492,6 +1439,9 @@ emer_daemon_init (EmerDaemon *self)
                                    NULL);
 
   g_free (user_agent);
+
+  priv->variant_array =
+    g_ptr_array_new_with_free_func ((GDestroyNotify) g_variant_unref);
 }
 
 /*
@@ -1525,9 +1475,8 @@ emer_daemon_new (void)
  * @persistent_cache: (allow-none): The #EmerPersistentCache in which to store
  *   metrics locally when they can't be sent over the network, or %NULL to use
  *   the default.
- * @buffer_length: The maximum number of events to store in each of the
- *   in-memory buffers. There are three in-memory buffers, one for singulars,
- *   for aggregates, and one for sequences.
+ * @max_bytes_buffered: The maximum number of bytes of event data that may be
+ *   stored in memory. Does not include overhead.
  *
  * Returns: (transfer full): a new customized #EmerDaemon. Use emer_daemon_new
  * to use the default configuration.
@@ -1540,7 +1489,7 @@ emer_daemon_new_full (GRand                   *rand,
                       EmerNetworkSendProvider *network_send_provider,
                       EmerPermissionsProvider *permissions_provider,
                       EmerPersistentCache     *persistent_cache,
-                      gint                     buffer_length)
+                      gulong                   max_bytes_buffered)
 {
   return g_object_new (EMER_TYPE_DAEMON,
                        "random-number-generator", rand,
@@ -1550,9 +1499,7 @@ emer_daemon_new_full (GRand                   *rand,
                        "network-send-provider", network_send_provider,
                        "permissions-provider", permissions_provider,
                        "persistent-cache", persistent_cache,
-                       "singular-buffer-length", buffer_length,
-                       "aggregate-buffer-length", buffer_length,
-                       "sequence-buffer-length", buffer_length,
+                       "max-bytes-buffered", max_bytes_buffered,
                        NULL);
 }
 
@@ -1577,26 +1524,22 @@ emer_daemon_record_singular_event (EmerDaemon *self,
     }
 
   gint64 boot_offset;
+  GError *error = NULL;
   if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
-                                                   &boot_offset, NULL, FALSE))
+                                                   &boot_offset, &error, FALSE))
     {
       g_warning ("Unable to correct event's relative timestamp. Dropping "
-                 "event.");
+                 "event. Error: %s.", error->message);
+      g_error_free (error);
       return;
     }
   relative_timestamp += boot_offset;
 
-  if (priv->num_singulars_buffered < priv->singular_buffer_length)
-    {
-      SingularEvent *singular = priv->singular_buffer +
-        priv->num_singulars_buffered;
-      priv->num_singulars_buffered++;
-      singular->user_id = user_id;
-      uuid_from_variant (event_id, singular->event_id);
-      GVariant *nullable_payload = get_nullable_payload (has_payload, payload);
-      EventValue event_value = { relative_timestamp, nullable_payload };
-      singular->event_value = event_value;
-    }
+  GVariant *nullable_payload = get_nullable_payload (payload, has_payload);
+  GVariant *singular =
+    g_variant_new ("(u@ayxmv)", user_id, event_id, relative_timestamp,
+                   nullable_payload);
+  buffer_event (self, singular);
 }
 
 void
@@ -1621,29 +1564,22 @@ emer_daemon_record_aggregate_event (EmerDaemon *self,
     }
 
   gint64 boot_offset;
+  GError *error = NULL;
   if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
-                                                   &boot_offset, NULL, FALSE))
+                                                   &boot_offset, &error, FALSE))
     {
       g_warning ("Unable to correct event's relative timestamp. Dropping "
-                 "event.");
+                 "event. Error: %s.", error->message);
+      g_error_free (error);
       return;
     }
   relative_timestamp += boot_offset;
 
-  if (priv->num_aggregates_buffered < priv->aggregate_buffer_length)
-    {
-      AggregateEvent *aggregate = priv->aggregate_buffer +
-        priv->num_aggregates_buffered;
-      priv->num_aggregates_buffered++;
-      SingularEvent singular;
-      singular.user_id = user_id;
-      uuid_from_variant (event_id, singular.event_id);
-      aggregate->num_events = num_events;
-      GVariant *nullable_payload = get_nullable_payload (has_payload, payload);
-      EventValue event_value = { relative_timestamp, nullable_payload };
-      singular.event_value = event_value;
-      aggregate->event = singular;
-    }
+  GVariant *nullable_payload = get_nullable_payload (payload, has_payload);
+  GVariant *aggregate =
+    g_variant_new ("(u@ayxxmv)", user_id, event_id, num_events,
+                   relative_timestamp, nullable_payload);
+  buffer_event (self, aggregate);
 }
 
 void
@@ -1665,45 +1601,39 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
     }
 
   gint64 boot_offset;
+  GError *error = NULL;
   if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
-                                                   &boot_offset, NULL, FALSE))
+                                                   &boot_offset, &error, FALSE))
     {
       g_warning ("Unable to correct event's relative timestamp. Dropping "
-                 "event.");
+                 "event. Error: %s.", error->message);
+      g_error_free (error);
       return;
     }
 
-  if (priv->num_sequences_buffered < priv->sequence_buffer_length)
+  g_variant_ref_sink (event_values);
+  gsize num_event_values = g_variant_n_children (event_values);
+  GVariantBuilder event_values_builder;
+  g_variant_builder_init (&event_values_builder, EVENT_VALUE_ARRAY_TYPE);
+  for (gsize i = 0; i < num_event_values; i++)
     {
-      SequenceEvent *event_sequence =
-        priv->sequence_buffer + priv->num_sequences_buffered;
-      priv->num_sequences_buffered++;
+      gint64 relative_timestamp;
+      gboolean has_payload;
+      GVariant *payload;
+      g_variant_get_child (event_values, i, "(xbv)", &relative_timestamp,
+                           &has_payload, &payload);
 
-      event_sequence->user_id = user_id;
-      uuid_from_variant (event_id, event_sequence->event_id);
-
-      g_variant_ref_sink (event_values);
-      gsize num_events = g_variant_n_children (event_values);
-      event_sequence->event_values = g_new (EventValue, num_events);
-      for(gsize index = 0; index < num_events; index++)
-        {
-          gint64 relative_timestamp;
-          gboolean has_payload;
-          GVariant *maybe_payload;
-
-          g_variant_get_child (event_values, index, "(xbv)",
-                               &relative_timestamp, &has_payload,
-                               &maybe_payload);
-
-          relative_timestamp += boot_offset;
-          GVariant *nullable_payload = has_payload ? maybe_payload : NULL;
-          EventValue event_value = { relative_timestamp, nullable_payload };
-          event_sequence->event_values[index] = event_value;
-        }
-
-      g_variant_unref (event_values);
-      event_sequence->num_event_values = num_events;
+      relative_timestamp += boot_offset;
+      GVariant *nullable_payload = get_nullable_payload (payload, has_payload);
+      g_variant_builder_add (&event_values_builder, EVENT_VALUE_TYPE_STRING,
+                             relative_timestamp, nullable_payload);
     }
+
+  g_variant_unref (event_values);
+  GVariant *sequence =
+    g_variant_new ("(u@ay" EVENT_VALUE_ARRAY_TYPE_STRING ")", user_id, event_id,
+                   &event_values_builder);
+  buffer_event (self, sequence);
 }
 
 /* emer_daemon_upload_events:

@@ -116,41 +116,41 @@ struct _EmerPersistentCacheClass
   GObjectClass parent_class;
 };
 
-GType               emer_persistent_cache_get_type             (void) G_GNUC_CONST;
+GType                emer_persistent_cache_get_type             (void) G_GNUC_CONST;
 
-gboolean            emer_persistent_cache_get_boot_time_offset (EmerPersistentCache      *self,
-                                                                gint64                   *offset,
-                                                                GError                  **error,
-                                                                gboolean                  always_update_timestamps);
+gboolean             emer_persistent_cache_get_boot_time_offset (EmerPersistentCache      *self,
+                                                                 gint64                   *offset,
+                                                                 GError                  **error,
+                                                                 gboolean                  always_update_timestamps);
 
-EmerPersistentCache *emer_persistent_cache_new                 (GCancellable             *cancellable,
-                                                                GError                  **error);
+EmerPersistentCache *emer_persistent_cache_new                  (GCancellable             *cancellable,
+                                                                 GError                  **error);
 
-gboolean             emer_persistent_cache_drain_metrics       (EmerPersistentCache      *self,
-                                                                GVariant               ***list_of_individual_metrics,
-                                                                GVariant               ***list_of_aggregate_metrics,
-                                                                GVariant               ***list_of_sequence_metrics,
-                                                                gint                      max_num_bytes);
+gboolean             emer_persistent_cache_drain_metrics        (EmerPersistentCache      *self,
+                                                                 GVariant               ***list_of_individual_metrics,
+                                                                 GVariant               ***list_of_aggregate_metrics,
+                                                                 GVariant               ***list_of_sequence_metrics,
+                                                                 gint                      max_num_bytes);
 
-gboolean             emer_persistent_cache_store_metrics       (EmerPersistentCache      *self,
-                                                                SingularEvent            *singular_buffer,
-                                                                AggregateEvent           *aggregate_buffer,
-                                                                SequenceEvent            *sequence_buffer,
-                                                                gint                      num_singulars_buffered,
-                                                                gint                      num_aggregates_buffered,
-                                                                gint                      num_sequences_buffered,
-                                                                gint                     *num_singulars_stored,
-                                                                gint                     *num_aggregates_stored,
-                                                                gint                     *num_sequences_stored,
-                                                                capacity_t               *capacity);
+gboolean             emer_persistent_cache_store_metrics        (EmerPersistentCache      *self,
+                                                                 SingularEvent            *singular_buffer,
+                                                                 AggregateEvent           *aggregate_buffer,
+                                                                 SequenceEvent            *sequence_buffer,
+                                                                 gint                      num_singulars_buffered,
+                                                                 gint                      num_aggregates_buffered,
+                                                                 gint                      num_sequences_buffered,
+                                                                 gint                     *num_singulars_stored,
+                                                                 gint                     *num_aggregates_stored,
+                                                                 gint                     *num_sequences_stored,
+                                                                 capacity_t               *capacity);
 
-EmerPersistentCache *emer_persistent_cache_new_full            (GCancellable             *cancellable,
-                                                                GError                  **error,
-                                                                const gchar              *custom_directory,
-                                                                EmerCacheSizeProvider    *cache_size_provider,
-                                                                EmerBootIdProvider       *boot_id_provider,
-                                                                EmerCacheVersionProvider *version_provider,
-                                                                guint                     boot_offset_update_interval);
+EmerPersistentCache *emer_persistent_cache_new_full             (GCancellable             *cancellable,
+                                                                 GError                  **error,
+                                                                 const gchar              *custom_directory,
+                                                                 EmerCacheSizeProvider    *cache_size_provider,
+                                                                 EmerBootIdProvider       *boot_id_provider,
+                                                                 EmerCacheVersionProvider *version_provider,
+                                                                 guint                     boot_offset_update_interval);
 
 G_END_DECLS
 

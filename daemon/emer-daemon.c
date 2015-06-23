@@ -1184,8 +1184,6 @@ set_persistent_cache (EmerDaemon          *self,
       if (priv->persistent_cache == NULL)
         {
           g_error_free (error);
-          priv->persistent_cache = NULL;
-          return;
         }
     }
   else

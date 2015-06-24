@@ -111,7 +111,9 @@ write_default_cache_version_key_file (void)
 static void
 write_empty_metrics_file (gchar *suffix)
 {
-  gchar *path = g_strconcat (TEST_DIRECTORY, CACHE_PREFIX, suffix, NULL);
+  gchar *filename = g_strconcat (CACHE_PREFIX, suffix, NULL);
+  gchar *path = g_build_filename (TEST_DIRECTORY, filename, NULL);
+  g_free (filename);
   GFile *file = g_file_new_for_path (path);
   g_free (path);
 

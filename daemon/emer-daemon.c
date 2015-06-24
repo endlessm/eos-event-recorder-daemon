@@ -260,7 +260,7 @@ get_http_request_uri (EmerDaemon   *self,
   gchar *checksum =
     g_compute_checksum_for_data (G_CHECKSUM_SHA512, data, length);
   gchar *http_request_uri_string =
-    g_strconcat (priv->server_uri, checksum, NULL);
+    g_build_filename (priv->server_uri, checksum, NULL);
   g_free (checksum);
 
   SoupURI *http_request_uri = soup_uri_new (http_request_uri_string);
@@ -1117,7 +1117,7 @@ set_server_uri (EmerDaemon  *self,
     {
       g_free (priv->server_uri);
       priv->server_uri =
-        g_strconcat (server_uri, CLIENT_VERSION_NUMBER "/", NULL);
+        g_build_filename (server_uri, CLIENT_VERSION_NUMBER "/", NULL);
     }
 }
 

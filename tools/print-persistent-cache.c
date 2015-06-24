@@ -417,25 +417,23 @@ make_persistent_cache (GFile *directory)
       return NULL;
     }
 
-  gchar *directory_path_with_slash = g_strconcat (directory_path, "/", NULL);
-  g_free (directory_path);
 
   EmerCacheSizeProvider *cache_size_provider = emer_cache_size_provider_new ();
   EmerBootIdProvider *boot_id_provider = emer_boot_id_provider_new ();
 
   gchar *cache_version_path =
-    g_strconcat (directory_path_with_slash, CACHE_VERSION_FILENAME, NULL);
+    g_build_filename (directory_path, CACHE_VERSION_FILENAME, NULL);
   EmerCacheVersionProvider *cache_version_provider =
     emer_cache_version_provider_new_full (cache_version_path);
   g_free (cache_version_path);
 
   EmerPersistentCache *persistent_cache =
     emer_persistent_cache_new_full (NULL /* GCancellable */, &error,
-                                    directory_path_with_slash,
+                                    directory_path,
                                     cache_size_provider, boot_id_provider,
                                     cache_version_provider,
                                     BOOT_OFFSET_UPDATE_INTERVAL);
-  g_free (directory_path_with_slash);
+  g_free (directory_path);
   g_object_unref (cache_size_provider);
   g_object_unref (boot_id_provider);
   g_object_unref (cache_version_provider);

@@ -679,7 +679,7 @@ get_events_from_request (GByteArray    *request,
 
   gchar *checksum =
     g_compute_checksum_for_bytes (G_CHECKSUM_SHA512, request_bytes);
-  gchar *expected_request_path = g_strconcat ("/2/", checksum, NULL);
+  gchar *expected_request_path = g_build_filename ("/2/", checksum, NULL);
   g_free (checksum);
   g_assert_cmpstr (fixture->request_path, ==, expected_request_path);
   g_free (expected_request_path);

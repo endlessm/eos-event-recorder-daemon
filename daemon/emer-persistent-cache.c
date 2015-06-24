@@ -213,8 +213,9 @@ get_cache_file (EmerPersistentCache *self,
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  gchar *path =
-    g_strconcat (priv->cache_directory, CACHE_PREFIX, path_ending, NULL);
+  gchar *filename = g_strconcat (CACHE_PREFIX, path_ending, NULL);
+  gchar *path = g_build_filename (priv->cache_directory, filename, NULL);
+  g_free (filename);
   GFile *file = g_file_new_for_path (path);
   g_free (path);
   return file;
@@ -1491,7 +1492,7 @@ emer_persistent_cache_constructed (GObject *object)
     emer_persistent_cache_get_instance_private (self);
 
   priv->boot_metadata_file_path =
-    g_strconcat (priv->cache_directory, BOOT_OFFSET_METADATA_FILE, NULL);
+    g_build_filename (priv->cache_directory, BOOT_OFFSET_METADATA_FILE, NULL);
 
   G_OBJECT_CLASS (emer_persistent_cache_parent_class)->constructed (object);
 }

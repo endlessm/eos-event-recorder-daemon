@@ -3,6 +3,7 @@
 /tests/daemon/test-boot-id-provider
 /tests/daemon/test-cache-size-provider
 /tests/daemon/test-cache-version-provider
+/tests/daemon/test-circular-file
 /tests/daemon/test-daemon.dbusdaemon
 /tests/daemon/test-machine-id-provider
 /tests/daemon/test-network-send-provider

@@ -81,7 +81,7 @@ EmerDaemon *             emer_daemon_new_full                 (GRand            
                                                                EmerNetworkSendProvider *network_send_provider,
                                                                EmerPermissionsProvider *permissions_provider,
                                                                EmerPersistentCache     *persistent_cache,
-                                                               gint                     buffer_length);
+                                                               gulong                   max_bytes_buffered);
 
 void                     emer_daemon_record_singular_event    (EmerDaemon              *self,
                                                                guint32                  user_id,

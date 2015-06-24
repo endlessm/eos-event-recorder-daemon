@@ -28,11 +28,8 @@
 
 typedef struct _EmerPersistentCachePrivate
 {
-  GArray *singular_buffer;
-  GArray *aggregate_buffer;
-  GArray *sequence_buffer;
+  GPtrArray *variant_array;
   gint num_timestamp_updates;
-  gint store_metrics_called;
 } EmerPersistentCachePrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerPersistentCache, emer_persistent_cache,
@@ -44,17 +41,8 @@ emer_persistent_cache_init (EmerPersistentCache *self)
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  priv->singular_buffer = g_array_new (TRUE, FALSE, sizeof (GVariant *));
-  g_array_set_clear_func (priv->singular_buffer,
-                          (GDestroyNotify) g_variant_unref);
-
-  priv->aggregate_buffer = g_array_new (TRUE, FALSE, sizeof (GVariant *));
-  g_array_set_clear_func (priv->aggregate_buffer,
-                          (GDestroyNotify) g_variant_unref);
-
-  priv->sequence_buffer = g_array_new (TRUE, FALSE, sizeof (GVariant *));
-  g_array_set_clear_func (priv->sequence_buffer,
-                          (GDestroyNotify) g_variant_unref);
+  priv->variant_array =
+    g_ptr_array_new_with_free_func ((GDestroyNotify) g_variant_unref);
 }
 
 static void
@@ -64,9 +52,7 @@ emer_persistent_cache_finalize (GObject *object)
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  g_array_unref (priv->singular_buffer);
-  g_array_unref (priv->aggregate_buffer);
-  g_array_unref (priv->sequence_buffer);
+  g_ptr_array_unref (priv->variant_array);
 
   G_OBJECT_CLASS (emer_persistent_cache_parent_class)->finalize (object);
 }
@@ -79,29 +65,34 @@ emer_persistent_cache_class_init (EmerPersistentCacheClass *klass)
 }
 
 EmerPersistentCache *
-emer_persistent_cache_new (GCancellable *cancellable,
-                           GError      **error)
+emer_persistent_cache_new (const gchar *directory,
+                           GError     **error)
 {
   return g_object_new (EMER_TYPE_PERSISTENT_CACHE, NULL);
 }
 
 EmerPersistentCache *
-emer_persistent_cache_new_full (GCancellable             *cancellable,
-                                GError                  **error,
-                                const gchar              *custom_directory,
+emer_persistent_cache_new_full (const gchar              *directory,
                                 EmerCacheSizeProvider    *cache_size_provider,
                                 EmerBootIdProvider       *boot_id_provider,
                                 EmerCacheVersionProvider *version_provider,
-                                guint                     boot_offset_update_interval)
+                                guint                     boot_offset_update_interval,
+                                GError                  **error)
 {
-  return g_object_new (EMER_TYPE_PERSISTENT_CACHE, NULL);
+  g_assert_not_reached ();
+}
+
+gsize
+emer_persistent_cache_cost (GVariant *variant)
+{
+  return g_variant_get_size (variant);
 }
 
 gboolean
 emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
                                             gint64              *offset,
-                                            GError             **error,
-                                            gboolean             always_update_timestamps)
+                                            gboolean             always_update_timestamps,
+                                            GError             **error)
 {
   if (always_update_timestamps)
     {
@@ -115,99 +106,82 @@ emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
   return TRUE;
 }
 
-static void
-drain_to_c_array (GArray    **variant_array,
-                  GVariant ***variant_c_array)
-{
-  *variant_c_array = (GVariant **) g_array_free (*variant_array, FALSE);
-  *variant_array = g_array_new (TRUE, FALSE, sizeof (GVariant *));
-}
-
-// TODO: Support max_num_bytes parameter once it's supported in production.
 gboolean
-emer_persistent_cache_drain_metrics (EmerPersistentCache *self,
-                                     GVariant          ***singular_array,
-                                     GVariant          ***aggregate_array,
-                                     GVariant          ***sequence_array,
-                                     gint                 max_num_bytes)
+emer_persistent_cache_store (EmerPersistentCache *self,
+                             GVariant           **variants,
+                             gsize                num_variants,
+                             gsize               *num_variants_stored,
+                             GError             **error)
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  drain_to_c_array (&priv->singular_buffer, singular_array);
-  drain_to_c_array (&priv->aggregate_buffer, aggregate_array);
-  drain_to_c_array (&priv->sequence_buffer, sequence_array);
+  for (gsize i = 0; priv->variant_array->len < MAX_NUM_VARIANTS &&
+       i < num_variants; i++)
+    {
+      g_variant_ref_sink (variants[i]);
+      g_ptr_array_add (priv->variant_array, variants[i]);
+    }
+
+  *num_variants_stored = num_variants;
 
   return TRUE;
 }
 
-static void
-append_singulars (GArray        *singular_variants,
-                  SingularEvent *singular_structs,
-                  gint           num_singulars_buffered)
-{
-  for (gint i = 0; i < num_singulars_buffered; i++)
-    {
-      GVariant *singular = singular_to_variant (singular_structs + i);
-      g_array_append_val (singular_variants, singular);
-    }
-}
-
-static void
-append_aggregates (GArray         *aggregate_variants,
-                   AggregateEvent *aggregate_structs,
-                   gint            num_aggregates_buffered)
-{
-  for (gint i = 0; i < num_aggregates_buffered; i++)
-    {
-      GVariant *aggregate = aggregate_to_variant (aggregate_structs + i);
-      g_array_append_val (aggregate_variants, aggregate);
-    }
-}
-
-static void
-append_sequences (GArray        *sequence_variants,
-                  SequenceEvent *sequence_structs,
-                  gint           num_sequences_buffered)
-{
-  for (gint i = 0; i < num_sequences_buffered; i++)
-    {
-      GVariant *sequence = sequence_to_variant (sequence_structs + i);
-      g_array_append_val (sequence_variants, sequence);
-    }
-}
-
 gboolean
-emer_persistent_cache_store_metrics (EmerPersistentCache *self,
-                                     SingularEvent       *singular_buffer,
-                                     AggregateEvent      *aggregate_buffer,
-                                     SequenceEvent       *sequence_buffer,
-                                     gint                 num_singulars_buffered,
-                                     gint                 num_aggregates_buffered,
-                                     gint                 num_sequences_buffered,
-                                     gint                *num_singulars_stored,
-                                     gint                *num_aggregates_stored,
-                                     gint                *num_sequences_stored,
-                                     capacity_t          *capacity)
+emer_persistent_cache_read (EmerPersistentCache *self,
+                            GVariant          ***variants,
+                            gsize                cost,
+                            gsize               *num_variants,
+                            guint64             *token,
+                            GError             **error)
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  append_singulars (priv->singular_buffer, singular_buffer,
-                    num_singulars_buffered);
-  *num_singulars_stored = num_singulars_buffered;
+  gsize curr_cost = 0, curr_num_variants = 0;
+  for (; curr_num_variants < priv->variant_array->len; curr_num_variants++)
+    {
+      GVariant *curr_variant =
+        g_ptr_array_index (priv->variant_array, curr_num_variants);
+      curr_cost += emer_persistent_cache_cost (curr_variant);
+      if (curr_cost > cost)
+        break;
+    }
 
-  append_aggregates (priv->aggregate_buffer, aggregate_buffer,
-                     num_aggregates_buffered);
-  *num_aggregates_stored = num_aggregates_buffered;
+  *num_variants = curr_num_variants;
 
-  append_sequences (priv->sequence_buffer, sequence_buffer,
-                    num_sequences_buffered);
-  *num_sequences_stored = num_sequences_buffered;
+  *variants = g_new (GVariant *, curr_num_variants);
+  for (gsize i = 0; i < curr_num_variants; i++)
+    {
+      GVariant *curr_variant = g_ptr_array_index (priv->variant_array, i);
+      (*variants)[i] = deep_copy_variant (curr_variant);
+    }
 
-  *capacity = CAPACITY_LOW;
+  *token = curr_num_variants;
+  return TRUE;
+}
 
-  priv->store_metrics_called++;
+gboolean
+emer_persistent_cache_has_more (EmerPersistentCache *self,
+                                guint64              token)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  return token < priv->variant_array->len;
+}
+
+gboolean
+emer_persistent_cache_remove (EmerPersistentCache *self,
+                              guint64              token,
+                              GError             **error)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  if (token > 0)
+    g_ptr_array_remove_range (priv->variant_array, 0, token);
 
   return TRUE;
 }
@@ -221,14 +195,4 @@ mock_persistent_cache_get_num_timestamp_updates (EmerPersistentCache *self)
     emer_persistent_cache_get_instance_private (self);
 
   return priv->num_timestamp_updates;
-}
-
-/* Return number of calls to emer_persistent_cache_store_metrics() */
-gint
-mock_persistent_cache_get_store_metrics_called (EmerPersistentCache *self)
-{
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
-
-  return priv->store_metrics_called;
 }

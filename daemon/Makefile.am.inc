@@ -39,6 +39,7 @@ eos_metrics_event_recorder_SOURCES = \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
 	daemon/emer-cache-size-provider.c daemon/emer-cache-size-provider.h \
 	daemon/emer-cache-version-provider.c daemon/emer-cache-version-provider.h \
+	daemon/emer-circular-file.c daemon/emer-circular-file.h \
 	daemon/emer-daemon.c daemon/emer-daemon.h \
 	daemon/emer-machine-id-provider.c daemon/emer-machine-id-provider.h \
 	daemon/emer-network-send-provider.c daemon/emer-network-send-provider.h \

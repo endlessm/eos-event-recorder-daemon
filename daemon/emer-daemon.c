@@ -1199,7 +1199,6 @@ set_singular_buffer_length (EmerDaemon *self,
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   priv->singular_buffer_length = length;
   priv->singular_buffer = g_new (SingularEvent, length);
-  priv->num_singulars_buffered = 0;
 }
 
 static void
@@ -1209,7 +1208,6 @@ set_aggregate_buffer_length (EmerDaemon *self,
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   priv->aggregate_buffer_length = length;
   priv->aggregate_buffer = g_new (AggregateEvent, length);
-  priv->num_aggregates_buffered = 0;
 }
 
 static void
@@ -1219,7 +1217,6 @@ set_sequence_buffer_length (EmerDaemon *self,
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   priv->sequence_buffer_length = length;
   priv->sequence_buffer = g_new (SequenceEvent, length);
-  priv->num_sequences_buffered = 0;
 }
 
 static void
@@ -1483,7 +1480,6 @@ emer_daemon_init (EmerDaemon *self)
   connect_to_login_manager (self);
 
   priv->upload_queue = g_queue_new ();
-  priv->uploading = FALSE;
 
   gchar *user_agent = get_user_agent ();
 

@@ -189,10 +189,10 @@ static GKeyFile *
 load_boot_offset_key_file (void)
 {
   GKeyFile *boot_offset_key_file = g_key_file_new ();
-  gchar *full_path =
-    g_strconcat (TEST_DIRECTORY, BOOT_OFFSET_METADATA_FILE, NULL);
   gboolean load_succeeded =
-    g_key_file_load_from_file (boot_offset_key_file, full_path, G_KEY_FILE_NONE,
+    g_key_file_load_from_file (boot_offset_key_file,
+                               TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE,
+                               G_KEY_FILE_NONE,
                                NULL);
   g_assert_true (load_succeeded);
   return boot_offset_key_file;
@@ -1759,8 +1759,7 @@ static void
 test_g_file_measure_disk_usage_returns_zero_on_empty_file (gboolean     *unused,
                                                            gconstpointer dontuseme)
 {
-  gchar *path = g_strconcat (TEST_DIRECTORY, "empty_file", NULL);
-  GFile *file = g_file_new_for_path (path);
+  GFile *file = g_file_new_for_path (TEST_DIRECTORY "empty_file");
 
   GError *error = NULL;
   g_file_replace_contents (file, "", 0, NULL, FALSE,
@@ -1777,8 +1776,7 @@ test_g_file_measure_disk_usage_returns_zero_on_empty_file (gboolean     *unused,
   g_assert_cmpint (disk_usage, ==, 0);
 
   g_object_unref (file);
-  g_unlink (path);
-  g_free (path);
+  g_unlink (TEST_DIRECTORY "empty_file");
 }
 
 int

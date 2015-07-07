@@ -121,8 +121,7 @@ read_config_file_sync (EmerPermissionsProvider *self)
     {
       load_fallback_data (self);
 
-      if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT) &&
-          !g_error_matches (error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_NOT_FOUND))
+      if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
         g_critical ("Permissions config file '%s' was invalid or could not be "
                     "read. Loading fallback data. Error: %s.", path,
                     error->message);

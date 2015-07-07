@@ -499,9 +499,7 @@ emer_circular_file_initable_init (GInitable    *initable,
   g_free (metadata_filepath);
   if (!load_succeeded)
     {
-      if (!g_error_matches (local_error, G_KEY_FILE_ERROR,
-                            G_KEY_FILE_ERROR_NOT_FOUND) &&
-          !g_error_matches (local_error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
+      if (!g_error_matches (local_error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
         goto handle_failed_read;
 
       g_key_file_set_uint64 (priv->metadata_key_file, METADATA_GROUP_NAME,

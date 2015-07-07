@@ -468,9 +468,7 @@ update_boot_offset (EmerPersistentCache *self,
                                &local_error);
   if (!load_succeeded)
     {
-      if (!g_error_matches (local_error, G_KEY_FILE_ERROR,
-                            G_KEY_FILE_ERROR_NOT_FOUND) &&
-          !g_error_matches (local_error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
+      if (!g_error_matches (local_error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
         {
           g_propagate_error (error, local_error);
           return FALSE;

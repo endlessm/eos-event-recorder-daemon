@@ -136,9 +136,10 @@ TESTS = \
 	tests/daemon/test-network-send-provider \
 	tests/daemon/test-persistent-cache \
 	tests/daemon/test-permissions-provider \
+	run_coverage.coverage \
 	$(NULL)
 
-TEST_EXTENSIONS = .dbusdaemon .py
+TEST_EXTENSIONS = .dbusdaemon .py .coverage
 DBUSDAEMON_LOG_COMPILER = $(top_srcdir)/tests/launch-mock-dbus-tests.sh
 AM_DBUSDAEMON_LOG_FLAGS = -k --verbose
 LOG_COMPILER = gtester

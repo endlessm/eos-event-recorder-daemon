@@ -105,3 +105,5 @@ include $(top_srcdir)/tools/Makefile.am.inc
 # # # TESTS # # #
 
 include $(top_srcdir)/tests/Makefile.am.inc
+
+clean-local:: clean-coverage

@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-UPLOAD_EVENTS_OUTPUT=$(gdbus call --system \
+UPLOAD_EVENTS_OUTPUT=$(gdbus call --system --timeout 2147483 \
     --dest com.endlessm.Metrics --object-path /com/endlessm/Metrics \
     --method com.endlessm.Metrics.EventRecorderServer.UploadEvents)
 

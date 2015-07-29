@@ -626,12 +626,15 @@ record_singulars (EmerDaemon *daemon)
                                      RELATIVE_TIMESTAMP,
                                      FALSE,
                                      g_variant_new_string ("This must be ignored."));
+  GVariant *auxiliary_payload = g_variant_new_boolean (FALSE);
+  g_variant_ref_sink (auxiliary_payload);
   emer_daemon_record_singular_event (daemon,
                                      USER_ID,
                                      make_event_id_variant (),
                                      RELATIVE_TIMESTAMP,
                                      FALSE,
-                                     g_variant_new_string ("This must be ignored."));
+                                     auxiliary_payload);
+  g_variant_unref (auxiliary_payload);
   emer_daemon_record_singular_event (daemon,
                                      USER_ID,
                                      make_event_id_variant (),

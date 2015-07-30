@@ -18,7 +18,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#include "daemon/emer-persistent-cache.h"
+#include "emer-persistent-cache.h"
 
 #include <string.h>
 

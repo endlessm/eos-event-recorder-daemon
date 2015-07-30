@@ -25,7 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "daemon/emer-persistent-cache.h"
+#include "emer-persistent-cache.h"
 #include "shared/metrics-util.h"
 
 #define TMP_DIR_TEMPLATE "persistent-cache-XXXXXX"

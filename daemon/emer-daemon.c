@@ -857,10 +857,10 @@ dequeue_and_do_upload (EmerDaemon  *self,
 }
 
 static void
-check_and_upload_events (EmerDaemon         *self,
-                         const gchar        *environment,
-                         GAsyncReadyCallback callback,
-                         gpointer            user_data)
+upload_events (EmerDaemon         *self,
+               const gchar        *environment,
+               GAsyncReadyCallback callback,
+               gpointer            user_data)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
@@ -895,9 +895,8 @@ handle_upload_timer (EmerDaemon *self)
   gchar *environment =
     emer_permissions_provider_get_environment (priv->permissions_provider);
   schedule_upload (self, environment);
-  check_and_upload_events (self, environment,
-                           (GAsyncReadyCallback) log_upload_error,
-                           NULL /* user_data */);
+  upload_events (self, environment, (GAsyncReadyCallback) log_upload_error,
+                 NULL /* user_data */);
   g_free (environment);
 
   return G_SOURCE_REMOVE;
@@ -1658,7 +1657,7 @@ emer_daemon_upload_events (EmerDaemon         *self,
 
   gchar *environment =
     emer_permissions_provider_get_environment (priv->permissions_provider);
-  check_and_upload_events (self, environment, callback, user_data);
+  upload_events (self, environment, callback, user_data);
   g_free (environment);
 }
 

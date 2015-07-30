@@ -683,6 +683,7 @@ get_nullable_payload (GVariant *payload,
 {
   if (!has_payload)
     {
+      g_variant_ref_sink (payload);
       g_variant_unref (payload);
       return NULL;
     }

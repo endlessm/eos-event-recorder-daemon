@@ -52,7 +52,7 @@
 
 /*
  * The maximum number of attempts to upload a particular batch of metric events
- * before giving up and dropping them.
+ * before giving up.
  */
 #define NETWORK_ATTEMPT_LIMIT 8
 
@@ -881,8 +881,7 @@ log_upload_error (EmerDaemon   *self,
       if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED) ||
           (g_strcmp0 (error->message, METRICS_DISABLED_MESSAGE) != 0 &&
            g_strcmp0 (error->message, UPLOADING_DISABLED_MESSAGE) != 0))
-        g_warning ("Dropped events because they could not be uploaded: %s.",
-                   error->message);
+        g_warning ("Failed to upload events: %s.", error->message);
       g_error_free (error);
     }
 }

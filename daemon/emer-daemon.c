@@ -97,6 +97,9 @@
 #define RETRY_TYPE_STRING "(ixx@ay@" SINGULAR_ARRAY_TYPE_STRING "@" \
   AGGREGATE_ARRAY_TYPE_STRING "@" SEQUENCE_ARRAY_TYPE_STRING ")"
 
+/* This limit only applies to timer-driven uploads, not explicitly
+ * requested uploads.
+ */
 #define MAX_REQUEST_PAYLOAD 100000 /* 100 kB */
 
 #define METRICS_DISABLED_MESSAGE "Could not upload events because the " \
@@ -543,15 +546,16 @@ add_events_to_builders (GVariant       **events,
     }
 }
 
-/* Populates the given variant builders with at most MAX_REQUEST_PAYLOAD bytes
- * of data from the persistent cache. Returns TRUE if the current network
- * request should also include data from the in-memory buffer and FALSE
- * otherwise. Sets read_bytes to the number of bytes of data that were read and
- * token to a value that can be passed to emer_persistent_cache_remove to remove
- * the events that were added to the variant builders from the persistent cache.
+/* Populates the given variant builders with at most max_bytes of data from the
+ * persistent cache. Returns TRUE if the current network request should also
+ * include data from the in-memory buffer and FALSE otherwise. Sets read_bytes
+ * to the number of bytes of data that were read and token to a value that can
+ * be passed to emer_persistent_cache_remove to remove the events that were
+ * added to the variant builders from the persistent cache.
  */
 static gboolean
 add_stored_events_to_builders (EmerDaemon        *self,
+                               gsize              max_bytes,
                                gsize             *read_bytes,
                                guint64           *token,
                                GVariantBuilder   *singulars,
@@ -564,9 +568,8 @@ add_stored_events_to_builders (EmerDaemon        *self,
   gsize num_variants;
   GError *error = NULL;
   gboolean read_succeeded =
-    emer_persistent_cache_read (priv->persistent_cache, &variants,
-                                MAX_REQUEST_PAYLOAD, &num_variants, token,
-                                &error);
+    emer_persistent_cache_read (priv->persistent_cache, &variants, max_bytes,
+                                &num_variants, token, &error);
   if (!read_succeeded)
     {
       g_warning ("Could not read from persistent cache: %s.", error->message);
@@ -617,6 +620,7 @@ add_buffered_events_to_builders (EmerDaemon      *self,
 
 static GVariant *
 create_request_body (EmerDaemon *self,
+                     gsize       max_bytes,
                      guint64    *token,
                      gsize      *num_buffer_events,
                      GError    **error)
@@ -647,12 +651,12 @@ create_request_body (EmerDaemon *self,
 
   gsize num_bytes_read;
   gboolean add_from_buffer =
-    add_stored_events_to_builders (self, &num_bytes_read, token,
+    add_stored_events_to_builders (self, max_bytes, &num_bytes_read, token,
                                    &singulars, &aggregates, &sequences);
 
   if (add_from_buffer)
     {
-      gsize space_remaining = MAX_REQUEST_PAYLOAD - num_bytes_read;
+      gsize space_remaining = max_bytes - num_bytes_read;
       add_buffered_events_to_builders (self, space_remaining, num_buffer_events,
                                        &singulars, &aggregates, &sequences);
     }
@@ -711,10 +715,12 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
       goto handle_upload_failed;
     }
 
+  gsize *max_upload_size = g_task_get_task_data (upload_task);
   guint64 token;
   gsize num_buffer_events;
   GVariant *request_body =
-    create_request_body (self, &token, &num_buffer_events, &error);
+    create_request_body (self, *max_upload_size, &token, &num_buffer_events,
+                         &error);
   if (request_body == NULL)
     {
       g_task_return_error (upload_task, error);
@@ -857,15 +863,19 @@ dequeue_and_do_upload (EmerDaemon  *self,
 }
 
 static void
-check_and_upload_events (EmerDaemon         *self,
-                         const gchar        *environment,
-                         GAsyncReadyCallback callback,
-                         gpointer            user_data)
+upload_events (EmerDaemon         *self,
+               gsize               max_upload_size,
+               const gchar        *environment,
+               GAsyncReadyCallback callback,
+               gpointer            user_data)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   GTask *upload_task =
     g_task_new (self, NULL /* GCancellable */, callback, user_data);
+  gsize *max_size = g_new (gsize, 1);
+  *max_size = max_upload_size;
+  g_task_set_task_data (upload_task, max_size, g_free);
   g_queue_push_tail (priv->upload_queue, upload_task);
   dequeue_and_do_upload (self, environment);
 }
@@ -894,9 +904,8 @@ handle_upload_timer (EmerDaemon *self)
   gchar *environment =
     emer_permissions_provider_get_environment (priv->permissions_provider);
   schedule_upload (self, environment);
-  check_and_upload_events (self, environment,
-                           (GAsyncReadyCallback) log_upload_error,
-                           NULL /* user_data */);
+  upload_events (self, MAX_REQUEST_PAYLOAD, environment,
+                 (GAsyncReadyCallback) log_upload_error, NULL /* user_data */);
   g_free (environment);
 
   return G_SOURCE_REMOVE;
@@ -1657,7 +1666,7 @@ emer_daemon_upload_events (EmerDaemon         *self,
 
   gchar *environment =
     emer_permissions_provider_get_environment (priv->permissions_provider);
-  check_and_upload_events (self, environment, callback, user_data);
+  upload_events (self, G_MAXSIZE, environment, callback, user_data);
   g_free (environment);
 }
 

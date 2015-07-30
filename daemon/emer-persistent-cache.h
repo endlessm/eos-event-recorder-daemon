@@ -26,9 +26,9 @@
 #include <glib-object.h>
 #include <gio/gio.h>
 
-#include "daemon/emer-boot-id-provider.h"
-#include "daemon/emer-cache-size-provider.h"
-#include "daemon/emer-cache-version-provider.h"
+#include "emer-boot-id-provider.h"
+#include "emer-cache-size-provider.h"
+#include "emer-cache-version-provider.h"
 #include "shared/metrics-util.h"
 
 G_BEGIN_DECLS

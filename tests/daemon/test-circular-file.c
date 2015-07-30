@@ -18,7 +18,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#include "daemon/emer-circular-file.h"
+#include "emer-circular-file.h"
 
 #include <string.h>
 

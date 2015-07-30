@@ -73,7 +73,6 @@ tests_daemon_test_daemon_dbusdaemon_SOURCES = \
 	tests/daemon/test-daemon.c \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
 	daemon/emer-cache-size-provider.c daemon/emer-cache-size-provider.h \
-	daemon/emer-cache-version-provider.c daemon/emer-cache-version-provider.h \
 	tests/daemon/mock-machine-id-provider.c daemon/emer-machine-id-provider.h \
 	tests/daemon/mock-network-send-provider.c \
 	daemon/emer-network-send-provider.h \

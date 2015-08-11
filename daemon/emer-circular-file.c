@@ -502,6 +502,7 @@ emer_circular_file_initable_init (GInitable    *initable,
       if (!g_error_matches (local_error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
         goto handle_failed_read;
 
+      g_error_free (local_error);
       g_key_file_set_uint64 (priv->metadata_key_file, METADATA_GROUP_NAME,
                              MAX_SIZE_KEY, priv->max_size);
       return set_metadata (self, 0, 0, error);

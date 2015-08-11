@@ -474,6 +474,7 @@ update_boot_offset (EmerPersistentCache *self,
           return FALSE;
         }
 
+      g_error_free (local_error);
       return reset_boot_offset_metadata_file (self, &relative_time,
                                               &absolute_time, error);
     }

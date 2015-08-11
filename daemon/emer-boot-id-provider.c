@@ -215,6 +215,7 @@ read_boot_id (EmerBootIdProvider *self)
   if (!read_succeeded)
     {
       g_critical ("Failed to read boot ID file (%s).", priv->path);
+      g_error_free (error);
       return FALSE;
     }
 

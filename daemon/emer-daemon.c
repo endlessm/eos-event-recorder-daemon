@@ -1187,10 +1187,7 @@ set_persistent_cache (EmerDaemon          *self,
       priv->persistent_cache =
         emer_persistent_cache_new (PERSISTENT_CACHE_DIR, &error);
       if (priv->persistent_cache == NULL)
-        {
-          g_warning ("Could not create persistent cache: %s.", error->message);
-          g_error_free (error);
-        }
+        g_error ("Could not create persistent cache: %s.", error->message);
     }
   else
     {

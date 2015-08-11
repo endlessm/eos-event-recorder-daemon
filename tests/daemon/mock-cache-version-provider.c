@@ -6,7 +6,7 @@
 
 typedef struct _EmerCacheVersionProviderPrivate
 {
-  gboolean foo;
+  gint cache_version;
 } EmerCacheVersionProviderPrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerCacheVersionProvider,
@@ -35,7 +35,10 @@ gboolean
 emer_cache_version_provider_get_version (EmerCacheVersionProvider *self,
                                          gint                     *version)
 {
-  *version = 0;
+  EmerCacheVersionProviderPrivate *priv =
+    emer_cache_version_provider_get_instance_private (self);
+
+  *version = priv->cache_version;
   return TRUE;
 }
 
@@ -44,5 +47,9 @@ emer_cache_version_provider_set_version (EmerCacheVersionProvider *self,
                                          gint                      new_version,
                                          GError                  **error)
 {
+  EmerCacheVersionProviderPrivate *priv =
+    emer_cache_version_provider_get_instance_private (self);
+
+  priv->cache_version = new_version;
   return TRUE;
 }

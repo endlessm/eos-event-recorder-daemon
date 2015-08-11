@@ -866,8 +866,10 @@ emer_persistent_cache_initable_init (GInitable    *initable,
 
   if (g_mkdir_with_parents (priv->cache_directory, 02774) != 0)
     {
-      const gchar *error_string = g_strerror (errno);
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+      gint error_code = errno;
+      GIOErrorEnum gio_error_code = g_io_error_from_errno (error_code);
+      const gchar *error_string = g_strerror (error_code);
+      g_set_error (error, G_IO_ERROR, gio_error_code,
                    "Failed to create directory: %s. Error: %s",
                    priv->cache_directory, error_string);
       return FALSE;

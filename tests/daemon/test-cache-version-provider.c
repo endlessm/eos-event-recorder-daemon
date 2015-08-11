@@ -71,7 +71,7 @@ setup (Fixture      *fixture,
   write_testing_cache_keyfile (fixture, STARTING_KEY_FILE);
 
   fixture->version_provider =
-    emer_cache_version_provider_new_full (fixture->tmp_path);
+    emer_cache_version_provider_new (fixture->tmp_path);
 }
 
 static void

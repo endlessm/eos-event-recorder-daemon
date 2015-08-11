@@ -32,12 +32,6 @@ typedef struct EmerCacheVersionProviderPrivate
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerCacheVersionProvider, emer_cache_version_provider, G_TYPE_OBJECT)
 
-/*
- * This is the filepath to the metadata file containing the local network
- * protocol version.
- */
-#define DEFAULT_CACHE_VERSION_FILE_PATH PERSISTENT_CACHE_DIR "local_version_file"
-
 #define CACHE_VERSION_GROUP "cache_version_info"
 #define CACHE_VERSION_KEY   "version"
 
@@ -117,7 +111,7 @@ emer_cache_version_provider_class_init (EmerCacheVersionProviderClass *klass)
   emer_cache_version_provider_props[PROP_PATH] =
     g_param_spec_string ("path", "Path",
                          "The path to the file where the cache version is stored.",
-                         DEFAULT_CACHE_VERSION_FILE_PATH,
+                         NULL,
                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   object_class->set_property = emer_cache_version_provider_set_property;
@@ -137,34 +131,19 @@ emer_cache_version_provider_init (EmerCacheVersionProvider *self)
 
 /*
  * emer_cache_version_provider_new:
+ * @path: see #EmerCacheVersionProvider:path
  *
- * Constructs the ID provider used to obtain a cache format version
- * via the default filepath.
- *
- * Returns: (transfer full): A new #EmerCacheVersionProvider.
- * Free with g_object_unref().
- */
-EmerCacheVersionProvider *
-emer_cache_version_provider_new (void)
-{
-  return g_object_new (EMER_TYPE_CACHE_VERSION_PROVIDER, NULL);
-}
-
-/*
- * emer_cache_version_provider_new_full:
- * @cache_version_file_path: path to a file; see #EmerCacheVersionProvider:path
- *
- * Constructs the ID provider used to obtain a cache format version
- * via a given filepath.
+ * Constructs a provider that stores the cache format version in a file at the
+ * given path.
  *
  * Returns: (transfer full): A new #EmerCacheVersionProvider.
  * Free with g_object_unref().
  */
 EmerCacheVersionProvider *
-emer_cache_version_provider_new_full (const gchar *cache_version_file_path)
+emer_cache_version_provider_new (const gchar *path)
 {
   return g_object_new (EMER_TYPE_CACHE_VERSION_PROVIDER,
-                       "path", cache_version_file_path,
+                       "path", path,
                        NULL);
 }
 

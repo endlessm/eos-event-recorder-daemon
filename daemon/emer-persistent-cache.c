@@ -864,7 +864,7 @@ emer_persistent_cache_initable_init (GInitable    *initable,
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  if (g_mkdir_with_parents (priv->cache_directory, 02774) != 0)
+  if (g_mkdir_with_parents (priv->cache_directory, 02775) != 0)
     {
       gint error_code = errno;
       GIOErrorEnum gio_error_code = g_io_error_from_errno (error_code);

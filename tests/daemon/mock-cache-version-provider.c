@@ -16,11 +16,13 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerCacheVersionProvider,
 static void
 emer_cache_version_provider_class_init (EmerCacheVersionProviderClass *klass)
 {
+  /* Nothing to do */
 }
 
 static void
 emer_cache_version_provider_init (EmerCacheVersionProvider *self)
 {
+  /* Nothing to do */
 }
 
 EmerCacheVersionProvider *

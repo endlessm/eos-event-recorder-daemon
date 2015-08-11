@@ -22,8 +22,8 @@
 
 #include "emer-network-send-provider.h"
 
-#include <glib.h>
 #include <gio/gio.h>
+#include <glib.h>
 
 typedef struct _EmerNetworkSendProviderPrivate
 {

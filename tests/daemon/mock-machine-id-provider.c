@@ -22,8 +22,9 @@
 
 #include "emer-machine-id-provider.h"
 
-#include <glib.h>
 #include <uuid/uuid.h>
+
+#include <glib.h>
 
 #define MACHINE_ID "387c5206-24b5-4513-a34f-72689d5c0a0e"
 

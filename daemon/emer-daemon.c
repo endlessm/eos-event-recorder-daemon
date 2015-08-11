@@ -20,6 +20,8 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "emer-daemon.h"
+
 #include <time.h>
 #include <uuid/uuid.h>
 
@@ -32,7 +34,6 @@
 
 #include <eosmetrics/eosmetrics.h>
 
-#include "emer-daemon.h"
 #include "emer-machine-id-provider.h"
 #include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"

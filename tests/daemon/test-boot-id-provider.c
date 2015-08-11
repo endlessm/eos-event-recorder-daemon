@@ -22,10 +22,11 @@
 
 #include "emer-boot-id-provider.h"
 
+#include <uuid/uuid.h>
+
+#include <gio/gio.h>
 #include <glib.h>
 #include <glib/gstdio.h>
-#include <gio/gio.h>
-#include <uuid/uuid.h>
 
 #define TESTING_FILE_PATH "testing_boot_id_XXXXXX"
 #define FIRST_TESTING_ID  "67ba25f5-b7af-48f9-a746-d1421a7e49de\n"

@@ -23,8 +23,8 @@
 #include "emer-permissions-provider.h"
 #include "mock-permissions-provider.h"
 
-#include <glib.h>
 #include <gio/gio.h>
+#include <glib.h>
 
 typedef struct _EmerPermissionsProviderPrivate
 {

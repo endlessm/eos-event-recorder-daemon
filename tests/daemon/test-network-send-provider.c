@@ -20,9 +20,9 @@
 
 #include "emer-network-send-provider.h"
 
+#include <gio/gio.h>
 #include <glib.h>
 #include <glib/gstdio.h>
-#include <gio/gio.h>
 
 #define TESTING_FILE_PATH "testing_network_send_XXXXXX"
 

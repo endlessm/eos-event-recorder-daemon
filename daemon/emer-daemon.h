@@ -23,13 +23,13 @@
 #ifndef EMER_DAEMON_H
 #define EMER_DAEMON_H
 
+#include <gio/gio.h>
+#include <glib-object.h>
+
 #include "emer-machine-id-provider.h"
 #include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
-
-#include <gio/gio.h>
-#include <glib-object.h>
 
 G_BEGIN_DECLS
 

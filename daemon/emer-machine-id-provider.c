@@ -22,13 +22,13 @@
 
 #include "emer-machine-id-provider.h"
 
-#include "shared/metrics-util.h"
-
 #include <string.h>
 #include <uuid/uuid.h>
 
 #include <glib/gprintf.h>
 #include <glib/gstdio.h>
+
+#include "shared/metrics-util.h"
 
 typedef struct EmerMachineIdProviderPrivate
 {

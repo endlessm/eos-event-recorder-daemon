@@ -24,8 +24,8 @@
 
 #include <string.h>
 
-#include <glib.h>
 #include <gio/gio.h>
+#include <glib.h>
 
 #define SIGNAL_TIMEOUT_SEC 5
 

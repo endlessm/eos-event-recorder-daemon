@@ -21,6 +21,21 @@
  */
 
 #include "emer-daemon.h"
+
+#include <signal.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/prctl.h>
+#include <uuid/uuid.h>
+
+#include <gio/gio.h>
+#include <glib.h>
+#include <glib-object.h>
+#include <glib/gstdio.h>
+#include <libsoup/soup.h>
+
+#include <eosmetrics/eosmetrics.h>
+
 #include "emer-boot-id-provider.h"
 #include "emer-machine-id-provider.h"
 #include "emer-network-send-provider.h"
@@ -29,18 +44,6 @@
 #include "mock-permissions-provider.h"
 #include "mock-persistent-cache.h"
 #include "shared/metrics-util.h"
-
-#include <eosmetrics/eosmetrics.h>
-#include <gio/gio.h>
-#include <glib.h>
-#include <glib-object.h>
-#include <glib/gstdio.h>
-#include <libsoup/soup.h>
-#include <uuid/uuid.h>
-#include <signal.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/prctl.h>
 
 #define MOCK_SERVER_PATH TEST_DIR "daemon/mock-server.py"
 

@@ -22,10 +22,11 @@
 
 #include "emer-machine-id-provider.h"
 
+#include <uuid/uuid.h>
+
+#include <gio/gio.h>
 #include <glib.h>
 #include <glib/gstdio.h>
-#include <gio/gio.h>
-#include <uuid/uuid.h>
 
 #define HYPHENS_IN_ID 4
 

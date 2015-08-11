@@ -20,12 +20,13 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include <string.h>
+
+#include <gio/gio.h>
 #include <glib.h>
 #include <glib-object.h>
 #include <glib-unix.h>
-#include <gio/gio.h>
 #include <polkit/polkit.h>
-#include <string.h>
 
 #include "emer-daemon.h"
 #include "emer-event-recorder-server.h"

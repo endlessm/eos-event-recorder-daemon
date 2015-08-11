@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2014 Endless Mobile, Inc. */
+/* Copyright 2014, 2015 Endless Mobile, Inc. */
 
 #include "emer-cache-version-provider.h"
 
@@ -24,13 +24,7 @@ emer_cache_version_provider_init (EmerCacheVersionProvider *self)
 }
 
 EmerCacheVersionProvider *
-emer_cache_version_provider_new ()
-{
-  return g_object_new (EMER_TYPE_CACHE_VERSION_PROVIDER, NULL);
-}
-
-EmerCacheVersionProvider *
-emer_cache_version_provider_new_full (const gchar *cache_version_file_path)
+emer_cache_version_provider_new (const gchar *path)
 {
   return g_object_new (EMER_TYPE_CACHE_VERSION_PROVIDER, NULL);
 }

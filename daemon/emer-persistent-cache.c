@@ -37,6 +37,7 @@
 #include "shared/metrics-util.h"
 
 #define VARIANT_FILENAME "variants.dat"
+#define DEFAULT_VERSION_FILENAME "local_version_file"
 
 /* SECTION:emer-persistent-cache.c
  * @title: Persistent Cache
@@ -687,10 +688,9 @@ set_cache_version_provider (EmerPersistentCache      *self,
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  if (cache_version_provider == NULL)
-    priv->cache_version_provider = emer_cache_version_provider_new ();
-  else
-    priv->cache_version_provider = g_object_ref (cache_version_provider);
+  if (cache_version_provider != NULL)
+    g_object_ref (cache_version_provider);
+  priv->cache_version_provider = cache_version_provider;
 }
 
 static void
@@ -714,6 +714,16 @@ emer_persistent_cache_constructed (GObject *object)
 
   priv->boot_metadata_file_path =
     g_build_filename (priv->cache_directory, BOOT_OFFSET_METADATA_FILE, NULL);
+
+  if (priv->cache_version_provider == NULL)
+    {
+      gchar *cache_version_path =
+        g_build_filename (priv->cache_directory, DEFAULT_VERSION_FILENAME,
+                          NULL);
+      priv->cache_version_provider =
+        emer_cache_version_provider_new (cache_version_path);
+      g_free (cache_version_path);
+    }
 
   G_OBJECT_CLASS (emer_persistent_cache_parent_class)->constructed (object);
 }

@@ -52,6 +52,12 @@
 #define RELATIVE_TIMESTAMP G_GINT64_CONSTANT (123456789)
 #define OFFSET_TIMESTAMP (RELATIVE_TIMESTAMP + BOOT_TIME_OFFSET)
 
+#define MAX_REQUEST_PAYLOAD 100000
+
+/* The non-array portion of the singular in make_large_singular costs 40 bytes.
+ */
+#define ZERO_ARRAY_LENGTH (MAX_REQUEST_PAYLOAD - 40)
+
 #define TIMEOUT_SEC 5
 
 #define EXPECTED_INHIBIT_SHUTDOWN_ARGS \
@@ -482,6 +488,23 @@ make_event_values_variant (void)
   return g_variant_builder_end (&builder);
 }
 
+static GVariant *
+make_large_singular (void)
+{
+  static guchar array[ZERO_ARRAY_LENGTH];
+  GVariant *auxiliary_payload =
+    g_variant_new_fixed_array (G_VARIANT_TYPE ("y"), array, ZERO_ARRAY_LENGTH,
+                               1);
+  GVariant *singular =
+    g_variant_new ("(u@ayxmv)", USER_ID, make_event_id_variant (),
+                   OFFSET_TIMESTAMP, auxiliary_payload);
+
+  gsize singular_cost = emer_persistent_cache_cost (singular);
+  g_assert_cmpuint (singular_cost, ==, MAX_REQUEST_PAYLOAD);
+
+  return singular;
+}
+
 static void
 assert_no_data_uploaded (EmerDaemon               *daemon,
                          GAsyncResult             *result,
@@ -772,6 +795,26 @@ assert_singulars_received (GByteArray *request,
   assert_singular_matches_next_value (singular_iterator,
                                       make_auxiliary_payload ());
   g_variant_iter_free (singular_iterator);
+
+  g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 0u);
+  g_variant_iter_free (aggregate_iterator);
+
+  g_assert_cmpuint (g_variant_iter_n_children (sequence_iterator), ==, 0u);
+  g_variant_iter_free (sequence_iterator);
+}
+
+static void
+assert_large_singular_received (GByteArray *request,
+                                Fixture    *fixture)
+{
+  GVariantIter *singular_iterator, *aggregate_iterator, *sequence_iterator;
+  get_events_from_request (request, fixture, &singular_iterator,
+                           &aggregate_iterator, &sequence_iterator);
+
+  g_assert_cmpuint (g_variant_iter_n_children (singular_iterator), ==, 1u);
+  GVariant *actual_singular = g_variant_iter_next_value (singular_iterator);
+  g_variant_iter_free (singular_iterator);
+  assert_variants_equal (actual_singular, make_large_singular ());
 
   g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 0u);
   g_variant_iter_free (aggregate_iterator);
@@ -1266,6 +1309,40 @@ test_daemon_reinhibits_shutdown_on_shutdown_cancel (Fixture      *fixture,
   terminate_subprocess_and_wait (fixture->logind_mock);
 }
 
+static void
+test_daemon_limits_network_upload_size (Fixture      *fixture,
+                                        gconstpointer unused)
+{
+  GVariant *variant = make_large_singular ();
+  g_variant_ref_sink (variant);
+  GVariant *variants[] = { variant, variant };
+  gsize num_variants = G_N_ELEMENTS (variants);
+
+  gsize num_variants_stored;
+  gboolean store_succeeded =
+    emer_persistent_cache_store (fixture->mock_persistent_cache, variants,
+                                 num_variants, &num_variants_stored,
+                                 NULL /* GError */);
+  g_variant_unref (variant);
+
+  g_assert_true (store_succeeded);
+  g_assert_cmpuint (num_variants_stored, ==, num_variants);
+
+  record_aggregates (fixture->test_object);
+
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_large_singular_received);
+  wait_for_upload_to_finish (fixture);
+
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_large_singular_received);
+  wait_for_upload_to_finish (fixture);
+
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_aggregates_received);
+  wait_for_upload_to_finish (fixture);
+}
+
 int
 main (int                argc,
       const char * const argv[])
@@ -1306,6 +1383,8 @@ main (int                argc,
                    test_daemon_flushes_to_persistent_cache_on_shutdown);
   ADD_DAEMON_TEST ("/daemon/reinhibits-shutdown-on-shutdown-cancel",
                    test_daemon_reinhibits_shutdown_on_shutdown_cancel);
+  ADD_DAEMON_TEST ("/daemon/limits-network-upload-size",
+                   test_daemon_limits_network_upload_size);
 
 #undef ADD_DAEMON_TEST
 

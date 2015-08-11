@@ -660,6 +660,10 @@ create_request_body (EmerDaemon *self,
       add_buffered_events_to_builders (self, space_remaining, num_buffer_events,
                                        &singulars, &aggregates, &sequences);
     }
+  else
+    {
+      *num_buffer_events = 0;
+    }
 
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.
@@ -1183,10 +1187,7 @@ set_persistent_cache (EmerDaemon          *self,
       priv->persistent_cache =
         emer_persistent_cache_new (PERSISTENT_CACHE_DIR, &error);
       if (priv->persistent_cache == NULL)
-        {
-          g_warning ("Could not create persistent cache: %s.", error->message);
-          g_error_free (error);
-        }
+        g_error ("Could not create persistent cache: %s.", error->message);
     }
   else
     {

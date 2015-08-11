@@ -474,6 +474,7 @@ update_boot_offset (EmerPersistentCache *self,
           return FALSE;
         }
 
+      g_error_free (local_error);
       return reset_boot_offset_metadata_file (self, &relative_time,
                                               &absolute_time, error);
     }
@@ -603,8 +604,7 @@ regularize_post_storage (GVariant *variant)
 /*
  * Attempts to wipe the persistent cache if the cache version file is out of
  * date or not found. Updates the cache version file as specified by the cache
- * provider if successful. Creates the cache directory if it doesn't exist.
- * Returns %TRUE on success and %FALSE on failure.
+ * provider if successful. Returns %TRUE on success and %FALSE on failure.
  */
 static gboolean
 apply_cache_versioning (EmerPersistentCache *self,
@@ -612,15 +612,6 @@ apply_cache_versioning (EmerPersistentCache *self,
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
-
-  if (g_mkdir_with_parents (priv->cache_directory, 02774) != 0)
-    {
-      const gchar *error_string = g_strerror (errno);
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
-                   "Failed to create directory: %s. Error: %s",
-                   priv->cache_directory, error_string);
-      return FALSE;
-    }
 
   gint old_version;
   gboolean read_succeeded =
@@ -862,6 +853,15 @@ emer_persistent_cache_initable_init (GInitable    *initable,
   EmerPersistentCache *self = EMER_PERSISTENT_CACHE (initable);
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
+
+  if (g_mkdir_with_parents (priv->cache_directory, 02774) != 0)
+    {
+      const gchar *error_string = g_strerror (errno);
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                   "Failed to create directory: %s. Error: %s",
+                   priv->cache_directory, error_string);
+      return FALSE;
+    }
 
   gchar *variant_file_path =
     g_build_filename (priv->cache_directory, VARIANT_FILENAME, NULL);

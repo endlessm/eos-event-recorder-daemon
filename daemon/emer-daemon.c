@@ -660,6 +660,10 @@ create_request_body (EmerDaemon *self,
       add_buffered_events_to_builders (self, space_remaining, num_buffer_events,
                                        &singulars, &aggregates, &sequences);
     }
+  else
+    {
+      *num_buffer_events = 0;
+    }
 
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.

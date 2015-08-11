@@ -1079,16 +1079,6 @@ connect_to_login_manager (EmerDaemon *self)
                       G_CALLBACK (handle_login_manager_name_owner_set), self);
 }
 
-static gchar *
-get_user_agent (void)
-{
-  guint libsoup_major_version = soup_get_major_version ();
-  guint libsoup_minor_version = soup_get_minor_version ();
-  guint libsoup_micro_version = soup_get_micro_version ();
-  return g_strdup_printf ("libsoup/%u.%u.%u", libsoup_major_version,
-                          libsoup_minor_version, libsoup_micro_version);
-}
-
 static void
 on_permissions_changed (EmerPermissionsProvider *permissions_provider,
                         GParamSpec              *pspec,
@@ -1481,17 +1471,12 @@ emer_daemon_init (EmerDaemon *self)
 
   priv->upload_queue = g_queue_new ();
 
-  gchar *user_agent = get_user_agent ();
-
   priv->http_session =
     soup_session_new_with_options (SOUP_SESSION_MAX_CONNS, 1,
                                    SOUP_SESSION_MAX_CONNS_PER_HOST, 1,
-                                   SOUP_SESSION_USER_AGENT, user_agent,
                                    SOUP_SESSION_ADD_FEATURE_BY_TYPE,
                                    SOUP_TYPE_CACHE,
                                    NULL);
-
-  g_free (user_agent);
 
   priv->variant_array =
     g_ptr_array_new_with_free_func ((GDestroyNotify) g_variant_unref);

@@ -106,11 +106,11 @@
 
 #define METRICS_DISABLED_MESSAGE "Could not upload events because the " \
   "metrics system is disabled. You may enable the metrics system via " \
-  "Settings > Privacy > Metrics."
+  "Settings > Privacy > Metrics"
 
 #define UPLOADING_DISABLED_MESSAGE "Could not upload events because " \
   "uploading is disabled. You may enable uploading by setting " \
-  "uploading_enabled to true in " PERMISSIONS_FILE "."
+  "uploading_enabled to true in " PERMISSIONS_FILE
 
 typedef struct _NetworkCallbackData
 {
@@ -390,7 +390,7 @@ get_offset_timestamps (EmerDaemon *self,
       !emtr_util_get_current_time (CLOCK_REALTIME, abs_timestamp_ptr))
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
-                   "Could not get current time.");
+                   "Could not get current time");
       return FALSE;
     }
 
@@ -465,7 +465,7 @@ handle_http_response (SoupSession         *http_session,
       g_task_return_new_error (callback_data->upload_task, G_IO_ERROR,
                                G_IO_ERROR_FAILED,
                                "Maximum number of network attempts (%d) "
-                               "reached.", NETWORK_ATTEMPT_LIMIT);
+                               "reached", NETWORK_ATTEMPT_LIMIT);
       finish_network_callback (callback_data);
       return;
     }
@@ -496,7 +496,7 @@ handle_http_response (SoupSession         *http_session,
           g_task_return_new_error (callback_data->upload_task, G_IO_ERROR,
                                    G_IO_ERROR_INVALID_DATA,
                                    "Could not serialize updated network "
-                                   "request body.");
+                                   "request body");
           finish_network_callback (callback_data);
           return;
         }
@@ -523,7 +523,7 @@ handle_http_response (SoupSession         *http_session,
     }
 
   g_task_return_new_error (callback_data->upload_task, G_IO_ERROR,
-                           G_IO_ERROR_FAILED, "Received HTTP status code: %u.",
+                           G_IO_ERROR_FAILED, "Received HTTP status code: %u",
                            status_code);
   finish_network_callback (callback_data);
 }
@@ -637,7 +637,7 @@ create_request_body (EmerDaemon *self,
   if (!read_id)
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
-                   "Could not read machine ID.");
+                   "Could not read machine ID");
       return NULL;
     }
 
@@ -739,7 +739,7 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
   if (serialized_request_body == NULL)
     {
       g_task_return_new_error (upload_task, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                               "Could not serialize network request body.");
+                               "Could not serialize network request body");
       goto handle_upload_failed;
     }
 

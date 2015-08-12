@@ -197,8 +197,10 @@ read_cache_size_data (EmerCacheSizeProvider *self)
     return;
 
   GError *error = NULL;
-  if (!g_key_file_load_from_file (priv->key_file, priv->path, G_KEY_FILE_NONE,
-                                  &error))
+  gboolean load_succeeded =
+    g_key_file_load_from_file (priv->key_file, priv->path, G_KEY_FILE_NONE,
+                               &error);
+  if (!load_succeeded)
     {
       if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
         goto handle_failed_read;
@@ -207,10 +209,9 @@ read_cache_size_data (EmerCacheSizeProvider *self)
       write_cache_size (self, DEFAULT_MAX_CACHE_SIZE);
     }
 
-  priv->max_cache_size = g_key_file_get_uint64 (priv->key_file,
-                                                CACHE_SIZE_GROUP,
-                                                MAX_CACHE_SIZE_KEY,
-                                                &error);
+  priv->max_cache_size =
+    g_key_file_get_uint64 (priv->key_file, CACHE_SIZE_GROUP, MAX_CACHE_SIZE_KEY,
+                           &error);
   if (error != NULL)
     goto handle_failed_read;
 

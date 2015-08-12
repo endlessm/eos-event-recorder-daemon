@@ -56,7 +56,6 @@ systembussecuritypolicydir = ${sysconfdir}/dbus-1/system.d
 dist_systembussecuritypolicy_DATA = data/com.endlessm.Metrics.conf
 
 dist_config_DATA = \
-	data/cache-size.conf \
 	data/eos-metrics-permissions.conf \
 	$(NULL)
 

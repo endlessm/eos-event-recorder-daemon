@@ -38,6 +38,9 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerCacheSizeProvider, emer_cache_size_provider, G_T
  */
 #define DEFAULT_CACHE_SIZE_FILE_PATH CONFIG_DIR "cache-size.conf"
 
+/* This is the default maximum cache size in bytes. */
+#define DEFAULT_MAX_CACHE_SIZE G_GUINT64_CONSTANT (10000000)
+
 #define CACHE_SIZE_GROUP "persistent_cache_size"
 #define MAX_CACHE_SIZE_KEY "maximum"
 
@@ -164,6 +167,27 @@ emer_cache_size_provider_new_full (const gchar *path)
 }
 
 static void
+write_cache_size (EmerCacheSizeProvider *self,
+                  guint64                max_cache_size)
+{
+  EmerCacheSizeProviderPrivate *priv =
+    emer_cache_size_provider_get_instance_private (self);
+
+  g_key_file_set_uint64 (priv->key_file, CACHE_SIZE_GROUP,
+                         MAX_CACHE_SIZE_KEY, max_cache_size);
+
+  GError *error = NULL;
+  gboolean save_succeeded =
+    g_key_file_save_to_file (priv->key_file, priv->path, &error);
+  if (!save_succeeded)
+    {
+      g_warning ("Failed to write default cache size file to %s. Error: %s.",
+                 priv->path, error->message);
+      g_error_free (error);
+    }
+}
+
+static void
 read_cache_size_data (EmerCacheSizeProvider *self)
 {
   EmerCacheSizeProviderPrivate *priv =
@@ -175,7 +199,13 @@ read_cache_size_data (EmerCacheSizeProvider *self)
   GError *error = NULL;
   if (!g_key_file_load_from_file (priv->key_file, priv->path, G_KEY_FILE_NONE,
                                   &error))
-    goto handle_failed_read;
+    {
+      if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
+        goto handle_failed_read;
+
+      g_clear_error (&error);
+      write_cache_size (self, DEFAULT_MAX_CACHE_SIZE);
+    }
 
   priv->max_cache_size = g_key_file_get_uint64 (priv->key_file,
                                                 CACHE_SIZE_GROUP,
@@ -196,8 +226,9 @@ handle_failed_read:
  * emer_cache_size_provider_get_max_cache_size:
  * @self: the max cache size provider
  *
- * Returns the maximum persistent cache size in bytes, which defaults to 0 if
- * the underlying configuration file can't be read.
+ * Returns the maximum persistent cache size in bytes. If the underlying
+ * configuration file doesn't exist yet, it is created with a default value of
+ * DEFAULT_MAX_CACHE_SIZE.
  */
 guint64
 emer_cache_size_provider_get_max_cache_size (EmerCacheSizeProvider *self)

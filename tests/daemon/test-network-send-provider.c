@@ -79,7 +79,7 @@ setup (Fixture      *fixture,
   write_testing_keyfile (fixture, STARTING_KEY_FILE);
 
   fixture->network_send_provider =
-    emer_network_send_provider_new_full (fixture->tmp_path);
+    emer_network_send_provider_new (fixture->tmp_path);
 }
 
 static void

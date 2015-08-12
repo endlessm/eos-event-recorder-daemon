@@ -65,6 +65,8 @@
 #define DEV_NETWORK_SEND_INTERVAL (60u * 15u) // Fifteen minutes
 #define PRODUCTION_NETWORK_SEND_INTERVAL (60u * 60u) // One hour
 
+#define DEFAULT_NETWORK_SEND_FILENAME "network_send_file"
+
 #define WHAT "shutdown"
 #define WHO "EndlessOS Event Recorder Daemon"
 #define WHY "Flushing events to disk"
@@ -148,6 +150,7 @@ typedef struct _EmerDaemonPrivate
   EmerNetworkSendProvider *network_send_provider;
   EmerPermissionsProvider *permissions_provider;
 
+  gchar *persistent_cache_directory;
   EmerPersistentCache *persistent_cache;
 
   gboolean recording_enabled;
@@ -166,6 +169,7 @@ enum
   PROP_MACHINE_ID_PROVIDER,
   PROP_NETWORK_SEND_PROVIDER,
   PROP_PERMISSIONS_PROVIDER,
+  PROP_PERSISTENT_CACHE_DIRECTORY,
   PROP_PERSISTENT_CACHE,
   PROP_MAX_BYTES_BUFFERED,
   NPROPS
@@ -1152,10 +1156,9 @@ set_network_send_provider (EmerDaemon *self,
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  if (network_send_prov == NULL)
-    priv->network_send_provider = emer_network_send_provider_new ();
-  else
-    priv->network_send_provider = g_object_ref (network_send_prov);
+  if (network_send_prov != NULL)
+    g_object_ref (network_send_prov);
+  priv->network_send_provider = network_send_prov;
 }
 
 static void
@@ -1176,23 +1179,23 @@ set_permissions_provider (EmerDaemon              *self,
 }
 
 static void
+set_persistent_cache_directory (EmerDaemon  *self,
+                                const gchar *persistent_cache_directory)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  priv->persistent_cache_directory = g_strdup (persistent_cache_directory);
+}
+
+static void
 set_persistent_cache (EmerDaemon          *self,
                       EmerPersistentCache *persistent_cache)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  if (persistent_cache == NULL)
-    {
-      GError *error = NULL;
-      priv->persistent_cache =
-        emer_persistent_cache_new (PERSISTENT_CACHE_DIR, &error);
-      if (priv->persistent_cache == NULL)
-        g_error ("Could not create persistent cache: %s.", error->message);
-    }
-  else
-    {
-      priv->persistent_cache = g_object_ref (persistent_cache);
-    }
+  if (persistent_cache != NULL)
+    g_object_ref (persistent_cache);
+  priv->persistent_cache = persistent_cache;
 }
 
 static void
@@ -1213,6 +1216,26 @@ emer_daemon_constructed (GObject *object)
     emer_permissions_provider_get_environment (priv->permissions_provider);
   schedule_upload (self, environment);
   g_free (environment);
+
+  if (priv->persistent_cache == NULL)
+    {
+      GError *error = NULL;
+      priv->persistent_cache =
+        emer_persistent_cache_new (priv->persistent_cache_directory, &error);
+      if (priv->persistent_cache == NULL)
+        g_error ("Could not create persistent cache in %s: %s.",
+                 priv->persistent_cache_directory, error->message);
+    }
+
+  if (priv->network_send_provider == NULL)
+    {
+      gchar *network_send_path =
+        g_build_filename (priv->persistent_cache_directory,
+                          DEFAULT_NETWORK_SEND_FILENAME, NULL);
+      priv->network_send_provider =
+        emer_network_send_provider_new (network_send_path);
+      g_free (network_send_path);
+    }
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->constructed (object);
 }
@@ -1249,6 +1272,10 @@ emer_daemon_set_property (GObject      *object,
 
     case PROP_PERMISSIONS_PROVIDER:
       set_permissions_provider (self, g_value_get_object (value));
+      break;
+
+    case PROP_PERSISTENT_CACHE_DIRECTORY:
+      set_persistent_cache_directory (self, g_value_get_string (value));
       break;
 
     case PROP_PERSISTENT_CACHE:
@@ -1290,6 +1317,7 @@ emer_daemon_finalize (GObject *object)
   g_clear_object (&priv->machine_id_provider);
   g_clear_object (&priv->network_send_provider);
   g_clear_object (&priv->permissions_provider);
+  g_clear_pointer (&priv->persistent_cache_directory, g_free);
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->finalize (object);
 }
@@ -1390,6 +1418,24 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                          G_PARAM_STATIC_STRINGS);
 
   /*
+   * EmerDaemon:persistent-cache-directory:
+   *
+   * A directory for temporarily storing events until they are uploaded to the
+   * metrics servers. If a network send provider is not specified, a default
+   * network send provider is created that uses DEFAULT_NETWORK_SEND_FILENAME in
+   * this directory.
+   */
+  emer_daemon_props[PROP_PERSISTENT_CACHE_DIRECTORY] =
+    g_param_spec_string ("persistent-cache-directory",
+                         "Persistent cache directory",
+                         "The directory in which to temporarily store events "
+                         "locally",
+                         NULL,
+                         G_PARAM_CONSTRUCT | G_PARAM_WRITABLE |
+                         G_PARAM_STATIC_STRINGS);
+
+
+  /*
    * EmerDaemon:persistent-cache:
    *
    * An #EmerPersistentCache for storing metrics until they are sent to the
@@ -1459,9 +1505,11 @@ emer_daemon_init (EmerDaemon *self)
  * Returns: (transfer full): a new #EmerDaemon with the default configuration.
  */
 EmerDaemon *
-emer_daemon_new (void)
+emer_daemon_new (const gchar *persistent_cache_directory)
 {
-  return g_object_new (EMER_TYPE_DAEMON, NULL);
+  return g_object_new (EMER_TYPE_DAEMON,
+                       "persistent-cache-directory", persistent_cache_directory,
+                       NULL);
 }
 
 /*

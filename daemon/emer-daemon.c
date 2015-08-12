@@ -1140,7 +1140,7 @@ set_machine_id_provider (EmerDaemon            *self,
 }
 
 static void
-set_network_send_provider (EmerDaemon *self,
+set_network_send_provider (EmerDaemon              *self,
                            EmerNetworkSendProvider *network_send_prov)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);

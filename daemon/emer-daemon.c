@@ -784,10 +784,8 @@ get_ping_socket (EmerDaemon *self)
     g_network_address_parse_uri (priv->server_uri, 443 /* SSL default port */,
                                  &error);
   if (ping_socket == NULL)
-  {
     g_error ("Invalid server URI '%s' could not be parsed because: %s.",
              priv->server_uri, error->message);
-  }
 
   return ping_socket;
 }

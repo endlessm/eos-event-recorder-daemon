@@ -297,9 +297,9 @@ make_daemon (gint                argc,
   return daemon;
 }
 
-int
-main (int                argc,
-      const char * const argv[])
+gint
+main (gint                argc,
+      const gchar * const argv[])
 {
   EmerDaemon *daemon = make_daemon (argc, argv);
   if (daemon == NULL)

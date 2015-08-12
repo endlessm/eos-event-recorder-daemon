@@ -1347,11 +1347,11 @@ test_daemon_limits_network_upload_size (Fixture      *fixture,
   wait_for_upload_to_finish (fixture);
 }
 
-int
-main (int                argc,
-      const char * const argv[])
+gint
+main (gint                argc,
+      const gchar * const argv[])
 {
-  g_test_init (&argc, (char ***) &argv, NULL);
+  g_test_init (&argc, (gchar ***) &argv, NULL);
 
 #define ADD_DAEMON_TEST(path, test_func) \
   g_test_add ((path), Fixture, NULL, setup, (test_func), teardown)

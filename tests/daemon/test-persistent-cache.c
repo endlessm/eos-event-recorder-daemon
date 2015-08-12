@@ -1190,11 +1190,11 @@ test_persistent_cache_get_offset_can_build_boot_metadata_file (gboolean     *unu
   g_object_unref (cache);
 }
 
-int
-main (int                argc,
-      const char * const argv[])
+gint
+main (gint                argc,
+      const gchar * const argv[])
 {
-  g_test_init (&argc, (char ***) &argv, NULL);
+  g_test_init (&argc, (gchar ***) &argv, NULL);
 
 // We are using a gboolean as a fixture type, but it will go unused.
 #define ADD_CACHE_TEST_FUNC(path, func) \

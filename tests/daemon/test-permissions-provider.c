@@ -449,11 +449,11 @@ test_permissions_provider_set_daemon_enabled_updates_config_file (Fixture      *
   g_free (contents);
 }
 
-int
-main (int                argc,
-      const char * const argv[])
+gint
+main (gint                argc,
+      const gchar * const argv[])
 {
-  g_test_init (&argc, (char ***) &argv, NULL);
+  g_test_init (&argc, (gchar ***) &argv, NULL);
 
 #define ADD_PERMISSIONS_PROVIDER_TEST(path, file_contents, setup, test_func) \
   g_test_add ((path), Fixture, (file_contents), (setup), (test_func), teardown);

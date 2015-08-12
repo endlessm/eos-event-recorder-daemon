@@ -238,7 +238,7 @@ read_boot_id (EmerBootIdProvider *self)
   // Remove newline.
   g_strchomp (boot_id_string);
 
-  int parse_failed = uuid_parse (boot_id_string, priv->id);
+  gint parse_failed = uuid_parse (boot_id_string, priv->id);
   g_free (boot_id_string);
 
   if (parse_failed != 0)

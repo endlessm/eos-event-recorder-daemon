@@ -166,11 +166,11 @@ test_network_send_provider_resets_when_corrupted (Fixture      *fixture,
   g_assert_cmpint (second_send_number, ==, RESET_SEND_NUMBER);
 }
 
-int
-main (int                argc,
-      const char * const argv[])
+gint
+main (gint                argc,
+      const gchar * const argv[])
 {
-  g_test_init (&argc, (char ***) &argv, NULL);
+  g_test_init (&argc, (gchar ***) &argv, NULL);
 #define ADD_CACHE_VERSION_TEST_FUNC(path, func) \
   g_test_add ((path), Fixture, NULL, setup, (func), teardown)
 

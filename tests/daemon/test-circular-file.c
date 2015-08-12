@@ -605,11 +605,11 @@ test_circular_file_shrink (Fixture      *fixture,
   g_object_unref (circular_file_2);
 }
 
-int
-main (int                argc,
-      const char * const argv[])
+gint
+main (gint                argc,
+      const gchar * const argv[])
 {
-  g_test_init (&argc, (char ***) &argv, NULL);
+  g_test_init (&argc, (gchar ***) &argv, NULL);
 
 #define ADD_CIRCULAR_FILE_TEST_FUNC(path, func) \
   g_test_add((path), Fixture, NULL, setup, (func), teardown)

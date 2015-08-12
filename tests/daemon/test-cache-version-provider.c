@@ -147,11 +147,11 @@ test_cache_version_provider_can_set_version (Fixture      *fixture,
   g_assert_cmpint (second_version, ==, write_version);
 }
 
-int
-main (int                argc,
-      const char * const argv[])
+gint
+main (gint                argc,
+      const gchar * const argv[])
 {
-  g_test_init (&argc, (char ***) &argv, NULL);
+  g_test_init (&argc, (gchar ***) &argv, NULL);
 #define ADD_CACHE_VERSION_TEST_FUNC(path, func) \
   g_test_add ((path), Fixture, NULL, setup, (func), teardown)
 

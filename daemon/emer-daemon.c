@@ -1302,7 +1302,7 @@ emer_daemon_finalize (GObject *object)
   g_clear_pointer (&priv->variant_array, g_ptr_array_unref);
 
   g_rand_free (priv->rand);
-  g_free (priv->server_uri);
+  g_clear_pointer (&priv->server_uri, g_free);
   g_clear_object (&priv->machine_id_provider);
   g_clear_object (&priv->network_send_provider);
   g_clear_object (&priv->permissions_provider);

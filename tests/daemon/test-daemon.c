@@ -991,7 +991,8 @@ setup (Fixture      *fixture,
   gchar *server_uri = get_server_uri (fixture->mock_server);
 
   fixture->mock_machine_id_provider = emer_machine_id_provider_new ();
-  fixture->mock_network_send_provider = emer_network_send_provider_new ();
+  fixture->mock_network_send_provider =
+    emer_network_send_provider_new (NULL /* path */);
   fixture->mock_permissions_provider = emer_permissions_provider_new ();
   fixture->mock_persistent_cache =
     emer_persistent_cache_new (NULL /* directory */, NULL /* GError */);
@@ -1025,7 +1026,7 @@ static void
 test_daemon_new_succeeds (Fixture      *fixture,
                           gconstpointer unused)
 {
-  EmerDaemon *daemon = emer_daemon_new ();
+  EmerDaemon *daemon = emer_daemon_new (NULL /* persistent cache directory */);
   g_assert_nonnull (daemon);
   g_object_unref (daemon);
 }

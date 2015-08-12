@@ -46,15 +46,9 @@ emer_network_send_provider_init (EmerNetworkSendProvider *self)
 /* MOCK PUBLIC API */
 
 EmerNetworkSendProvider *
-emer_network_send_provider_new (void)
+emer_network_send_provider_new (const gchar *path)
 {
   return g_object_new (EMER_TYPE_NETWORK_SEND_PROVIDER, NULL);
-}
-
-EmerNetworkSendProvider *
-emer_network_send_provider_new_full (const char *path)
-{
-  return emer_network_send_provider_new ();
 }
 
 gint

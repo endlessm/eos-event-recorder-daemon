@@ -58,8 +58,8 @@
 #define NETWORK_ATTEMPT_LIMIT 8
 
 /*
- * How many seconds to delay between trying to send metrics to the proxy server
- * if we are online, or to the persistent cache, if we are offline.
+ * How many seconds to delay between trying to send events to the metrics
+ * servers if we are online, or to the persistent cache, if we are offline.
  *
  * For QA, the "dev" environment delay is much shorter.
  */
@@ -1358,8 +1358,8 @@ emer_daemon_class_init (EmerDaemonClass *klass)
    */
   emer_daemon_props[PROP_NETWORK_SEND_INTERVAL] =
     g_param_spec_uint ("network-send-interval", "Network send interval",
-                       "Number of seconds between attempts to flush metrics to "
-                       "proxy server",
+                       "Number of seconds between attempts to upload events to "
+                       "server",
                        0, G_MAXUINT, 0,
                        G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                        G_PARAM_STATIC_STRINGS);
@@ -1427,15 +1427,15 @@ emer_daemon_class_init (EmerDaemonClass *klass)
   /*
    * EmerDaemon:persistent-cache:
    *
-   * An #EmerPersistentCache for storing metrics until they are sent to the
-   * proxy server.
+   * An #EmerPersistentCache for storing events until they are uploaded to the
+   * metrics servers.
    * If this property is not specified, a default persistent cache (created by
    * emer_persistent_cache_new ()) will be used.
    */
   emer_daemon_props[PROP_PERSISTENT_CACHE] =
     g_param_spec_object ("persistent-cache", "Persistent cache",
-                         "Object managing persistent storage of metrics until "
-                         "they are sent to the proxy server",
+                         "Object managing persistent storage of events until "
+                         "they are uploaded to the metrics servers",
                          EMER_TYPE_PERSISTENT_CACHE,
                          G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                          G_PARAM_STATIC_STRINGS);

@@ -22,10 +22,11 @@
 
 #include "emer-machine-id-provider.h"
 
+#include <uuid/uuid.h>
+
+#include <gio/gio.h>
 #include <glib.h>
 #include <glib/gstdio.h>
-#include <gio/gio.h>
-#include <uuid/uuid.h>
 
 #define HYPHENS_IN_ID 4
 
@@ -113,15 +114,15 @@ test_machine_id_provider_can_get_id (gboolean     *unused,
   g_object_unref (id_provider);
 }
 
-int
-main (int                argc,
-      const char * const argv[])
+gint
+main (gint                argc,
+      const gchar * const argv[])
 {
 // We are using a gboolean as a fixture type, but it will go unused.
 #define ADD_CACHE_TEST_FUNC(path, func) \
   g_test_add((path), gboolean, NULL, setup, (func), teardown)
 
-  g_test_init (&argc, (char ***) &argv, NULL);
+  g_test_init (&argc, (gchar ***) &argv, NULL);
 
   ADD_CACHE_TEST_FUNC ("/machine-id-provider/new-succeeds",
                        test_machine_id_provider_new_succeeds);

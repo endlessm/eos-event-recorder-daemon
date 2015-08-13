@@ -19,7 +19,10 @@
 # <http://www.gnu.org/licenses/>.
 
 import dbus
+import shlex
+import shutil
 import subprocess
+import tempfile
 import unittest
 
 import dbusmock
@@ -48,7 +51,11 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         (self.login_popen, self.login_obj) = self.spawn_server_template('logind')
         (self.polkit_popen, self.polkit_obj) = self.spawn_server_template('polkitd')
 
-        self.daemon = subprocess.Popen('./eos-metrics-event-recorder')
+        self.persistent_cache_directory = tempfile.mkdtemp()
+        escaped_dir = shlex.quote(self.persistent_cache_directory)
+        persistent_cache_dir_arg = '--persistent-cache-directory=' + escaped_dir
+        self.daemon = subprocess.Popen(['./eos-metrics-event-recorder',
+                                        persistent_cache_dir_arg])
 
         # Wait for the service to come up
         self.wait_for_bus_object('com.endlessm.Metrics',
@@ -66,6 +73,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         self.polkit_popen.wait()
         self.login_popen.wait()
         self.assertEquals(self.daemon.wait(), 0)
+        shutil.rmtree(self.persistent_cache_directory)
 
     def test_opt_out_readable(self):
         """Make sure the Enabled property exists."""

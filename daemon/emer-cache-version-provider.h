@@ -78,9 +78,7 @@ struct _EmerCacheVersionProviderClass
 
 GType                     emer_cache_version_provider_get_type    (void) G_GNUC_CONST;
 
-EmerCacheVersionProvider *emer_cache_version_provider_new         (void);
-
-EmerCacheVersionProvider *emer_cache_version_provider_new_full    (const gchar              *version_file_path);
+EmerCacheVersionProvider *emer_cache_version_provider_new         (const gchar              *path);
 
 gboolean                  emer_cache_version_provider_get_version (EmerCacheVersionProvider *self,
                                                                    gint                     *version);

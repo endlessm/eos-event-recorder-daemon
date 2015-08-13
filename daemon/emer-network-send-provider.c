@@ -32,11 +32,6 @@ typedef struct EmerNetworkSendProviderPrivate
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerNetworkSendProvider, emer_network_send_provider, G_TYPE_OBJECT)
 
-/*
- * The filepath to the metadata file containing the network send metadata.
- */
-#define DEFAULT_NETWORK_SEND_FILE_PATH PERSISTENT_CACHE_DIR "network_send_file"
-
 #define NETWORK_SEND_GROUP "network_send_data"
 #define NETWORK_SEND_KEY   "network_requests_sent"
 
@@ -123,7 +118,7 @@ emer_network_send_provider_class_init (EmerNetworkSendProviderClass *klass)
   emer_network_send_provider_props[PROP_PATH] =
     g_param_spec_string ("path", "Path",
                          "The path to the file where the network send data is stored.",
-                         DEFAULT_NETWORK_SEND_FILE_PATH,
+                         NULL,
                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   object_class->set_property = emer_network_send_provider_set_property;
@@ -143,32 +138,17 @@ emer_network_send_provider_init (EmerNetworkSendProvider *self)
 
 /*
  * emer_network_send_provider_new:
- *
- * Constructs the provider used to obtain and store data regarding "network
- * send" metadata via the default filepath.
- *
- * Returns: (transfer full): A new #EmerNetworkSendProvider.
- * Free with g_object_unref().
- */
-EmerNetworkSendProvider *
-emer_network_send_provider_new (void)
-{
-  return g_object_new (EMER_TYPE_NETWORK_SEND_PROVIDER, NULL);
-}
-
-/*
- * emer_network_send_provider_new_full:
  * @path: path to a file containing network send data; see
  * #EmerNetworkSendProvider:path.
  *
- * Constructs the provider used to obtain and store data regarding "network
- * send" metadata via a given filepath.
+ * Constructs a provider that stores the number of upload attempts in a
+ * file at the given path.
  *
  * Returns: (transfer full): A new #EmerNetworkSendProvider.
  * Free with g_object_unref().
  */
 EmerNetworkSendProvider *
-emer_network_send_provider_new_full (const gchar *path)
+emer_network_send_provider_new (const gchar *path)
 {
   return g_object_new (EMER_TYPE_NETWORK_SEND_PROVIDER,
                        "path", path,

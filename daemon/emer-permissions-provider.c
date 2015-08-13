@@ -24,8 +24,8 @@
 
 #include <string.h>
 
-#include <glib.h>
 #include <gio/gio.h>
+#include <glib.h>
 #include <ostree-repo.h>
 
 #include "shared/metrics-util.h"
@@ -471,8 +471,8 @@ emer_permissions_provider_new (void)
  *   Free with g_object_unref() when done.
  */
 EmerPermissionsProvider *
-emer_permissions_provider_new_full (const char *permissions_config_file_path,
-                                    const char *ostree_config_file_path)
+emer_permissions_provider_new_full (const gchar *permissions_config_file_path,
+                                    const gchar *ostree_config_file_path)
 {
   return g_object_new (EMER_TYPE_PERMISSIONS_PROVIDER,
                        "config-file-path", permissions_config_file_path,

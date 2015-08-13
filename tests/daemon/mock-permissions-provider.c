@@ -23,8 +23,8 @@
 #include "emer-permissions-provider.h"
 #include "mock-permissions-provider.h"
 
-#include <glib.h>
 #include <gio/gio.h>
+#include <glib.h>
 
 typedef struct _EmerPermissionsProviderPrivate
 {
@@ -58,8 +58,8 @@ emer_permissions_provider_new (void)
 }
 
 EmerPermissionsProvider *
-emer_permissions_provider_new_full (const char *config_file_path,
-                                    const char *ostree_config_file_path)
+emer_permissions_provider_new_full (const gchar *config_file_path,
+                                    const gchar *ostree_config_file_path)
 {
   return emer_permissions_provider_new ();
 }

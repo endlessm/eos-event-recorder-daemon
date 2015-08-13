@@ -37,6 +37,7 @@
 #include "shared/metrics-util.h"
 
 #define VARIANT_FILENAME "variants.dat"
+#define DEFAULT_VERSION_FILENAME "local_version_file"
 
 /* SECTION:emer-persistent-cache.c
  * @title: Persistent Cache
@@ -687,10 +688,9 @@ set_cache_version_provider (EmerPersistentCache      *self,
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  if (cache_version_provider == NULL)
-    priv->cache_version_provider = emer_cache_version_provider_new ();
-  else
-    priv->cache_version_provider = g_object_ref (cache_version_provider);
+  if (cache_version_provider != NULL)
+    g_object_ref (cache_version_provider);
+  priv->cache_version_provider = cache_version_provider;
 }
 
 static void
@@ -714,6 +714,16 @@ emer_persistent_cache_constructed (GObject *object)
 
   priv->boot_metadata_file_path =
     g_build_filename (priv->cache_directory, BOOT_OFFSET_METADATA_FILE, NULL);
+
+  if (priv->cache_version_provider == NULL)
+    {
+      gchar *cache_version_path =
+        g_build_filename (priv->cache_directory, DEFAULT_VERSION_FILENAME,
+                          NULL);
+      priv->cache_version_provider =
+        emer_cache_version_provider_new (cache_version_path);
+      g_free (cache_version_path);
+    }
 
   G_OBJECT_CLASS (emer_persistent_cache_parent_class)->constructed (object);
 }
@@ -854,10 +864,12 @@ emer_persistent_cache_initable_init (GInitable    *initable,
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  if (g_mkdir_with_parents (priv->cache_directory, 02774) != 0)
+  if (g_mkdir_with_parents (priv->cache_directory, 02775) != 0)
     {
-      const gchar *error_string = g_strerror (errno);
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+      gint error_code = errno;
+      GIOErrorEnum gio_error_code = g_io_error_from_errno (error_code);
+      const gchar *error_string = g_strerror (error_code);
+      g_set_error (error, G_IO_ERROR, gio_error_code,
                    "Failed to create directory: %s. Error: %s",
                    priv->cache_directory, error_string);
       return FALSE;

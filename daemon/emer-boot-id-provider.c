@@ -214,7 +214,8 @@ read_boot_id (EmerBootIdProvider *self)
 
   if (!read_succeeded)
     {
-      g_critical ("Failed to read boot ID file (%s).", priv->path);
+      g_critical ("Failed to read boot ID file (%s). Error: %s.", priv->path,
+                  error->message);
       g_error_free (error);
       return FALSE;
     }
@@ -237,7 +238,7 @@ read_boot_id (EmerBootIdProvider *self)
   // Remove newline.
   g_strchomp (boot_id_string);
 
-  int parse_failed = uuid_parse (boot_id_string, priv->id);
+  gint parse_failed = uuid_parse (boot_id_string, priv->id);
   g_free (boot_id_string);
 
   if (parse_failed != 0)

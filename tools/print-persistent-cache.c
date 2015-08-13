@@ -55,6 +55,12 @@ print_variants_to_file (GVariant   **variants,
       return FALSE;
     }
 
+  if (num_variants == 0)
+    {
+      g_object_unref (file_output_stream);
+      return TRUE;
+    }
+
   GByteArray *byte_array = g_byte_array_new ();
   for (gint i = 0; i < num_variants; i++)
     {

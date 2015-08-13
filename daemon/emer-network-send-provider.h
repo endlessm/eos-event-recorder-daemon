@@ -77,9 +77,7 @@ struct _EmerNetworkSendProviderClass
 
 GType                    emer_network_send_provider_get_type              (void) G_GNUC_CONST;
 
-EmerNetworkSendProvider *emer_network_send_provider_new                   (void);
-
-EmerNetworkSendProvider *emer_network_send_provider_new_full              (const gchar             *path);
+EmerNetworkSendProvider *emer_network_send_provider_new                   (const gchar             *path);
 
 gint                     emer_network_send_provider_get_send_number       (EmerNetworkSendProvider *self);
 

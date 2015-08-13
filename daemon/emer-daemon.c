@@ -20,6 +20,8 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "emer-daemon.h"
+
 #include <time.h>
 #include <uuid/uuid.h>
 
@@ -32,7 +34,6 @@
 
 #include <eosmetrics/eosmetrics.h>
 
-#include "emer-daemon.h"
 #include "emer-machine-id-provider.h"
 #include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
@@ -57,13 +58,15 @@
 #define NETWORK_ATTEMPT_LIMIT 8
 
 /*
- * How many seconds to delay between trying to send metrics to the proxy server
- * if we are online, or to the persistent cache, if we are offline.
+ * How many seconds to delay between trying to send events to the metrics
+ * servers if we are online, or to the persistent cache, if we are offline.
  *
  * For QA, the "dev" environment delay is much shorter.
  */
 #define DEV_NETWORK_SEND_INTERVAL (60u * 15u) // Fifteen minutes
 #define PRODUCTION_NETWORK_SEND_INTERVAL (60u * 60u) // One hour
+
+#define DEFAULT_NETWORK_SEND_FILENAME "network_send_file"
 
 #define WHAT "shutdown"
 #define WHO "EndlessOS Event Recorder Daemon"
@@ -104,11 +107,11 @@
 
 #define METRICS_DISABLED_MESSAGE "Could not upload events because the " \
   "metrics system is disabled. You may enable the metrics system via " \
-  "Settings > Privacy > Metrics."
+  "Settings > Privacy > Metrics"
 
 #define UPLOADING_DISABLED_MESSAGE "Could not upload events because " \
   "uploading is disabled. You may enable uploading by setting " \
-  "uploading_enabled to true in " PERMISSIONS_FILE "."
+  "uploading_enabled to true in " PERMISSIONS_FILE
 
 typedef struct _NetworkCallbackData
 {
@@ -148,6 +151,7 @@ typedef struct _EmerDaemonPrivate
   EmerNetworkSendProvider *network_send_provider;
   EmerPermissionsProvider *permissions_provider;
 
+  gchar *persistent_cache_directory;
   EmerPersistentCache *persistent_cache;
 
   gboolean recording_enabled;
@@ -166,6 +170,7 @@ enum
   PROP_MACHINE_ID_PROVIDER,
   PROP_NETWORK_SEND_PROVIDER,
   PROP_PERMISSIONS_PROVIDER,
+  PROP_PERSISTENT_CACHE_DIRECTORY,
   PROP_PERSISTENT_CACHE,
   PROP_MAX_BYTES_BUFFERED,
   NPROPS
@@ -386,7 +391,7 @@ get_offset_timestamps (EmerDaemon *self,
       !emtr_util_get_current_time (CLOCK_REALTIME, abs_timestamp_ptr))
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
-                   "Could not get current time.");
+                   "Could not get current time");
       return FALSE;
     }
 
@@ -461,7 +466,7 @@ handle_http_response (SoupSession         *http_session,
       g_task_return_new_error (callback_data->upload_task, G_IO_ERROR,
                                G_IO_ERROR_FAILED,
                                "Maximum number of network attempts (%d) "
-                               "reached.", NETWORK_ATTEMPT_LIMIT);
+                               "reached", NETWORK_ATTEMPT_LIMIT);
       finish_network_callback (callback_data);
       return;
     }
@@ -492,7 +497,7 @@ handle_http_response (SoupSession         *http_session,
           g_task_return_new_error (callback_data->upload_task, G_IO_ERROR,
                                    G_IO_ERROR_INVALID_DATA,
                                    "Could not serialize updated network "
-                                   "request body.");
+                                   "request body");
           finish_network_callback (callback_data);
           return;
         }
@@ -519,7 +524,7 @@ handle_http_response (SoupSession         *http_session,
     }
 
   g_task_return_new_error (callback_data->upload_task, G_IO_ERROR,
-                           G_IO_ERROR_FAILED, "Received HTTP status code: %u.",
+                           G_IO_ERROR_FAILED, "Received HTTP status code: %u",
                            status_code);
   finish_network_callback (callback_data);
 }
@@ -633,7 +638,7 @@ create_request_body (EmerDaemon *self,
   if (!read_id)
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
-                   "Could not read machine ID.");
+                   "Could not read machine ID");
       return NULL;
     }
 
@@ -735,7 +740,7 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
   if (serialized_request_body == NULL)
     {
       g_task_return_new_error (upload_task, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                               "Could not serialize network request body.");
+                               "Could not serialize network request body");
       goto handle_upload_failed;
     }
 
@@ -780,10 +785,8 @@ get_ping_socket (EmerDaemon *self)
     g_network_address_parse_uri (priv->server_uri, 443 /* SSL default port */,
                                  &error);
   if (ping_socket == NULL)
-  {
     g_error ("Invalid server URI '%s' could not be parsed because: %s.",
              priv->server_uri, error->message);
-  }
 
   return ping_socket;
 }
@@ -1077,16 +1080,6 @@ connect_to_login_manager (EmerDaemon *self)
                       G_CALLBACK (handle_login_manager_name_owner_set), self);
 }
 
-static gchar *
-get_user_agent (void)
-{
-  guint libsoup_major_version = soup_get_major_version ();
-  guint libsoup_minor_version = soup_get_minor_version ();
-  guint libsoup_micro_version = soup_get_micro_version ();
-  return g_strdup_printf ("libsoup/%u.%u.%u", libsoup_major_version,
-                          libsoup_minor_version, libsoup_micro_version);
-}
-
 static void
 on_permissions_changed (EmerPermissionsProvider *permissions_provider,
                         GParamSpec              *pspec,
@@ -1147,15 +1140,14 @@ set_machine_id_provider (EmerDaemon            *self,
 }
 
 static void
-set_network_send_provider (EmerDaemon *self,
+set_network_send_provider (EmerDaemon              *self,
                            EmerNetworkSendProvider *network_send_prov)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  if (network_send_prov == NULL)
-    priv->network_send_provider = emer_network_send_provider_new ();
-  else
-    priv->network_send_provider = g_object_ref (network_send_prov);
+  if (network_send_prov != NULL)
+    g_object_ref (network_send_prov);
+  priv->network_send_provider = network_send_prov;
 }
 
 static void
@@ -1176,23 +1168,23 @@ set_permissions_provider (EmerDaemon              *self,
 }
 
 static void
+set_persistent_cache_directory (EmerDaemon  *self,
+                                const gchar *persistent_cache_directory)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  priv->persistent_cache_directory = g_strdup (persistent_cache_directory);
+}
+
+static void
 set_persistent_cache (EmerDaemon          *self,
                       EmerPersistentCache *persistent_cache)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  if (persistent_cache == NULL)
-    {
-      GError *error = NULL;
-      priv->persistent_cache =
-        emer_persistent_cache_new (PERSISTENT_CACHE_DIR, &error);
-      if (priv->persistent_cache == NULL)
-        g_error ("Could not create persistent cache: %s.", error->message);
-    }
-  else
-    {
-      priv->persistent_cache = g_object_ref (persistent_cache);
-    }
+  if (persistent_cache != NULL)
+    g_object_ref (persistent_cache);
+  priv->persistent_cache = persistent_cache;
 }
 
 static void
@@ -1213,6 +1205,26 @@ emer_daemon_constructed (GObject *object)
     emer_permissions_provider_get_environment (priv->permissions_provider);
   schedule_upload (self, environment);
   g_free (environment);
+
+  if (priv->persistent_cache == NULL)
+    {
+      GError *error = NULL;
+      priv->persistent_cache =
+        emer_persistent_cache_new (priv->persistent_cache_directory, &error);
+      if (priv->persistent_cache == NULL)
+        g_error ("Could not create persistent cache in %s: %s.",
+                 priv->persistent_cache_directory, error->message);
+    }
+
+  if (priv->network_send_provider == NULL)
+    {
+      gchar *network_send_path =
+        g_build_filename (priv->persistent_cache_directory,
+                          DEFAULT_NETWORK_SEND_FILENAME, NULL);
+      priv->network_send_provider =
+        emer_network_send_provider_new (network_send_path);
+      g_free (network_send_path);
+    }
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->constructed (object);
 }
@@ -1251,6 +1263,10 @@ emer_daemon_set_property (GObject      *object,
       set_permissions_provider (self, g_value_get_object (value));
       break;
 
+    case PROP_PERSISTENT_CACHE_DIRECTORY:
+      set_persistent_cache_directory (self, g_value_get_string (value));
+      break;
+
     case PROP_PERSISTENT_CACHE:
       set_persistent_cache (self, g_value_get_object (value));
       break;
@@ -1286,10 +1302,11 @@ emer_daemon_finalize (GObject *object)
   g_clear_pointer (&priv->variant_array, g_ptr_array_unref);
 
   g_rand_free (priv->rand);
-  g_free (priv->server_uri);
+  g_clear_pointer (&priv->server_uri, g_free);
   g_clear_object (&priv->machine_id_provider);
   g_clear_object (&priv->network_send_provider);
   g_clear_object (&priv->permissions_provider);
+  g_clear_pointer (&priv->persistent_cache_directory, g_free);
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->finalize (object);
 }
@@ -1341,8 +1358,8 @@ emer_daemon_class_init (EmerDaemonClass *klass)
    */
   emer_daemon_props[PROP_NETWORK_SEND_INTERVAL] =
     g_param_spec_uint ("network-send-interval", "Network send interval",
-                       "Number of seconds between attempts to flush metrics to "
-                       "proxy server",
+                       "Number of seconds between attempts to upload events to "
+                       "server",
                        0, G_MAXUINT, 0,
                        G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                        G_PARAM_STATIC_STRINGS);
@@ -1390,17 +1407,35 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                          G_PARAM_STATIC_STRINGS);
 
   /*
+   * EmerDaemon:persistent-cache-directory:
+   *
+   * A directory for temporarily storing events until they are uploaded to the
+   * metrics servers. If a network send provider is not specified, a default
+   * network send provider is created that uses DEFAULT_NETWORK_SEND_FILENAME in
+   * this directory.
+   */
+  emer_daemon_props[PROP_PERSISTENT_CACHE_DIRECTORY] =
+    g_param_spec_string ("persistent-cache-directory",
+                         "Persistent cache directory",
+                         "The directory in which to temporarily store events "
+                         "locally",
+                         NULL,
+                         G_PARAM_CONSTRUCT | G_PARAM_WRITABLE |
+                         G_PARAM_STATIC_STRINGS);
+
+
+  /*
    * EmerDaemon:persistent-cache:
    *
-   * An #EmerPersistentCache for storing metrics until they are sent to the
-   * proxy server.
+   * An #EmerPersistentCache for storing events until they are uploaded to the
+   * metrics servers.
    * If this property is not specified, a default persistent cache (created by
    * emer_persistent_cache_new ()) will be used.
    */
   emer_daemon_props[PROP_PERSISTENT_CACHE] =
     g_param_spec_object ("persistent-cache", "Persistent cache",
-                         "Object managing persistent storage of metrics until "
-                         "they are sent to the proxy server",
+                         "Object managing persistent storage of events until "
+                         "they are uploaded to the metrics servers",
                          EMER_TYPE_PERSISTENT_CACHE,
                          G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                          G_PARAM_STATIC_STRINGS);
@@ -1437,17 +1472,12 @@ emer_daemon_init (EmerDaemon *self)
 
   priv->upload_queue = g_queue_new ();
 
-  gchar *user_agent = get_user_agent ();
-
   priv->http_session =
     soup_session_new_with_options (SOUP_SESSION_MAX_CONNS, 1,
                                    SOUP_SESSION_MAX_CONNS_PER_HOST, 1,
-                                   SOUP_SESSION_USER_AGENT, user_agent,
                                    SOUP_SESSION_ADD_FEATURE_BY_TYPE,
                                    SOUP_TYPE_CACHE,
                                    NULL);
-
-  g_free (user_agent);
 
   priv->variant_array =
     g_ptr_array_new_with_free_func ((GDestroyNotify) g_variant_unref);
@@ -1459,9 +1489,11 @@ emer_daemon_init (EmerDaemon *self)
  * Returns: (transfer full): a new #EmerDaemon with the default configuration.
  */
 EmerDaemon *
-emer_daemon_new (void)
+emer_daemon_new (const gchar *persistent_cache_directory)
 {
-  return g_object_new (EMER_TYPE_DAEMON, NULL);
+  return g_object_new (EMER_TYPE_DAEMON,
+                       "persistent-cache-directory", persistent_cache_directory,
+                       NULL);
 }
 
 /*

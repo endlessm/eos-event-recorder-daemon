@@ -23,9 +23,9 @@
 #ifndef MOCK_PERMISSIONS_PROVIDER_H
 #define MOCK_PERMISSIONS_PROVIDER_H
 
-#include <glib.h>
-
 #include "emer-permissions-provider.h"
+
+#include <glib.h>
 
 G_BEGIN_DECLS
 

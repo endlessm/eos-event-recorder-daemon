@@ -23,8 +23,9 @@
 #ifndef EMER_MACHINE_ID_PROVIDER_H
 #define EMER_MACHINE_ID_PROVIDER_H
 
-#include <glib-object.h>
 #include <uuid/uuid.h>
+
+#include <glib-object.h>
 
 G_BEGIN_DECLS
 

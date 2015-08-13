@@ -20,12 +20,13 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include <string.h>
+
+#include <gio/gio.h>
 #include <glib.h>
 #include <glib-object.h>
 #include <glib-unix.h>
-#include <gio/gio.h>
 #include <polkit/polkit.h>
-#include <string.h>
 
 #include "emer-daemon.h"
 #include "emer-event-recorder-server.h"
@@ -257,11 +258,52 @@ on_name_lost (GDBusConnection *system_bus,
   g_error ("Could not acquire name '%s' on system bus.", name);
 }
 
-int
-main (int                argc,
-      const char * const argv[])
+static EmerDaemon *
+make_daemon (gint                argc,
+             const gchar * const argv[])
 {
-  EmerDaemon *daemon = emer_daemon_new ();
+  gchar *persistent_cache_directory = NULL;
+  GOptionEntry option_entries[] =
+  {
+    { "persistent-cache-directory", 'p', G_OPTION_FLAG_NONE,
+      G_OPTION_ARG_FILENAME, &persistent_cache_directory,
+      "Store persistent cache at path", "path"},
+    { NULL }
+  };
+
+  GOptionContext *option_context =
+    g_option_context_new (NULL /* parameter string */);
+  g_option_context_add_main_entries (option_context, option_entries,
+                                     NULL /* translation domain */);
+
+  GError *error = NULL;
+  gboolean parse_succeeded =
+    g_option_context_parse (option_context, &argc, (gchar ***) &argv, &error);
+  g_option_context_free (option_context);
+
+  if (!parse_succeeded)
+    {
+      g_warning ("Option parsing failed: %s.", error->message);
+      g_error_free (error);
+      return NULL;
+    }
+
+  if (persistent_cache_directory == NULL)
+    return emer_daemon_new (PERSISTENT_CACHE_DIR);
+
+  EmerDaemon *daemon = emer_daemon_new (persistent_cache_directory);
+  g_free (persistent_cache_directory);
+
+  return daemon;
+}
+
+gint
+main (gint                argc,
+      const gchar * const argv[])
+{
+  EmerDaemon *daemon = make_daemon (argc, argv);
+  if (daemon == NULL)
+    return EXIT_FAILURE;
 
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
 

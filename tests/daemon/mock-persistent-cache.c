@@ -22,9 +22,10 @@
 
 #include "emer-persistent-cache.h"
 #include "mock-persistent-cache.h"
-#include "shared/metrics-util.h"
 
 #include <glib.h>
+
+#include "shared/metrics-util.h"
 
 typedef struct _EmerPersistentCachePrivate
 {

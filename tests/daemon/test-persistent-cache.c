@@ -140,7 +140,7 @@ make_testing_cache (void)
   EmerBootIdProvider *boot_id_provider =
     emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
   EmerCacheVersionProvider *cache_version_provider =
-    emer_cache_version_provider_new_full (NULL);
+    emer_cache_version_provider_new (NULL);
   GError *error = NULL;
   g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
                          "Failed to unlink old cache file " TEST_DIRECTORY
@@ -595,7 +595,7 @@ test_persistent_cache_store_when_full (gboolean     *unused,
   EmerBootIdProvider *boot_id_provider =
     emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
   EmerCacheVersionProvider *cache_version_provider =
-    emer_cache_version_provider_new_full (NULL);
+    emer_cache_version_provider_new (NULL);
   GError *error = NULL;
   g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
                          "Failed to unlink old cache file " TEST_DIRECTORY
@@ -820,7 +820,7 @@ test_persistent_cache_purges_when_out_of_date (gboolean     *unused,
   EmerBootIdProvider *boot_id_provider =
     emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
   EmerCacheVersionProvider *cache_version_provider =
-    emer_cache_version_provider_new_full (NULL);
+    emer_cache_version_provider_new (NULL);
   GError *error = NULL;
   g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
                          "Failed to unlink old cache file " TEST_DIRECTORY
@@ -1190,11 +1190,11 @@ test_persistent_cache_get_offset_can_build_boot_metadata_file (gboolean     *unu
   g_object_unref (cache);
 }
 
-int
-main (int                argc,
-      const char * const argv[])
+gint
+main (gint                argc,
+      const gchar * const argv[])
 {
-  g_test_init (&argc, (char ***) &argv, NULL);
+  g_test_init (&argc, (gchar ***) &argv, NULL);
 
 // We are using a gboolean as a fixture type, but it will go unused.
 #define ADD_CACHE_TEST_FUNC(path, func) \

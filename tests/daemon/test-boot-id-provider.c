@@ -22,10 +22,11 @@
 
 #include "emer-boot-id-provider.h"
 
+#include <uuid/uuid.h>
+
+#include <gio/gio.h>
 #include <glib.h>
 #include <glib/gstdio.h>
-#include <gio/gio.h>
-#include <uuid/uuid.h>
 
 #define TESTING_FILE_PATH "testing_boot_id_XXXXXX"
 #define FIRST_TESTING_ID  "67ba25f5-b7af-48f9-a746-d1421a7e49de\n"
@@ -130,11 +131,11 @@ test_boot_id_provider_caches_id (struct Fixture *fixture,
   g_assert (uuid_compare (testing_id, real_id) != 0);
 }
 
-int
-main (int                argc,
-      const char * const argv[])
+gint
+main (gint                argc,
+      const gchar * const argv[])
 {
-  g_test_init (&argc, (char ***) &argv, NULL);
+  g_test_init (&argc, (gchar ***) &argv, NULL);
 // gboolean is being used as a dummy fixture.
 #define ADD_BOOT_TEST_FUNC(path, func) \
   g_test_add ((path), struct Fixture, NULL, setup, (func), teardown)

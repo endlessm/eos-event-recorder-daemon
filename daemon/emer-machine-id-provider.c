@@ -22,13 +22,13 @@
 
 #include "emer-machine-id-provider.h"
 
-#include "shared/metrics-util.h"
-
 #include <string.h>
 #include <uuid/uuid.h>
 
 #include <glib/gprintf.h>
 #include <glib/gstdio.h>
+
+#include "shared/metrics-util.h"
 
 typedef struct EmerMachineIdProviderPrivate
 {
@@ -261,7 +261,7 @@ read_machine_id (EmerMachineIdProvider *self)
   gchar *hyphenated_machine_id = hyphenate_uuid (machine_id_sans_hyphens);
   g_free (machine_id_sans_hyphens);
 
-  int parse_failed = uuid_parse (hyphenated_machine_id, priv->id);
+  gint parse_failed = uuid_parse (hyphenated_machine_id, priv->id);
   g_free (hyphenated_machine_id);
 
   if (parse_failed != 0)

@@ -23,8 +23,8 @@
 #ifndef EMER_PERSISTENT_CACHE_H
 #define EMER_PERSISTENT_CACHE_H
 
-#include <glib-object.h>
 #include <gio/gio.h>
+#include <glib-object.h>
 
 #include "emer-boot-id-provider.h"
 #include "emer-cache-size-provider.h"

@@ -23,13 +23,13 @@
 #ifndef EMER_DAEMON_H
 #define EMER_DAEMON_H
 
+#include <gio/gio.h>
+#include <glib-object.h>
+
 #include "emer-machine-id-provider.h"
 #include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
-
-#include <gio/gio.h>
-#include <glib-object.h>
 
 G_BEGIN_DECLS
 
@@ -72,7 +72,7 @@ struct _EmerDaemonClass
 
 GType                    emer_daemon_get_type                 (void) G_GNUC_CONST;
 
-EmerDaemon *             emer_daemon_new                      (void);
+EmerDaemon *             emer_daemon_new                      (const gchar             *persistent_cache_directory);
 
 EmerDaemon *             emer_daemon_new_full                 (GRand                   *rand,
                                                                const gchar             *server_uri,

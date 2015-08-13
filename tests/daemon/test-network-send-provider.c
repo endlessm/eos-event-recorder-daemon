@@ -20,9 +20,9 @@
 
 #include "emer-network-send-provider.h"
 
+#include <gio/gio.h>
 #include <glib.h>
 #include <glib/gstdio.h>
-#include <gio/gio.h>
 
 #define TESTING_FILE_PATH "testing_network_send_XXXXXX"
 
@@ -79,7 +79,7 @@ setup (Fixture      *fixture,
   write_testing_keyfile (fixture, STARTING_KEY_FILE);
 
   fixture->network_send_provider =
-    emer_network_send_provider_new_full (fixture->tmp_path);
+    emer_network_send_provider_new (fixture->tmp_path);
 }
 
 static void
@@ -166,11 +166,11 @@ test_network_send_provider_resets_when_corrupted (Fixture      *fixture,
   g_assert_cmpint (second_send_number, ==, RESET_SEND_NUMBER);
 }
 
-int
-main (int                argc,
-      const char * const argv[])
+gint
+main (gint                argc,
+      const gchar * const argv[])
 {
-  g_test_init (&argc, (char ***) &argv, NULL);
+  g_test_init (&argc, (gchar ***) &argv, NULL);
 #define ADD_CACHE_VERSION_TEST_FUNC(path, func) \
   g_test_add ((path), Fixture, NULL, setup, (func), teardown)
 

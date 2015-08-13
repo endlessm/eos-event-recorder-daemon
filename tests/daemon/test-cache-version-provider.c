@@ -20,9 +20,9 @@
 
 #include "emer-cache-version-provider.h"
 
+#include <gio/gio.h>
 #include <glib.h>
 #include <glib/gstdio.h>
-#include <gio/gio.h>
 
 #define TESTING_FILE_PATH "testing_cache_version_XXXXXX"
 
@@ -71,7 +71,7 @@ setup (Fixture      *fixture,
   write_testing_cache_keyfile (fixture, STARTING_KEY_FILE);
 
   fixture->version_provider =
-    emer_cache_version_provider_new_full (fixture->tmp_path);
+    emer_cache_version_provider_new (fixture->tmp_path);
 }
 
 static void
@@ -147,11 +147,11 @@ test_cache_version_provider_can_set_version (Fixture      *fixture,
   g_assert_cmpint (second_version, ==, write_version);
 }
 
-int
-main (int                argc,
-      const char * const argv[])
+gint
+main (gint                argc,
+      const gchar * const argv[])
 {
-  g_test_init (&argc, (char ***) &argv, NULL);
+  g_test_init (&argc, (gchar ***) &argv, NULL);
 #define ADD_CACHE_VERSION_TEST_FUNC(path, func) \
   g_test_add ((path), Fixture, NULL, setup, (func), teardown)
 

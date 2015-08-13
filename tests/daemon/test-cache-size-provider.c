@@ -120,11 +120,11 @@ test_cache_size_provider_caches_max_cache_size (Fixture      *fixture,
   g_assert_cmpint (second_max_cache_size, ==, FIRST_MAX_CACHE_SIZE);
 }
 
-int
-main (int                argc,
-      const char * const argv[])
+gint
+main (gint                argc,
+      const gchar * const argv[])
 {
-  g_test_init (&argc, (char ***) &argv, NULL);
+  g_test_init (&argc, (gchar ***) &argv, NULL);
 #define ADD_CACHE_SIZE_TEST_FUNC(path, func) \
   g_test_add ((path), Fixture, NULL, setup, (func), teardown)
 

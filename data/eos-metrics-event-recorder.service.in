@@ -1,6 +1,5 @@
 [Unit]
 Description=EndlessOS Metrics Event Recorder Server
-Wants=systemd-logind.service
 
 [Service]
 Environment=DCONF_PROFILE=/dev/null

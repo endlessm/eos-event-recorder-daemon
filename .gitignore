@@ -64,3 +64,4 @@ Makefile.in
 *.gcda
 *.gcno
 /_coverage
+run_coverage.coverage

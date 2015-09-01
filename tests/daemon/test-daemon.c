@@ -1225,17 +1225,6 @@ test_daemon_does_not_record_sequences_when_daemon_disabled (Fixture      *fixtur
 }
 
 static void
-test_daemon_inhibits_shutdown (Fixture      *fixture,
-                               gconstpointer unused)
-{
-  start_mock_logind_service (fixture);
-  read_lines_from_stdout (fixture->logind_mock,
-                          (ProcessLineSourceFunc) process_logind_line,
-                          NULL /* user_data */);
-  terminate_subprocess_and_wait (fixture->logind_mock);
-}
-
-static void
 test_daemon_updates_timestamps_on_shutdown (Fixture      *fixture,
                                             gconstpointer unused)
 {
@@ -1288,29 +1277,6 @@ test_daemon_flushes_to_persistent_cache_on_shutdown (Fixture      *fixture,
                                 NULL /* GError */);
   g_assert_true (read_succeeded);
   assert_singulars_match (variants, num_variants);
-}
-
-static void
-test_daemon_reinhibits_shutdown_on_shutdown_cancel (Fixture      *fixture,
-                                                    gconstpointer unused)
-{
-  start_mock_logind_service (fixture);
-
-  read_lines_from_stdout (fixture->logind_mock,
-                          (ProcessLineSourceFunc) process_logind_line,
-                          NULL /* user_data */);
-  emit_shutdown_signal (TRUE);
-
-  // Wait for EmerDaemon to handle the signal.
-  while (g_main_context_pending (NULL))
-    g_main_context_iteration (NULL, TRUE);
-
-  emit_shutdown_signal (FALSE);
-  read_lines_from_stdout (fixture->logind_mock,
-                          (ProcessLineSourceFunc) process_logind_line,
-                          NULL /* user_data */);
-
-  terminate_subprocess_and_wait (fixture->logind_mock);
 }
 
 static void
@@ -1380,13 +1346,10 @@ main (gint                argc,
                    test_daemon_does_not_record_aggregates_when_daemon_disabled);
   ADD_DAEMON_TEST ("/daemon/does-not-record-sequences-when-daemon-disabled",
                    test_daemon_does_not_record_sequences_when_daemon_disabled);
-  ADD_DAEMON_TEST ("/daemon/inhibits-shutdown", test_daemon_inhibits_shutdown);
   ADD_DAEMON_TEST ("/daemon/updates-timestamps-on-shutdown",
                    test_daemon_updates_timestamps_on_shutdown);
   ADD_DAEMON_TEST ("/daemon/flushes-to-persistent-cache-on-shutdown",
                    test_daemon_flushes_to_persistent_cache_on_shutdown);
-  ADD_DAEMON_TEST ("/daemon/reinhibits-shutdown-on-shutdown-cancel",
-                   test_daemon_reinhibits_shutdown_on_shutdown_cancel);
   ADD_DAEMON_TEST ("/daemon/limits-network-upload-size",
                    test_daemon_limits_network_upload_size);
 

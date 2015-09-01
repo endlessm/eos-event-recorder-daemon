@@ -125,7 +125,6 @@ typedef struct _NetworkCallbackData
 
 typedef struct _EmerDaemonPrivate
 {
-  gint shutdown_inhibitor;
   GDBusProxy *login_manager_proxy;
 
   guint network_send_interval;
@@ -201,28 +200,6 @@ finish_network_callback (NetworkCallbackData *callback_data)
 
   priv->uploading = FALSE;
   g_signal_emit (self, emer_daemon_signals[SIGNAL_UPLOAD_FINISHED], 0u);
-}
-
-static void
-release_shutdown_inhibitor (EmerDaemon *self)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  if (priv->shutdown_inhibitor != -1)
-    {
-      // We are currently holding a shutdown inhibitor.
-      GError *error = NULL;
-      gboolean released_shutdown_inhibitor =
-        g_close (priv->shutdown_inhibitor, &error);
-      if (!released_shutdown_inhibitor)
-        {
-          g_warning ("Could not release shutdown inhibitor: %s.",
-                     error->message);
-          g_error_free (error);
-        }
-
-      priv->shutdown_inhibitor = -1;
-    }
 }
 
 static gboolean
@@ -933,55 +910,6 @@ handle_upload_finished (EmerDaemon *self)
 }
 
 static void
-inhibit_shutdown (EmerDaemon *self)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  if (priv->shutdown_inhibitor != -1)
-    // There is no point in inhibiting shutdown twice.
-    return;
-
-  GVariant *inhibit_args = g_variant_new_parsed (INHIBIT_ARGS);
-  GError *error = NULL;
-  GUnixFDList *fd_list = NULL;
-  GVariant *inhibitor_tuple =
-    g_dbus_proxy_call_with_unix_fd_list_sync (priv->login_manager_proxy,
-                                              "Inhibit", inhibit_args,
-                                              G_DBUS_CALL_FLAGS_NONE,
-                                              -1 /* timeout */,
-                                              NULL /* input fd_list */,
-                                              &fd_list, NULL /* GCancellable */,
-                                              &error);
-
-  if (inhibitor_tuple == NULL)
-    {
-      if (fd_list != NULL)
-        g_object_unref (fd_list);
-      g_warning ("Error inhibiting shutdown: %s.", error->message);
-      g_error_free (error);
-      return;
-    }
-
-  g_variant_unref (inhibitor_tuple);
-
-  gint fd_list_length;
-  gint *fds = g_unix_fd_list_steal_fds (fd_list, &fd_list_length);
-  g_object_unref (fd_list);
-  if (fd_list_length != 1)
-    {
-      g_warning ("Error inhibiting shutdown. Login manager returned %d file "
-                 "descriptors, but we expected 1 file descriptor.",
-                 fd_list_length);
-      goto finally;
-    }
-
-  priv->shutdown_inhibitor = fds[0];
-
-finally:
-  g_free (fds);
-}
-
-static void
 update_timestamps (EmerDaemon *self)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
@@ -1005,18 +933,8 @@ handle_login_manager_signal (GDBusProxy *dbus_proxy,
 {
   if (g_strcmp0 ("PrepareForShutdown", signal_name) == 0)
     {
-      gboolean shutting_down;
-      g_variant_get_child (parameters, 0, "b", &shutting_down);
-      if (shutting_down)
-        {
-          flush_to_persistent_cache (self);
-          update_timestamps (self);
-          release_shutdown_inhibitor (self);
-        }
-      else
-        {
-          inhibit_shutdown (self);
-        }
+      flush_to_persistent_cache (self);
+      update_timestamps (self);
     }
 }
 
@@ -1027,7 +945,6 @@ register_with_login_manager (EmerDaemon *self)
 
   g_signal_connect (priv->login_manager_proxy, "g-signal",
                     G_CALLBACK (handle_login_manager_signal), self);
-  inhibit_shutdown (self);
 }
 
 static gboolean
@@ -1290,7 +1207,6 @@ emer_daemon_finalize (GObject *object)
 
   flush_to_persistent_cache (self);
   g_clear_object (&priv->persistent_cache);
-  release_shutdown_inhibitor (self);
 
   g_clear_object (&priv->login_manager_proxy);
 
@@ -1464,9 +1380,6 @@ static void
 emer_daemon_init (EmerDaemon *self)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  // We are not currently holding a shutdown inhibitor.
-  priv->shutdown_inhibitor = -1;
 
   connect_to_login_manager (self);
 

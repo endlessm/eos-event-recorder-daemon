@@ -48,7 +48,6 @@
 #define MOCK_SERVER_PATH TEST_DIR "daemon/mock-server.py"
 
 #define MEANINGLESS_EVENT "350ac4ff-3026-4c25-9e7e-e8103b4fd5d8"
-#define MEANINGLESS_EVENT_2 "d936cd5c-08de-4d4e-8a87-8df1f4a33cba"
 
 #define USER_ID 4200u
 #define NUM_EVENTS G_GINT64_CONSTANT (101)

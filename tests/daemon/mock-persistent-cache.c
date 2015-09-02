@@ -30,7 +30,6 @@
 typedef struct _EmerPersistentCachePrivate
 {
   GPtrArray *variant_array;
-  gint num_timestamp_updates;
 } EmerPersistentCachePrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerPersistentCache, emer_persistent_cache,
@@ -92,16 +91,8 @@ emer_persistent_cache_cost (GVariant *variant)
 gboolean
 emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
                                             gint64              *offset,
-                                            gboolean             always_update_timestamps,
                                             GError             **error)
 {
-  if (always_update_timestamps)
-    {
-      EmerPersistentCachePrivate *priv =
-        emer_persistent_cache_get_instance_private (self);
-      priv->num_timestamp_updates++;
-    }
-
   if (offset != NULL)
     *offset = BOOT_TIME_OFFSET;
   return TRUE;
@@ -185,15 +176,4 @@ emer_persistent_cache_remove (EmerPersistentCache *self,
     g_ptr_array_remove_range (priv->variant_array, 0, token);
 
   return TRUE;
-}
-
-/* API OF MOCK OBJECT */
-
-gint
-mock_persistent_cache_get_num_timestamp_updates (EmerPersistentCache *self)
-{
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
-
-  return priv->num_timestamp_updates;
 }

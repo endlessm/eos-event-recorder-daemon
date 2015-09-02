@@ -93,7 +93,6 @@ gsize                emer_persistent_cache_cost                 (GVariant       
 
 gboolean             emer_persistent_cache_get_boot_time_offset (EmerPersistentCache      *self,
                                                                  gint64                   *offset,
-                                                                 gboolean                  always_update_timestamps,
                                                                  GError                  **error);
 
 gboolean             emer_persistent_cache_store                (EmerPersistentCache      *self,

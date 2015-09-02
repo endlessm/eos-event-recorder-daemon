@@ -32,8 +32,6 @@ G_BEGIN_DECLS
 #define BOOT_TIME_OFFSET G_GINT64_CONSTANT (73)
 #define MAX_NUM_VARIANTS 10
 
-gint mock_persistent_cache_get_num_timestamp_updates (EmerPersistentCache *self);
-
 G_END_DECLS
 
 #endif /* MOCK_PERSISTENT_CACHE_H */

@@ -48,7 +48,6 @@
 #define MOCK_SERVER_PATH TEST_DIR "daemon/mock-server.py"
 
 #define MEANINGLESS_EVENT "350ac4ff-3026-4c25-9e7e-e8103b4fd5d8"
-#define MEANINGLESS_EVENT_2 "d936cd5c-08de-4d4e-8a87-8df1f4a33cba"
 
 #define USER_ID 4200u
 #define NUM_EVENTS G_GINT64_CONSTANT (101)
@@ -63,12 +62,6 @@
 
 #define TIMEOUT_SEC 5
 
-#define EXPECTED_INHIBIT_SHUTDOWN_ARGS \
-  "\"shutdown\" " \
-  "\"EndlessOS Event Recorder Daemon\" " \
-  "\"Flushing events to disk\" " \
-  "\"delay\""
-
 typedef struct _Fixture
 {
   EmerDaemon *test_object;
@@ -78,7 +71,6 @@ typedef struct _Fixture
   EmerPersistentCache *mock_persistent_cache;
 
   GSubprocess *mock_server;
-  GSubprocess *logind_mock;
 
   gint64 relative_time;
   gint64 absolute_time;
@@ -130,15 +122,6 @@ terminate_subprocess_and_wait (GSubprocess *subprocess)
   g_object_unref (subprocess);
 }
 
-static void
-start_mock_logind_service (Fixture *fixture)
-{
-  fixture->logind_mock =
-    g_subprocess_new (G_SUBPROCESS_FLAGS_STDOUT_PIPE, NULL, "python3", "-m",
-                      "dbusmock", "--system", "--template", "logind", NULL);
-  g_assert_nonnull (fixture->logind_mock);
-}
-
 static gboolean
 timeout (gpointer unused)
 {
@@ -177,17 +160,6 @@ contains_dbus_call (const gchar *line,
   gchar *given_args_index = strstr (arguments_given, arguments);
   g_free (arguments_given);
   return given_args_index != NULL;
-}
-
-static gboolean
-process_logind_line (GString *line,
-                     gpointer unused)
-{
-  // Ensure that the only null byte in the line is the terminal null byte.
-  g_assert_cmpuint (line->len, ==, strlen (line->str));
-
-  return !contains_dbus_call (line->str, "Inhibit",
-                              EXPECTED_INHIBIT_SHUTDOWN_ARGS);
 }
 
 static gboolean
@@ -432,28 +404,6 @@ read_bytes_from_stdout (GSubprocess           *subprocess,
   g_source_remove (timeout_id);
   g_main_loop_unref (byte_collector.main_loop);
   g_byte_array_unref (byte_collector.byte_array);
-}
-
-static void
-emit_shutdown_signal (gboolean shutdown)
-{
-  GDBusConnection *system_bus = g_bus_get_sync (G_BUS_TYPE_SYSTEM, NULL, NULL);
-  g_assert_nonnull (system_bus);
-
-  GVariantBuilder args_builder;
-  g_variant_builder_init (&args_builder, G_VARIANT_TYPE ("av"));
-  g_variant_builder_add (&args_builder, "v", g_variant_new ("b", shutdown));
-  GVariant *response =
-    g_dbus_connection_call_sync (system_bus, "org.freedesktop.login1",
-                                 "/org/freedesktop/login1",
-                                 "org.freedesktop.DBus.Mock", "EmitSignal",
-                                 g_variant_new ("(sssav)", "",
-                                                "PrepareForShutdown", "b",
-                                                &args_builder),
-                                 NULL, G_DBUS_CALL_FLAGS_NO_AUTO_START,
-                                 TIMEOUT_SEC * 1000,
-                                 NULL, NULL);
-  g_assert_nonnull (response);
 }
 
 static GVariant *
@@ -1015,7 +965,7 @@ static void
 teardown (Fixture      *fixture,
           gconstpointer unused)
 {
-  g_object_unref (fixture->test_object);
+  g_clear_object (&fixture->test_object);
   g_object_unref (fixture->mock_machine_id_provider);
   g_object_unref (fixture->mock_network_send_provider);
   g_object_unref (fixture->mock_permissions_provider);
@@ -1225,48 +1175,13 @@ test_daemon_does_not_record_sequences_when_daemon_disabled (Fixture      *fixtur
 }
 
 static void
-test_daemon_updates_timestamps_on_shutdown (Fixture      *fixture,
-                                            gconstpointer unused)
-{
-  start_mock_logind_service (fixture);
-
-  gint num_timestamp_updates_before =
-    mock_persistent_cache_get_num_timestamp_updates (fixture->mock_persistent_cache);
-
-  read_lines_from_stdout (fixture->logind_mock,
-                          (ProcessLineSourceFunc) process_logind_line,
-                          NULL /* user_data */);
-  emit_shutdown_signal (TRUE);
-
-  // Wait for EmerDaemon to handle the signal.
-  while (g_main_context_pending (NULL))
-    g_main_context_iteration (NULL, TRUE);
-
-  gint num_timestamp_updates_after =
-    mock_persistent_cache_get_num_timestamp_updates (fixture->mock_persistent_cache);
-  g_assert_cmpint (num_timestamp_updates_after, ==, num_timestamp_updates_before + 1);
-
-  terminate_subprocess_and_wait (fixture->logind_mock);
-}
-
-static void
-test_daemon_flushes_to_persistent_cache_on_shutdown (Fixture      *fixture,
+test_daemon_flushes_to_persistent_cache_on_finalize (Fixture      *fixture,
                                                      gconstpointer unused)
 {
-  start_mock_logind_service (fixture);
-
-  read_lines_from_stdout (fixture->logind_mock,
-                          (ProcessLineSourceFunc) process_logind_line,
-                          NULL /* user_data */);
-
   record_singulars (fixture->test_object);
-  emit_shutdown_signal (TRUE);
 
-  /* Wait for daemon to handle the signal. */
-  while (g_main_context_pending (NULL))
-    g_main_context_iteration (NULL, TRUE);
-
-  terminate_subprocess_and_wait (fixture->logind_mock);
+  /* Unref the daemon, causing it to finalize. */
+  g_clear_object (&fixture->test_object);
 
   GVariant **variants;
   gsize num_variants;
@@ -1346,10 +1261,8 @@ main (gint                argc,
                    test_daemon_does_not_record_aggregates_when_daemon_disabled);
   ADD_DAEMON_TEST ("/daemon/does-not-record-sequences-when-daemon-disabled",
                    test_daemon_does_not_record_sequences_when_daemon_disabled);
-  ADD_DAEMON_TEST ("/daemon/updates-timestamps-on-shutdown",
-                   test_daemon_updates_timestamps_on_shutdown);
-  ADD_DAEMON_TEST ("/daemon/flushes-to-persistent-cache-on-shutdown",
-                   test_daemon_flushes_to_persistent_cache_on_shutdown);
+  ADD_DAEMON_TEST ("/daemon/flushes-to-persistent-cache-on-finalize",
+                   test_daemon_flushes_to_persistent_cache_on_finalize);
   ADD_DAEMON_TEST ("/daemon/limits-network-upload-size",
                    test_daemon_limits_network_upload_size);
 

@@ -47,8 +47,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
     def setUp(self):
         """Start the event recorder on the mock system bus."""
 
-        # Put polkitd and logind mocks onto the mock system bus
-        (self.login_popen, self.login_obj) = self.spawn_server_template('logind')
+        # Put polkitd mocks onto the mock system bus
         (self.polkit_popen, self.polkit_obj) = self.spawn_server_template('polkitd')
 
         self.persistent_cache_directory = tempfile.mkdtemp()
@@ -67,11 +66,9 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
 
     def tearDown(self):
         self.polkit_popen.terminate()
-        self.login_popen.terminate()
         self.daemon.terminate()
 
         self.polkit_popen.wait()
-        self.login_popen.wait()
         self.assertEquals(self.daemon.wait(), 0)
         shutil.rmtree(self.persistent_cache_directory)
 

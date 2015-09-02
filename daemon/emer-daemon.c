@@ -68,12 +68,6 @@
 
 #define DEFAULT_NETWORK_SEND_FILENAME "network_send_file"
 
-#define WHAT "shutdown"
-#define WHO "EndlessOS Event Recorder Daemon"
-#define WHY "Flushing events to disk"
-#define MODE "delay"
-#define INHIBIT_ARGS "('" WHAT "', '" WHO "', '" WHY "', '" MODE "')"
-
 #define EVENT_VALUE_TYPE_STRING "(xmv)"
 #define EVENT_VALUE_ARRAY_TYPE_STRING "a" EVENT_VALUE_TYPE_STRING
 #define EVENT_VALUE_ARRAY_TYPE G_VARIANT_TYPE (EVENT_VALUE_ARRAY_TYPE_STRING)
@@ -125,8 +119,6 @@ typedef struct _NetworkCallbackData
 
 typedef struct _EmerDaemonPrivate
 {
-  GDBusProxy *login_manager_proxy;
-
   guint network_send_interval;
   GQueue *upload_queue;
   gboolean uploading;
@@ -910,94 +902,6 @@ handle_upload_finished (EmerDaemon *self)
 }
 
 static void
-update_timestamps (EmerDaemon *self)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  GError *error = NULL;
-  if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
-                                                   NULL, TRUE, &error))
-    {
-      g_warning ("Persistent cache could not update timestamps: %s.",
-                 error->message);
-      g_error_free (error);
-    }
-}
-
-static void
-handle_login_manager_signal (GDBusProxy *dbus_proxy,
-                             gchar      *sender_name,
-                             gchar      *signal_name,
-                             GVariant   *parameters,
-                             EmerDaemon *self)
-{
-  if (g_strcmp0 ("PrepareForShutdown", signal_name) == 0)
-    {
-      flush_to_persistent_cache (self);
-      update_timestamps (self);
-    }
-}
-
-static void
-register_with_login_manager (EmerDaemon *self)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  g_signal_connect (priv->login_manager_proxy, "g-signal",
-                    G_CALLBACK (handle_login_manager_signal), self);
-}
-
-static gboolean
-has_owner (GDBusProxy *dbus_proxy)
-{
-  gchar *name_owner =
-    g_dbus_proxy_get_name_owner (dbus_proxy);
-  if (name_owner != NULL)
-    g_free (name_owner);
-
-  return name_owner != NULL;
-}
-
-static void
-handle_login_manager_name_owner_set (GDBusProxy *dbus_proxy,
-                                     GParamSpec *pspec,
-                                     EmerDaemon *self)
-{
-  if (has_owner (dbus_proxy))
-    register_with_login_manager (self);
-}
-
-static void
-connect_to_login_manager (EmerDaemon *self)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  GError *error = NULL;
-  priv->login_manager_proxy =
-    g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
-                                   G_DBUS_PROXY_FLAGS_DO_NOT_AUTO_START,
-                                   NULL /* GDBusInterfaceInfo */,
-                                   "org.freedesktop.login1",
-                                   "/org/freedesktop/login1",
-                                   "org.freedesktop.login1.Manager",
-                                   NULL /* GCancellable */,
-                                   &error);
-  if (priv->login_manager_proxy == NULL)
-    {
-      g_warning ("Error creating login manager D-Bus proxy: %s.",
-                 error->message);
-      g_error_free (error);
-      return;
-    }
-
-  if (has_owner (priv->login_manager_proxy))
-    register_with_login_manager (self);
-  else
-    g_signal_connect (priv->login_manager_proxy, "notify::g-name-owner",
-                      G_CALLBACK (handle_login_manager_name_owner_set), self);
-}
-
-static void
 on_permissions_changed (EmerPermissionsProvider *permissions_provider,
                         GParamSpec              *pspec,
                         EmerDaemon              *self)
@@ -1208,8 +1112,6 @@ emer_daemon_finalize (GObject *object)
   flush_to_persistent_cache (self);
   g_clear_object (&priv->persistent_cache);
 
-  g_clear_object (&priv->login_manager_proxy);
-
   g_queue_free_full (priv->upload_queue, g_object_unref);
 
   soup_session_abort (priv->http_session);
@@ -1380,8 +1282,6 @@ static void
 emer_daemon_init (EmerDaemon *self)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  connect_to_login_manager (self);
 
   priv->upload_queue = g_queue_new ();
 

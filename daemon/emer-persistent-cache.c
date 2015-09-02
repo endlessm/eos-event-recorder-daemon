@@ -966,17 +966,13 @@ emer_persistent_cache_cost (GVariant *variant)
 gboolean
 emer_persistent_cache_get_boot_time_offset (EmerPersistentCache *self,
                                             gint64              *offset,
-                                            gboolean             always_update_timestamps,
                                             GError             **error)
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  /* When always_update_timestamps is FALSE, the timestamps won't be written
-   * unless the boot offset in the metadata file is being overwritten.
-   */
   gboolean update_succeeded =
-    update_boot_offset (self, always_update_timestamps, error);
+    update_boot_offset (self, FALSE, error);
   if (!update_succeeded)
     return FALSE;
 

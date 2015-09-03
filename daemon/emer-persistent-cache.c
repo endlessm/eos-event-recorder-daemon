@@ -953,12 +953,8 @@ emer_persistent_cache_cost (GVariant *variant)
   return type_string_length + variant_size;
 }
 
-/* Gets the boot time offset and stores it in the out parameter offset.
- * If the always_update_timestamps parameter is FALSE, does not write to disk
- * solely to update the timestamps during this operation unless the boot id is
- * out of date or some corruption is detected that prompts a total rewrite of
- * the boot timing metadata file. Pass an offset of NULL if you don't care about
- * its value.
+/* Gets the boot time offset and stores it in the out parameter offset. Pass
+ * an offset of NULL if you don't care about its value.
  *
  * Returns TRUE on success. Returns FALSE on failure and sets the error unless
  * it's NULL. Does not alter the offset out parameter on failure.

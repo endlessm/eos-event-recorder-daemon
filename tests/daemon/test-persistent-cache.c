@@ -953,17 +953,17 @@ static void
 test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean     *unused,
                                                                     gconstpointer dontuseme)
 {
-  gint64 relative_time;
-  g_assert_true (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time));
-  gint64 absolute_time;
-  g_assert_true (emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
-
   EmerPersistentCache *cache = make_testing_cache ();
 
   g_assert_true (boot_offset_was_reset ());
 
   g_object_unref (cache);
   set_boot_id_in_metadata_file (FAKE_BOOT_ID);
+
+  gint64 relative_time;
+  g_assert_true (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time));
+  gint64 absolute_time;
+  g_assert_true (emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
 
   EmerPersistentCache *cache2 = make_testing_cache ();
 

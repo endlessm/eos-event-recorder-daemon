@@ -887,8 +887,6 @@ test_persistent_cache_builds_boot_metadata_file (gboolean     *unused,
   gint64 offset = read_offset ();
 
   g_assert_true (boot_timestamp_is_valid (relative_time, absolute_time));
-
-  // The offset should not have changed.
   g_assert_cmpint (offset, ==, 0);
   g_assert_true (boot_offset_was_reset ());
 
@@ -939,15 +937,12 @@ test_persistent_cache_computes_reasonable_offset (gboolean     *unused,
  * Tests that releasing and recreating the persistent cache within the same boot
  * doesn't change the boot offset.
  *
- * Triggers the computation of a new boot offset by asking for the new boot
- * offset with no preexisting boot metadata file, which triggers a reset to
- * offset 0 and the current boot id. Then unrefs the persistent cache and makes
- * it anew, clearing its in-memory cache. Then mutates the metadata file to
- * simulate a new boot. Then requests the boot offset again to prompt the
- * persistent cache to compute a new offset. Then unrefs and recreates the
- * persistent cache again to clear its in-memory cache. Finally, requests the
- * boot offset, prompting the persistent cache to write new timestamps without
- * recomputing the boot offset.
+ * Instantiates a persistent cache with no preexisting boot metadata file,
+ * which triggers a reset to a boot offset of 0. Then unrefs the persistent
+ * cache, mutates the boot ID in the metadata file, and makes the persistent
+ * cache anew to simulate a new boot and trigger computation of a non-zero boot
+ * offset. Finally, unrefs and makes anew the persistent cache once more,
+ * prompting it to detect the unchanged boot ID and preserve the boot offset.
  */
 static void
 test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean     *unused,
@@ -965,6 +960,7 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
   gint64 absolute_time;
   g_assert_true (emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
 
+  // This call should have to compute the boot offset itself.
   EmerPersistentCache *cache2 = make_testing_cache ();
 
   g_assert_true (boot_timestamp_is_valid (relative_time, absolute_time));

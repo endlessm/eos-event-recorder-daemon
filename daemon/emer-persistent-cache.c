@@ -778,8 +778,11 @@ emer_persistent_cache_finalize (GObject *object)
       g_error_free (error);
     }
 
-  g_clear_pointer (&priv->boot_offset_update_timeout_source_id,
-                   g_source_remove);
+  if (priv->boot_offset_update_timeout_source_id != 0)
+    {
+      g_source_remove (priv->boot_offset_update_timeout_source_id);
+      priv->boot_offset_update_timeout_source_id = 0;
+    }
 
   g_clear_object (&priv->cache_size_provider);
   g_clear_object (&priv->boot_id_provider);

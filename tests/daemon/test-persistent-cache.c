@@ -983,8 +983,8 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
  * offset on disk between calls to the same instance of a persistent cache.
  */
 static void
-test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
-                                                gconstpointer dontuseme)
+test_persistent_cache_reads_cached_boot_offset_when_file_changed (gboolean     *unused,
+                                                                  gconstpointer dontuseme)
 {
   EmerPersistentCache *cache = make_testing_cache ();
 
@@ -1007,6 +1007,41 @@ test_persistent_cache_reads_cached_boot_offset (gboolean     *unused,
    * This call should read the offset from its in-memory cache, not the new one
    * on disk.
    */
+  get_succeeded =
+    emer_persistent_cache_get_boot_time_offset (cache, &second_offset, &error);
+  g_assert_no_error (error);
+  g_assert_true (get_succeeded);
+
+  g_assert_cmpint (first_offset, ==, second_offset);
+
+  g_object_unref (cache);
+}
+
+/*
+ * Tests that the in-memory cache is used when present by removing the boot
+ * offset from disk between calls to the same instance of a persistent cache.
+ * This test exercises a code path similar to
+ * test_persistent_cache_reads_cached_boot_offset_when_file_changed().
+ */
+static void
+test_persistent_cache_reads_cached_boot_offset_when_file_missing (gboolean     *unused,
+                                                                  gconstpointer dontuseme)
+{
+  EmerPersistentCache *cache = make_testing_cache ();
+
+  gint64 first_offset;
+  GError *error = NULL;
+  gboolean get_succeeded =
+    emer_persistent_cache_get_boot_time_offset (cache, &first_offset, &error);
+  g_assert_no_error (error);
+  g_assert_true (get_succeeded);
+
+  // Remove the boot offset file.
+  g_assert_cmpint (g_unlink (TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE), ==, 0);
+
+  gint64 second_offset;
+
+  // This call should read the offset from its in-memory cache.
   get_succeeded =
     emer_persistent_cache_get_boot_time_offset (cache, &second_offset, &error);
   g_assert_no_error (error);
@@ -1042,19 +1077,20 @@ test_persistent_cache_updates_timestamps_on_finalize (gboolean     *unused,
 }
 
 /*
- * Ensures that the get_boot_time_offset call will reset the metadata file if
+ * Ensures that creating the persistent cache will reset the metadata file if
  * one isn't found.
  */
 static void
-test_persistent_cache_get_offset_can_build_boot_metadata_file (gboolean     *unused,
-                                                               gconstpointer dontuseme)
+test_persistent_cache_can_build_boot_metadata_file (gboolean     *unused,
+                                                    gconstpointer dontuseme)
 {
   EmerPersistentCache *cache = make_testing_cache ();
+  g_object_unref (cache);
 
-  /*
-   * Don't write a default boot offset file. We want to create a new one via
-   * production code.
-   */
+  // Remove the boot offset file.
+  g_assert_cmpint (g_unlink (TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE), ==, 0);
+
+  cache = make_testing_cache ();
 
   GError *error = NULL;
   gboolean get_succeeded =
@@ -1115,12 +1151,14 @@ main (gint                argc,
                        test_persistent_cache_computes_reasonable_offset);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/does-not-compute-offset-when-boot-id-is-same",
                        test_persistent_cache_does_not_compute_offset_when_boot_id_is_same);
-  ADD_CACHE_TEST_FUNC ("/persistent-cache/reads-cached-boot-offset",
-                       test_persistent_cache_reads_cached_boot_offset);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/reads-cached-boot-offset-when-file-changed",
+                       test_persistent_cache_reads_cached_boot_offset_when_file_changed);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/reads-cached-boot-offset-when-file-missing",
+                       test_persistent_cache_reads_cached_boot_offset_when_file_missing);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/updates-timestamps-on-finalize",
                        test_persistent_cache_updates_timestamps_on_finalize);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/get-offset-can-build-boot-metadata-file",
-                       test_persistent_cache_get_offset_can_build_boot_metadata_file);
+                       test_persistent_cache_can_build_boot_metadata_file);
 #undef ADD_CACHE_TEST_FUNC
 
   return g_test_run ();

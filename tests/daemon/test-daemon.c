@@ -474,8 +474,9 @@ assert_variants_equal (GVariant *actual_variant,
   g_variant_unref (expected_variant);
 }
 
-static void assert_machine_id_matches (GVariant              *machine_id_variant,
-                                       EmerMachineIdProvider *machine_id_provider)
+static void
+assert_machine_id_matches (GVariant              *machine_id_variant,
+                           EmerMachineIdProvider *machine_id_provider)
 {
   gsize actual_length;
   const guchar *actual_machine_id =

@@ -128,40 +128,6 @@ timeout (gpointer unused)
   g_assert_not_reached ();
 }
 
-/*
- * Looks through the given @line of a mock DBus process' output for a call
- * matching @method_name and containing the string @arguments in its arguments.
- *
- * Returns %TRUE if the call was found in @line and @arguments matched.
- *
- * Returns %FALSE if the call was not found in @line, or the call was found but
- * @arguments was given and did not match.
- */
-static gboolean
-contains_dbus_call (const gchar *line,
-                    const gchar *method_name,
-                    const gchar *arguments)
-{
-  gchar *method_called = NULL, *arguments_given = NULL;
-  if (sscanf (line, "%*f %ms %m[^\n]", &method_called, &arguments_given) != 2)
-    {
-      g_free (method_called);
-      return FALSE;
-    }
-
-  if (strcmp (method_name, method_called) != 0)
-    {
-      g_free (method_called);
-      g_free (arguments_given);
-      return FALSE;
-    }
-  g_free (method_called);
-
-  gchar *given_args_index = strstr (arguments_given, arguments);
-  g_free (arguments_given);
-  return given_args_index != NULL;
-}
-
 static gboolean
 remove_last_character (GString *line,
                        gchar  **stripped_line)

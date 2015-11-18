@@ -209,6 +209,7 @@ on_bus_acquired (GDBusConnection *system_bus,
                  EmerDaemon      *daemon)
 {
   EmerEventRecorderServer *server = emer_event_recorder_server_skeleton_new ();
+
   g_signal_connect (server, "handle-record-singular-event",
                     G_CALLBACK (on_record_singular_event), daemon);
   g_signal_connect (server, "handle-record-aggregate-event",

@@ -200,8 +200,8 @@ quit_main_loop (GMainLoop *main_loop)
 
 /*
  * Called when a reference to the system bus is acquired. This is where you are
- * supposed to export your well-known name, confusingly not in name_acquired;
- * that is too late.
+ * supposed to export your well-known name, not in name_acquired; that is too
+ * late.
  */
 static void
 on_bus_acquired (GDBusConnection *system_bus,

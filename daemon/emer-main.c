@@ -179,13 +179,11 @@ on_authorize_method_check (GDBusInterfaceSkeleton *interface,
 
   gboolean authorized = polkit_authorization_result_get_is_authorized (result);
   if (!authorized)
-    {
-      g_dbus_method_invocation_return_error (invocation,
-                                             G_DBUS_ERROR,
-                                             G_DBUS_ERROR_AUTH_FAILED,
-                                             "Disabling metrics is only "
-                                             "allowed from system settings");
-    }
+    g_dbus_method_invocation_return_error (invocation,
+                                           G_DBUS_ERROR,
+                                           G_DBUS_ERROR_AUTH_FAILED,
+                                           "Disabling metrics is only "
+                                           "allowed from system settings");
 
   g_object_unref (result);
   return authorized;
@@ -200,8 +198,8 @@ quit_main_loop (GMainLoop *main_loop)
 
 /*
  * Called when a reference to the system bus is acquired. This is where you are
- * supposed to export your well-known name, confusingly not in name_acquired;
- * that is too late.
+ * supposed to export your well-known name, not in name_acquired; that is too
+ * late.
  */
 static void
 on_bus_acquired (GDBusConnection *system_bus,
@@ -209,6 +207,7 @@ on_bus_acquired (GDBusConnection *system_bus,
                  EmerDaemon      *daemon)
 {
   EmerEventRecorderServer *server = emer_event_recorder_server_skeleton_new ();
+
   g_signal_connect (server, "handle-record-singular-event",
                     G_CALLBACK (on_record_singular_event), daemon);
   g_signal_connect (server, "handle-record-aggregate-event",
@@ -232,10 +231,8 @@ on_bus_acquired (GDBusConnection *system_bus,
                                          system_bus,
                                          "/com/endlessm/Metrics",
                                          &error))
-    {
-      g_error ("Could not export metrics interface on system bus: %s.",
-               error->message);
-    }
+    g_error ("Could not export metrics interface on system bus: %s.",
+             error->message);
 }
 
 /*
@@ -252,9 +249,8 @@ on_name_lost (GDBusConnection *system_bus,
    * acquired.
    */
   if (system_bus == NULL)
-    {
-      g_error ("Could not get connection to system bus.");
-    }
+    g_error ("Could not get connection to system bus.");
+
   g_error ("Could not acquire name '%s' on system bus.", name);
 }
 

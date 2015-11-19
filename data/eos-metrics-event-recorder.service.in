@@ -1,5 +1,7 @@
 [Unit]
 Description=EndlessOS Metrics Event Recorder Server
+Requires=dbus.service
+After=dbus.service
 
 [Service]
 Environment=DCONF_PROFILE=/dev/null

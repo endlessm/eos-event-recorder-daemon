@@ -453,7 +453,7 @@ emer_permissions_provider_init (EmerPermissionsProvider *self)
  * events or not.
  *
  * Returns: (transfer full): a new permissions provider.
- *   Free with g_object_unref() when done.
+ * Free with g_object_unref() when done.
  */
 EmerPermissionsProvider *
 emer_permissions_provider_new (void)
@@ -468,7 +468,7 @@ emer_permissions_provider_new (void)
  * OSTree config file path. Use this function only for testing purposes.
  *
  * Returns: (transfer full): a new permissions provider.
- *   Free with g_object_unref() when done.
+ * Free with g_object_unref() when done.
  */
 EmerPermissionsProvider *
 emer_permissions_provider_new_full (const gchar *permissions_config_file_path,
@@ -487,7 +487,7 @@ emer_permissions_provider_new_full (const gchar *permissions_config_file_path,
  * Tells whether the event recorder should record events.
  *
  * Returns: %TRUE if the event recorder is allowed to record events, %FALSE if
- *   the user has opted out or the user's preference is unknown.
+ * the user has opted out or the user's preference is unknown.
  */
 gboolean
 emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self)
@@ -544,7 +544,7 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
  * emer_permissions_provider_get_daemon_enabled().
  *
  * Returns: %TRUE if the event recorder is allowed to upload events or the
- *   user's preference is unknown, %FALSE if the user has opted out.
+ * user's preference is unknown, %FALSE if the user has opted out.
  */
 gboolean
 emer_permissions_provider_get_uploading_enabled (EmerPermissionsProvider *self)

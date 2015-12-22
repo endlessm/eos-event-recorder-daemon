@@ -53,7 +53,7 @@ struct Fixture
 
 static void
 write_testing_boot_id (struct Fixture *fixture,
-                     const gchar    *testing_id)
+                       const gchar    *testing_id)
 {
   g_assert (g_file_replace_contents (fixture->tmp_file, testing_id, FILE_LENGTH,
                                      NULL, FALSE,

@@ -136,7 +136,6 @@ main (gint                argc,
       const gchar * const argv[])
 {
   g_test_init (&argc, (gchar ***) &argv, NULL);
-// gboolean is being used as a dummy fixture.
 #define ADD_BOOT_TEST_FUNC(path, func) \
   g_test_add ((path), struct Fixture, NULL, setup, (func), teardown)
 

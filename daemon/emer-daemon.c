@@ -34,6 +34,7 @@
 
 #include <eosmetrics/eosmetrics.h>
 
+#include "emer-gzip.h"
 #include "emer-machine-id-provider.h"
 #include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
@@ -425,17 +426,35 @@ queue_http_request (NetworkCallbackData *callback_data)
       return;
     }
 
-  gsize request_body_length = g_variant_get_size (callback_data->request_body);
+  gsize serialized_request_body_length =
+    g_variant_get_size (callback_data->request_body);
+
+  gsize compressed_request_body_length;
+  GError *error = NULL;
+  gpointer compressed_request_body =
+    emer_gzip_compress (serialized_request_body,
+                        serialized_request_body_length,
+                        &compressed_request_body_length,
+                        &error);
+  if (compressed_request_body == NULL)
+    {
+      g_task_return_error (callback_data->upload_task, error);
+      finish_network_callback (callback_data);
+      return;
+    }
 
   SoupURI *http_request_uri =
-    get_http_request_uri (self, serialized_request_body, request_body_length);
+    get_http_request_uri (self, serialized_request_body,
+                          serialized_request_body_length);
   SoupMessage *http_message =
     soup_message_new_from_uri ("PUT", http_request_uri);
   soup_uri_free (http_request_uri);
 
+  soup_message_headers_append (http_message->request_headers,
+                               "Content-Encoding", "gzip");
   soup_message_set_request (http_message, "application/octet-stream",
-                            SOUP_MEMORY_TEMPORARY, serialized_request_body,
-                            request_body_length);
+                            SOUP_MEMORY_TAKE, compressed_request_body,
+                            compressed_request_body_length);
   soup_session_queue_message (priv->http_session, http_message,
                               (SoupSessionCallback) handle_http_response,
                               callback_data);

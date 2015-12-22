@@ -22,6 +22,7 @@ noinst_PROGRAMS += \
 	tests/daemon/test-cache-version-provider \
 	tests/daemon/test-circular-file \
 	tests/daemon/test-daemon.dbusdaemon \
+	tests/daemon/test-gzip \
 	tests/daemon/test-machine-id-provider \
 	tests/daemon/test-network-send-provider \
 	tests/daemon/test-permissions-provider \
@@ -73,6 +74,7 @@ tests_daemon_test_daemon_dbusdaemon_SOURCES = \
 	tests/daemon/test-daemon.c \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
 	daemon/emer-cache-size-provider.c daemon/emer-cache-size-provider.h \
+	daemon/emer-gzip.c daemon/emer-gzip.h \
 	tests/daemon/mock-machine-id-provider.c daemon/emer-machine-id-provider.h \
 	tests/daemon/mock-network-send-provider.c \
 	daemon/emer-network-send-provider.h \
@@ -84,6 +86,13 @@ tests_daemon_test_daemon_dbusdaemon_SOURCES = \
 	$(NULL)
 tests_daemon_test_daemon_dbusdaemon_CPPFLAGS = $(DAEMON_TEST_FLAGS)
 tests_daemon_test_daemon_dbusdaemon_LDADD = $(DAEMON_TEST_LIBS)
+
+tests_daemon_test_gzip_SOURCES = \
+	daemon/emer-gzip.c daemon/emer-gzip.h \
+	tests/daemon/test-gzip.c \
+	$(NULL)
+tests_daemon_test_gzip_CPPFLAGS = $(DAEMON_TEST_FLAGS)
+tests_daemon_test_gzip_LDADD = $(DAEMON_TEST_LIBS)
 
 tests_daemon_test_machine_id_provider_SOURCES = \
 	daemon/emer-machine-id-provider.c daemon/emer-machine-id-provider.h \
@@ -132,6 +141,7 @@ TESTS = \
 	tests/daemon/test-cache-version-provider \
 	tests/daemon/test-circular-file \
 	tests/daemon/test-daemon.dbusdaemon \
+	tests/daemon/test-gzip \
 	tests/daemon/test-machine-id-provider \
 	tests/daemon/test-network-send-provider \
 	tests/daemon/test-persistent-cache \

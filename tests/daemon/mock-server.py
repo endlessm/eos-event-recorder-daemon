@@ -18,17 +18,24 @@
 # along with eos-event-recorder-daemon.  If not, see
 # <http://www.gnu.org/licenses/>.
 
+import gzip
 import http.server
 import sys
 
 class PrintingHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
     def do_PUT(self):
         print(self.path, flush=True)
+
+        content_encoding = self.headers['Content-Encoding']
+        print(content_encoding, flush=True)
+
         content_length = int(self.headers['Content-Length'])
-        print(content_length, flush=True)
-        request_body = self.rfile.read(content_length)
-        sys.stdout.buffer.write(request_body)
+        compressed_request_body = self.rfile.read(content_length)
+        decompressed_request_body = gzip.decompress(compressed_request_body)
+        print(len(decompressed_request_body), flush=True)
+        sys.stdout.buffer.write(decompressed_request_body)
         sys.stdout.buffer.flush()
+
         status_code_str = sys.stdin.readline()
         status_code = int(status_code_str)
         self.send_response(status_code)

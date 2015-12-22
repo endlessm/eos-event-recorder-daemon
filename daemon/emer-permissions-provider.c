@@ -573,7 +573,7 @@ emer_permissions_provider_get_uploading_enabled (EmerPermissionsProvider *self)
  * emer_permissions_provider_get_environment:
  * @self: the permissions provider
  *
- * Returns the current metrics environment.
+ * Reads the current metrics environment off the disk.
  *
  * Returns: the metrics environment string if it exists in the permissions file
  * and is valid. The default value of the environment string is "test".

@@ -708,6 +708,7 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
   gconstpointer serialized_request_body = g_variant_get_data (request_body);
   if (serialized_request_body == NULL)
     {
+      g_variant_unref (request_body);
       g_task_return_new_error (upload_task, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
                                "Could not serialize network request body");
       goto handle_upload_failed;

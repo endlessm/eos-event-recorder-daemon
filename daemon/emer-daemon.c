@@ -1492,11 +1492,11 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
 
 /* emer_daemon_upload_events:
  * @self: the daemon
- * @callback (nullable): the function to call once the upload completes. The
+ * @callback: (nullable): the function to call once the upload completes. The
  * first parameter passed to this callback is self. The second parameter is a
  * GAsyncResult that can be passed to emer_daemon_upload_events_finish to
  * determine whether the upload succeeded. The third parameter is user_data.
- * @user_data (nullable): arbitrary data that is blindly passed through to the
+ * @user_data: (nullable): arbitrary data that is blindly passed through to the
  * callback.
  *
  * The event recorder daemon may have already decided to upload some or all
@@ -1519,7 +1519,7 @@ emer_daemon_upload_events (EmerDaemon         *self,
 /* emer_daemon_upload_events_finish:
  * @self: the daemon
  * @result: a GAsyncResult that encapsulates whether the upload succeeded
- * @error (out) (optional): if the upload failed, error will be set to a GError
+ * @error: (out) (optional): if the upload failed, error will be set to a GError
  * describing what went wrong; otherwise it will be set to NULL. Pass NULL to
  * ignore this value.
  *

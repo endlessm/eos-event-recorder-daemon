@@ -593,8 +593,9 @@ emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
     }
 
   /* Check if the environment is set to "production" and if the term "staging"
-  is in the OSTree URL, which indicates that the metrics environment should be
-  set to "dev". */
+   * is in the OSTree URL, which indicates that the metrics environment should
+   * be set to "dev".
+   */
   if (g_strcmp0 (environment, "production") == 0 &&
       strstr (ostree_url, "staging") != NULL)
     {

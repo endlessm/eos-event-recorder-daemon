@@ -53,7 +53,7 @@ struct Fixture
 
 static void
 write_testing_boot_id (struct Fixture *fixture,
-                     const gchar    *testing_id)
+                       const gchar    *testing_id)
 {
   g_assert (g_file_replace_contents (fixture->tmp_file, testing_id, FILE_LENGTH,
                                      NULL, FALSE,
@@ -136,7 +136,6 @@ main (gint                argc,
       const gchar * const argv[])
 {
   g_test_init (&argc, (gchar ***) &argv, NULL);
-// gboolean is being used as a dummy fixture.
 #define ADD_BOOT_TEST_FUNC(path, func) \
   g_test_add ((path), struct Fixture, NULL, setup, (func), teardown)
 

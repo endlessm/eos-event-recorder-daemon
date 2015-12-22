@@ -34,6 +34,7 @@
 
 #include <eosmetrics/eosmetrics.h>
 
+#include "emer-gzip.h"
 #include "emer-machine-id-provider.h"
 #include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
@@ -179,6 +180,10 @@ enum
 static guint emer_daemon_signals[NSIGNALS] = { 0u, };
 
 static gboolean handle_upload_timer (EmerDaemon *self);
+
+static void handle_http_response (SoupSession         *http_session,
+                                  SoupMessage         *http_message,
+                                  NetworkCallbackData *callback_data);
 
 static void
 finish_network_callback (NetworkCallbackData *callback_data)
@@ -404,6 +409,57 @@ get_updated_request_body (EmerDaemon *self,
                         machine_id, singulars, aggregates, sequences);
 }
 
+static void
+queue_http_request (NetworkCallbackData *callback_data)
+{
+  EmerDaemon *self = callback_data->daemon;
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  gconstpointer serialized_request_body =
+    g_variant_get_data (callback_data->request_body);
+  if (serialized_request_body == NULL)
+    {
+      g_task_return_new_error (callback_data->upload_task, G_IO_ERROR,
+                               G_IO_ERROR_INVALID_DATA,
+                               "Could not serialize network request body");
+      finish_network_callback (callback_data);
+      return;
+    }
+
+  gsize serialized_request_body_length =
+    g_variant_get_size (callback_data->request_body);
+
+  gsize compressed_request_body_length;
+  GError *error = NULL;
+  gpointer compressed_request_body =
+    emer_gzip_compress (serialized_request_body,
+                        serialized_request_body_length,
+                        &compressed_request_body_length,
+                        &error);
+  if (compressed_request_body == NULL)
+    {
+      g_task_return_error (callback_data->upload_task, error);
+      finish_network_callback (callback_data);
+      return;
+    }
+
+  SoupURI *http_request_uri =
+    get_http_request_uri (self, serialized_request_body,
+                          serialized_request_body_length);
+  SoupMessage *http_message =
+    soup_message_new_from_uri ("PUT", http_request_uri);
+  soup_uri_free (http_request_uri);
+
+  soup_message_headers_append (http_message->request_headers,
+                               "Content-Encoding", "gzip");
+  soup_message_set_request (http_message, "application/octet-stream",
+                            SOUP_MEMORY_TAKE, compressed_request_body,
+                            compressed_request_body_length);
+  soup_session_queue_message (priv->http_session, http_message,
+                              (SoupSessionCallback) handle_http_response,
+                              callback_data);
+}
+
 // Handles HTTP or HTTPS responses.
 static void
 handle_http_response (SoupSession         *http_session,
@@ -458,37 +514,9 @@ handle_http_response (SoupSession         *http_session,
 
       g_variant_unref (callback_data->request_body);
       callback_data->request_body = updated_request_body;
+      queue_http_request (callback_data);
 
-      gconstpointer serialized_request_body =
-        g_variant_get_data (updated_request_body);
-      if (serialized_request_body == NULL)
-        {
-          g_task_return_new_error (callback_data->upload_task, G_IO_ERROR,
-                                   G_IO_ERROR_INVALID_DATA,
-                                   "Could not serialize updated network "
-                                   "request body");
-          finish_network_callback (callback_data);
-          return;
-        }
-
-      gsize request_body_length = g_variant_get_size (updated_request_body);
-
-      SoupURI *http_request_uri =
-        get_http_request_uri (callback_data->daemon, serialized_request_body,
-                              request_body_length);
-      SoupMessage *new_http_message =
-        soup_message_new_from_uri ("PUT", http_request_uri);
-      soup_uri_free (http_request_uri);
-
-      soup_message_set_request (new_http_message, "application/octet-stream",
-                                SOUP_MEMORY_TEMPORARY, serialized_request_body,
-                                request_body_length);
-
-      soup_session_queue_message (http_session, new_http_message,
-                                  (SoupSessionCallback) handle_http_response,
-                                  callback_data);
       /* Old message is unreffed automatically, because it is not requeued. */
-
       return;
     }
 
@@ -705,27 +733,7 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
       goto handle_upload_failed;
     }
 
-  gconstpointer serialized_request_body = g_variant_get_data (request_body);
-  if (serialized_request_body == NULL)
-    {
-      g_task_return_new_error (upload_task, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                               "Could not serialize network request body");
-      goto handle_upload_failed;
-    }
-
   priv->uploading = TRUE;
-
-  gsize request_body_length = g_variant_get_size (request_body);
-
-  SoupURI *http_request_uri =
-    get_http_request_uri (self, serialized_request_body, request_body_length);
-  SoupMessage *http_message =
-    soup_message_new_from_uri ("PUT", http_request_uri);
-  soup_uri_free (http_request_uri);
-
-  soup_message_set_request (http_message, "application/octet-stream",
-                            SOUP_MEMORY_TEMPORARY, serialized_request_body,
-                            request_body_length);
 
   NetworkCallbackData *callback_data = g_new (NetworkCallbackData, 1);
   callback_data->daemon = self;
@@ -734,9 +742,8 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
   callback_data->num_buffer_events = num_buffer_events;
   callback_data->attempt_num = 0;
   callback_data->upload_task = upload_task;
-  soup_session_queue_message (priv->http_session, http_message,
-                              (SoupSessionCallback) handle_http_response,
-                              callback_data);
+
+  queue_http_request (callback_data);
   return;
 
 handle_upload_failed:
@@ -1492,11 +1499,11 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
 
 /* emer_daemon_upload_events:
  * @self: the daemon
- * @callback (nullable): the function to call once the upload completes. The
+ * @callback: (nullable): the function to call once the upload completes. The
  * first parameter passed to this callback is self. The second parameter is a
  * GAsyncResult that can be passed to emer_daemon_upload_events_finish to
  * determine whether the upload succeeded. The third parameter is user_data.
- * @user_data (nullable): arbitrary data that is blindly passed through to the
+ * @user_data: (nullable): arbitrary data that is blindly passed through to the
  * callback.
  *
  * The event recorder daemon may have already decided to upload some or all
@@ -1519,7 +1526,7 @@ emer_daemon_upload_events (EmerDaemon         *self,
 /* emer_daemon_upload_events_finish:
  * @self: the daemon
  * @result: a GAsyncResult that encapsulates whether the upload succeeded
- * @error (out) (optional): if the upload failed, error will be set to a GError
+ * @error: (out) (optional): if the upload failed, error will be set to a GError
  * describing what went wrong; otherwise it will be set to NULL. Pass NULL to
  * ignore this value.
  *

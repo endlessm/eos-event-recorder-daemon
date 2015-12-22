@@ -793,13 +793,13 @@ handle_upload_finished (EmerDaemon *test_object,
 
 /* Reads a network request from stdout of fixture->mock_server. Assumes the
  * server prints the path to which the request was made on a single line,
- * followed by the length in bytes of the request received on a single line,
- * followed by the request body without a terminal newline. Sets
- * fixture->relative_time and fixture->absolute_time to the relative and
- * absolute times at which this function was called. Sets fixture->request_path
- * to the path to which the request was sent. Calls source_func with a
- * GByteArray containing the request body as the first parameter and the
- * modified fixture as the second parameter.
+ * followed by the content encoding on a single line, followed by the length in
+ * bytes of the request received on a single line, followed by the request body
+ * without a terminal newline. Sets fixture->relative_time and
+ * fixture->absolute_time to the relative and absolute times at which this
+ * function was called. Sets fixture->request_path to the path to which the
+ * request was sent. Calls source_func with a GByteArray containing the request
+ * body as the first parameter and the modified fixture as the second parameter.
  */
 static void
 read_network_request (Fixture               *fixture,
@@ -815,6 +815,12 @@ read_network_request (Fixture               *fixture,
   read_lines_from_stdout (fixture->mock_server,
                           (ProcessLineSourceFunc) remove_last_character,
                           &fixture->request_path);
+
+  gchar *content_encoding;
+  read_lines_from_stdout (fixture->mock_server,
+                          (ProcessLineSourceFunc) remove_last_character,
+                          &content_encoding);
+  g_assert_cmpstr (content_encoding, ==, "gzip");
 
   guint content_length;
   read_lines_from_stdout (fixture->mock_server,

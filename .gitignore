@@ -5,6 +5,7 @@
 /tests/daemon/test-cache-version-provider
 /tests/daemon/test-circular-file
 /tests/daemon/test-daemon.dbusdaemon
+/tests/daemon/test-gzip
 /tests/daemon/test-machine-id-provider
 /tests/daemon/test-network-send-provider
 /tests/daemon/test-permissions-provider

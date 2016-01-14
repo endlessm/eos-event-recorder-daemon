@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2015 Endless Mobile, Inc.
+# Copyright 2015, 2016 Endless Mobile, Inc.
 
 # This file is part of eos-event-recorder-daemon.
 #
@@ -26,7 +26,7 @@ class PrintingHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
     def do_PUT(self):
         print(self.path, flush=True)
 
-        content_encoding = self.headers['Content-Encoding']
+        content_encoding = self.headers['X-Endless-Content-Encoding']
         print(content_encoding, flush=True)
 
         content_length = int(self.headers['Content-Length'])

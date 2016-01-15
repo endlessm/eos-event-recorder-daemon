@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2014, 2015 Endless Mobile, Inc. */
+/* Copyright 2014 - 2016 Endless Mobile, Inc. */
 
 /*
  * This file is part of eos-event-recorder-daemon.
@@ -451,7 +451,7 @@ queue_http_request (NetworkCallbackData *callback_data)
   soup_uri_free (http_request_uri);
 
   soup_message_headers_append (http_message->request_headers,
-                               "Content-Encoding", "gzip");
+                               "X-Endless-Content-Encoding", "gzip");
   soup_message_set_request (http_message, "application/octet-stream",
                             SOUP_MEMORY_TAKE, compressed_request_body,
                             compressed_request_body_length);

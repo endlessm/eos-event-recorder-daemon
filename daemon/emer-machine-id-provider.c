@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2014, 2015 Endless Mobile, Inc. */
+/* Copyright 2014 - 2016 Endless Mobile, Inc. */
 
 /*
  * This file is part of eos-event-recorder-daemon.
@@ -253,8 +253,7 @@ read_machine_id (EmerMachineIdProvider *self)
     {
       g_critical ("Machine ID file (%s) contained %" G_GSIZE_FORMAT " bytes, "
                   "but expected %d bytes.",
-                  priv->path, machine_id_sans_hyphens_length,
-                  FILE_LENGTH);
+                  priv->path, machine_id_sans_hyphens_length, FILE_LENGTH);
       return FALSE;
     }
 

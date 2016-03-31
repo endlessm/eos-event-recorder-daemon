@@ -116,9 +116,7 @@ main (gint   argc,
   GOptionEntry options[] =
   {
     {
-      // FIXME: Replace 0 with G_OPTION_FLAG_NONE once GLib 2.42 is available on
-      // Endless OS.
-      "persistent-cache-path", 'p', 0 /* G_OPTION_FLAG_NONE */,
+      "persistent-cache-path", 'p', G_OPTION_FLAG_NONE,
       G_OPTION_ARG_FILENAME, &persistent_cache_path,
       "The filepath to the persistent cache to print.",
       NULL /* argument description */

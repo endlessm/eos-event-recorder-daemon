@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2015 Endless Mobile, Inc. */
+/* Copyright 2015, 2016 Endless Mobile, Inc. */
 
 /*
  * This file is part of eos-event-recorder-daemon.
@@ -103,11 +103,8 @@ test_gzip_roundtrip (const gchar *input_string)
                                &decompressed_length);
   g_free (compressed_string);
 
-  /* TODO: Replace with g_assert_cmpmem once we upgrade to glib >= 2.46. */
-  g_assert_cmpuint (input_length, ==, decompressed_length);
-  for (gsize i = 0; i < input_length; i++)
-    g_assert_cmpint (input_string[i], ==, decompressed_string[i]);
-
+  g_assert_cmpmem (input_string, input_length, decompressed_string,
+                   decompressed_length);
   g_free (decompressed_string);
 }
 

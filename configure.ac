@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to produce configure
 
-dnl Copyright 2013, 2014, 2015 Endless Mobile, Inc.
+dnl Copyright 2013 - 2016 Endless Mobile, Inc.
 
 dnl This file is part of eos-event-recorder-daemon.
 dnl
@@ -58,7 +58,7 @@ AC_CACHE_SAVE
 # Update these whenever you use a function that requires a certain API version.
 # Keep these lists sorted alphabetically.
 EOS_METRICS_REQUIREMENT="eosmetrics-0 >= 0.2"
-GIO_REQUIREMENT="gio-unix-2.0 >= 2.40"
+GIO_REQUIREMENT="gio-unix-2.0 >= 2.46"
 GOBJECT_REQUIREMENT="gobject-2.0"
 OSTREE_REQUIREMENT="ostree-1 >= 2013.7"
 POLKIT_REQUIREMENT="polkit-gobject-1"

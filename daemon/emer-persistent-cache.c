@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2014, 2015 Endless Mobile, Inc. */
+/* Copyright 2014 - 2016 Endless Mobile, Inc. */
 
 /*
  * This file is part of eos-event-recorder-daemon.
@@ -636,7 +636,7 @@ apply_cache_versioning (EmerPersistentCache *self,
       if (!set_succeeded)
         {
           g_prefix_error (error,
-                          "Failed to update cache version number to %i. ",
+                          "Failed to update cache version number to %d. ",
                           CURRENT_CACHE_VERSION);
           return FALSE;
         }

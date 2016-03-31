@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2014, 2015 Endless Mobile, Inc. */
+/* Copyright 2014 - 2016 Endless Mobile, Inc. */
 
 /*
  * This file is part of eos-event-recorder-daemon.
@@ -108,9 +108,9 @@ make_persistent_cache (const gchar *directory)
   return persistent_cache;
 }
 
-int
-main (int   argc,
-      char *argv[])
+gint
+main (gint   argc,
+      gchar *argv[])
 {
   gchar *persistent_cache_path = NULL;
   GOptionEntry options[] =

@@ -252,7 +252,7 @@ read_machine_id (EmerMachineIdProvider *self)
   if (machine_id_sans_hyphens_length != FILE_LENGTH)
     {
       g_critical ("Machine ID file (%s) contained %" G_GSIZE_FORMAT " bytes, "
-                  "but expected %d bytes.",
+                  "but expected %" G_GSIZE_FORMAT " bytes.",
                   priv->path, machine_id_sans_hyphens_length, FILE_LENGTH);
       return FALSE;
     }

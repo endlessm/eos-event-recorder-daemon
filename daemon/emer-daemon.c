@@ -1379,8 +1379,8 @@ emer_daemon_record_singular_event (EmerDaemon *self,
 
   if (!is_uuid (event_id))
     {
-      g_warning ("Event ID must be a UUID represented as an array of %d "
-                 "bytes. Dropping event.", UUID_LENGTH);
+      g_warning ("Event ID must be a UUID represented as an array of %"
+                 G_GSIZE_FORMAT " bytes. Dropping event.", UUID_LENGTH);
       return;
     }
 
@@ -1419,8 +1419,8 @@ emer_daemon_record_aggregate_event (EmerDaemon *self,
 
   if (!is_uuid (event_id))
     {
-      g_warning ("Event ID must be a UUID represented as an array of %d "
-                 "bytes. Dropping event.", UUID_LENGTH);
+      g_warning ("Event ID must be a UUID represented as an array of %"
+                 G_GSIZE_FORMAT " bytes. Dropping event.", UUID_LENGTH);
       return;
     }
 
@@ -1456,8 +1456,8 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
 
   if (!is_uuid (event_id))
     {
-      g_warning ("Event ID must be a UUID represented as an array of %d "
-                 "bytes. Dropping event.", UUID_LENGTH);
+      g_warning ("Event ID must be a UUID represented as an array of %"
+                 G_GSIZE_FORMAT " bytes. Dropping event.", UUID_LENGTH);
       return;
     }
 

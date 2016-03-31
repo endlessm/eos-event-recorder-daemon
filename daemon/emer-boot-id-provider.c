@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2014, 2015 Endless Mobile, Inc. */
+/* Copyright 2014 - 2016 Endless Mobile, Inc. */
 
 /*
  * This file is part of eos-event-recorder-daemon.
@@ -230,8 +230,8 @@ read_boot_id (EmerBootIdProvider *self)
   if (boot_id_length != FILE_LENGTH)
     {
       g_critical ("Boot ID file (%s) contained %" G_GSIZE_FORMAT " bytes, "
-                  "but expected %d bytes.", priv->path, boot_id_length,
-                  FILE_LENGTH);
+                  "but expected %" G_GSIZE_FORMAT " bytes.",
+                  priv->path, boot_id_length, FILE_LENGTH);
       return FALSE;
     }
 

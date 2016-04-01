@@ -230,7 +230,7 @@ read_boot_id (EmerBootIdProvider *self)
   if (boot_id_length != FILE_LENGTH)
     {
       g_critical ("Boot ID file (%s) contained %" G_GSIZE_FORMAT " bytes, "
-                  "but expected %" G_GSIZE_FORMAT " bytes.",
+                  "but expected %d bytes.",
                   priv->path, boot_id_length, FILE_LENGTH);
       return FALSE;
     }

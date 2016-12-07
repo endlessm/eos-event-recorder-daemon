@@ -115,6 +115,9 @@ gboolean             emer_persistent_cache_remove               (EmerPersistentC
                                                                  guint64                   token,
                                                                  GError                  **error);
 
+gboolean             emer_persistent_cache_remove_all           (EmerPersistentCache      *self,
+                                                                 GError                  **error);
+
 EmerPersistentCache *emer_persistent_cache_new_full             (const gchar              *directory,
                                                                  EmerCacheSizeProvider    *cache_size_provider,
                                                                  EmerBootIdProvider       *boot_id_provider,

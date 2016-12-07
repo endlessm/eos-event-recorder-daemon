@@ -734,6 +734,19 @@ emer_circular_file_read (EmerCircularFile *self,
       if (!read_elem_size (self, input_stream, &elem_size, error))
         goto handle_failed_read;
 
+      /* Reading a zero-sized element here means that we have invalid
+       * data ahead, in which case we need to update the priv->size
+       * pointer so that the next time this is run it does not include
+       * the region of invalid data existing after this point.
+       */
+      if (elem_size == 0)
+        {
+          g_warning ("Discarding invalid data found after byte %" G_GINT64_FORMAT,
+                     (priv->head + curr_disk_bytes) % priv->max_size);
+          set_metadata (self, curr_disk_bytes, priv->head, error);
+          break;
+        }
+
       guint64 next_data_bytes = curr_data_bytes + elem_size;
       if (next_data_bytes > data_bytes_to_read)
         break;

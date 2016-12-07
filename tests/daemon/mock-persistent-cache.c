@@ -177,3 +177,15 @@ emer_persistent_cache_remove (EmerPersistentCache *self,
 
   return TRUE;
 }
+
+gboolean
+emer_persistent_cache_remove_all (EmerPersistentCache *self,
+                                  GError             **error)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  g_ptr_array_remove_range (priv->variant_array, 0, priv->variant_array->len);
+
+  return TRUE;
+}

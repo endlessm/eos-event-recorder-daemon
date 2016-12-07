@@ -1053,27 +1053,42 @@ emer_persistent_cache_read (EmerPersistentCache *self,
   GBytes **elems;
   gsize num_elems;
   guint64 local_token;
+  gsize i;
+
   gboolean read_succeeded =
     emer_circular_file_read (priv->variant_file, &elems, cost, &num_elems,
                              &local_token, error);
   if (!read_succeeded)
     return FALSE;
 
+  gboolean corrupt_data = FALSE;
   GVariant **local_variants = g_new (GVariant *, num_elems);
-  for (gsize i = 0; i < num_elems; i++)
+  for (i = 0; i < num_elems; i++)
     {
       gsize elem_size;
       const gchar *elem_data = g_bytes_get_data (elems[i], &elem_size);
       if (elem_data == NULL)
-        g_error ("An element had size 0.");
+        {
+          g_critical ("An element had size 0.");
+          corrupt_data = TRUE;
+          break;
+        }
 
       const gchar *end_of_type = memchr (elem_data, '\0', elem_size);
       if (end_of_type == NULL)
-        g_error ("An element did not contain a null byte indicating the end of "
-                 "a variant type string.");
+        {
+          g_critical ("An element did not contain a null byte indicating the end of "
+                      "a variant type string.");
+          corrupt_data = TRUE;
+          break;
+        }
 
       if (!g_variant_type_string_is_valid (elem_data))
-        g_error ("An element did not begin with a valid variant type string.");
+        {
+          g_critical ("An element did not begin with a valid variant type string.");
+          corrupt_data = TRUE;
+          break;
+        }
 
       const GVariantType *variant_type = G_VARIANT_TYPE (elem_data);
       const gchar *start_of_variant = end_of_type + 1;
@@ -1084,6 +1099,25 @@ emer_persistent_cache_read (EmerPersistentCache *self,
                                  FALSE /* trusted */, g_free, variant_data);
       g_bytes_unref (elems[i]);
       local_variants[i] = regularize_post_storage (curr_variant);
+    }
+
+  if (corrupt_data)
+    {
+      /* Somehow the circular file contains corrupt data, meaning that we
+       * can't trust its contents anymore so we clean up and return an error. */
+      gsize j = i;
+
+      while (j < num_elems)
+        g_bytes_unref (elems[j++]);
+      g_free (elems);
+
+      j = 0;
+      while (j < i)
+        g_variant_unref (local_variants[j++]);
+
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                   "Corrupt data found in the persistent cache.");
+      return FALSE;
     }
 
   g_free (elems);
@@ -1128,4 +1162,17 @@ emer_persistent_cache_remove (EmerPersistentCache *self,
     emer_persistent_cache_get_instance_private (self);
 
   return emer_circular_file_remove (priv->variant_file, token, error);
+}
+
+/* Removes all the data stored by marking it all invalid in the circular file.
+ * Returns TRUE on success and FALSE on error.
+ */
+gboolean
+emer_persistent_cache_remove_all (EmerPersistentCache *self,
+                                  GError             **error)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  return emer_circular_file_purge (priv->variant_file, error);
 }

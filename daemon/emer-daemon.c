@@ -574,7 +574,22 @@ add_stored_events_to_builders (EmerDaemon        *self,
                                 &num_variants, token, &error);
   if (!read_succeeded)
     {
-      g_warning ("Could not read from persistent cache: %s.", error->message);
+      if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA))
+        {
+          GError *local_error = NULL;
+
+          g_critical ("Invalid data read from the persistent cache. Clearing everything...");
+          if (!emer_persistent_cache_remove_all (priv->persistent_cache, &local_error))
+            {
+              g_warning ("Error removing data from the persistent cache: %s", local_error->message);
+              g_error_free (local_error);
+            }
+        }
+      else
+        {
+          g_warning ("Could not read from persistent cache: %s.", error->message);
+        }
+
       g_error_free (error);
       *read_bytes = 0;
       *token = 0;

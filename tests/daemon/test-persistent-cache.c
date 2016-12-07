@@ -468,9 +468,10 @@ assert_variants_read (EmerPersistentCache *cache,
   guint64 token = total_size_when_stored + 1;
 
   GError *error = NULL;
+  gboolean invalid_data;
   gboolean read_succeeded =
     emer_persistent_cache_read (cache, &variants_read, total_elem_size,
-                                &num_variants_read, &token, &error);
+                                &num_variants_read, &token, &invalid_data, &error);
 
   g_assert_no_error (error);
   g_assert_true (read_succeeded);
@@ -495,9 +496,10 @@ assert_cache_is_empty (EmerPersistentCache *cache)
   guint64 token = 1;
 
   GError *error = NULL;
+  gboolean invalid_data;
   gboolean read_succeeded =
     emer_persistent_cache_read (cache, &variants, G_MAXSIZE, &num_variants,
-                                &token, &error);
+                                &token, &invalid_data, &error);
 
   g_assert_no_error (error);
   g_assert_true (read_succeeded);

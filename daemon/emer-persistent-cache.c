@@ -1045,35 +1045,52 @@ emer_persistent_cache_read (EmerPersistentCache *self,
                             gsize                cost,
                             gsize               *num_variants,
                             guint64             *token,
+                            gboolean            *invalid_data,
                             GError             **error)
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
   GBytes **elems;
-  gsize num_elems;
+  GVariant **local_variants;
   guint64 local_token;
-  gboolean read_succeeded =
+  gboolean read_succeeded;
+  gsize num_elems;
+  gsize i;
+
+  read_succeeded =
     emer_circular_file_read (priv->variant_file, &elems, cost, &num_elems,
-                             &local_token, error);
+                             &local_token, invalid_data, error);
   if (!read_succeeded)
     return FALSE;
 
-  GVariant **local_variants = g_new (GVariant *, num_elems);
-  for (gsize i = 0; i < num_elems; i++)
+  local_variants = g_new (GVariant *, num_elems);
+  for (i = 0; i < num_elems; i++)
     {
       gsize elem_size;
       const gchar *elem_data = g_bytes_get_data (elems[i], &elem_size);
       if (elem_data == NULL)
-        g_error ("An element had size 0.");
+        {
+          g_critical ("An element had size 0.");
+          *invalid_data = TRUE;
+          break;
+        }
 
       const gchar *end_of_type = memchr (elem_data, '\0', elem_size);
       if (end_of_type == NULL)
-        g_error ("An element did not contain a null byte indicating the end of "
-                 "a variant type string.");
+        {
+          g_critical ("An element did not contain a null byte indicating the end of "
+                      "a variant type string.");
+          *invalid_data = TRUE;
+          break;
+        }
 
       if (!g_variant_type_string_is_valid (elem_data))
-        g_error ("An element did not begin with a valid variant type string.");
+        {
+          g_critical ("An element did not begin with a valid variant type string.");
+          *invalid_data = TRUE;
+          break;
+        }
 
       const GVariantType *variant_type = G_VARIANT_TYPE (elem_data);
       const gchar *start_of_variant = end_of_type + 1;
@@ -1090,6 +1107,7 @@ emer_persistent_cache_read (EmerPersistentCache *self,
   *variants = local_variants;
   *num_variants = num_elems;
   *token = local_token;
+
   return TRUE;
 }
 

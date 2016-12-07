@@ -108,6 +108,8 @@
   "uploading is disabled. You may enable uploading by setting " \
   "uploading_enabled to true in " PERMISSIONS_FILE
 
+#define INVALID_METRICS_FILE "cbfbcbdb-6af2-f1db-9e11-6cc25846e296"
+
 typedef struct _NetworkCallbackData
 {
   EmerDaemon *daemon;
@@ -548,6 +550,22 @@ add_events_to_builders (GVariant       **events,
     }
 }
 
+static gboolean
+parse_event_id (const gchar *unparsed_event_id,
+                uuid_t       parsed_event_id)
+{
+  gint parse_failed = uuid_parse (unparsed_event_id, parsed_event_id);
+  if (parse_failed != 0)
+    {
+      g_warning ("Attempt to parse UUID \"%s\" failed. Make sure you created "
+                 "this UUID with uuidgen -r. You may need to sudo apt-get "
+                 "install uuid-runtime first.", unparsed_event_id);
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
 /* Populates the given variant builders with at most max_bytes of data from the
  * persistent cache. Returns TRUE if the current network request should also
  * include data from the in-memory buffer and FALSE otherwise. Sets read_bytes
@@ -569,9 +587,10 @@ add_stored_events_to_builders (EmerDaemon        *self,
   GVariant **variants;
   gsize num_variants;
   GError *error = NULL;
+  gboolean invalid_data = FALSE;
   gboolean read_succeeded =
     emer_persistent_cache_read (priv->persistent_cache, &variants, max_bytes,
-                                &num_variants, token, &error);
+                                &num_variants, token, &invalid_data, &error);
   if (!read_succeeded)
     {
       g_warning ("Could not read from persistent cache: %s.", error->message);
@@ -579,6 +598,42 @@ add_stored_events_to_builders (EmerDaemon        *self,
       *read_bytes = 0;
       *token = 0;
       return TRUE;
+    }
+
+  if (invalid_data)
+    {
+      gint64 relative_time;
+      if (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time))
+        {
+          uuid_t parsed_event_id;
+          if (parse_event_id (INVALID_METRICS_FILE, parsed_event_id))
+            {
+              GVariantBuilder uuid_builder;
+              get_uuid_builder (parsed_event_id, &uuid_builder);
+              GVariant *event_id_variant = g_variant_builder_end (&uuid_builder);
+
+              GVariant *unboxed_variant = g_variant_new_boolean (FALSE);
+              GVariant *empty_auxiliary_payload = g_variant_new_variant (unboxed_variant);
+              g_variant_ref_sink (empty_auxiliary_payload);
+
+              g_warning ("Invalid data found in the persistent cache. Reporting...");
+              emer_daemon_record_singular_event (self,
+                                                 getuid (),
+                                                 event_id_variant,
+                                                 relative_time,
+                                                 FALSE,
+                                                 NULL);
+
+              g_variant_unref (empty_auxiliary_payload);
+
+            }
+          else
+            {
+              g_critical ("Could not parse event ID");
+            }
+        }
+      else
+        g_critical ("Getting relative timestamp failed.");
     }
 
   add_events_to_builders (variants, num_variants,

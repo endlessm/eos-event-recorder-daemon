@@ -161,9 +161,10 @@ main (gint   argc,
   GVariant **variants;
   gsize num_variants;
   guint64 token;
+  gboolean invalid_data;
   gboolean read_succeeded =
     emer_persistent_cache_read (persistent_cache, &variants, G_MAXSIZE,
-                                &num_variants, &token, &error);
+                                &num_variants, &token, &invalid_data, &error);
   g_object_unref (persistent_cache);
 
   if (!read_succeeded)

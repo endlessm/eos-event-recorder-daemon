@@ -468,15 +468,17 @@ assert_variants_read (EmerPersistentCache *cache,
   guint64 token = total_size_when_stored + 1;
 
   GError *error = NULL;
+  gboolean has_invalid;
   gboolean read_succeeded =
     emer_persistent_cache_read (cache, &variants_read, total_elem_size,
-                                &num_variants_read, &token, &error);
+                                &num_variants_read, &token, &has_invalid, &error);
 
   g_assert_no_error (error);
   g_assert_true (read_succeeded);
   g_assert_cmpuint (num_variants_read, ==, num_variants);
   assert_variants_equal (variants_read, variants, num_variants);
   g_assert_cmpuint (token, ==, total_size_when_stored);
+  g_assert_false (has_invalid);
 
   destroy_variants (variants_read, num_variants);
 
@@ -495,15 +497,17 @@ assert_cache_is_empty (EmerPersistentCache *cache)
   guint64 token = 1;
 
   GError *error = NULL;
+  gboolean has_invalid;
   gboolean read_succeeded =
     emer_persistent_cache_read (cache, &variants, G_MAXSIZE, &num_variants,
-                                &token, &error);
+                                &token, &has_invalid, &error);
 
   g_assert_no_error (error);
   g_assert_true (read_succeeded);
   g_assert_null (variants);
   g_assert_cmpuint (num_variants, ==, 0);
   g_assert_cmpuint (token, ==, 0);
+  g_assert_false (has_invalid);
 }
 
 static void

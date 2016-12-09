@@ -160,6 +160,7 @@ emer_circular_file_read (EmerCircularFile *self,
                          gsize             num_bytes,
                          gsize            *num_elems,
                          guint64          *token,
+                         gboolean         *has_invalid,
                          GError          **error)
 {
   EmerCircularFilePrivate *priv =
@@ -190,6 +191,7 @@ emer_circular_file_read (EmerCircularFile *self,
   *num_elems = elem_array->len;
   *elems = (GBytes **) g_ptr_array_free (elem_array, FALSE);
   *token = curr_buffer_bytes;
+  *has_invalid = FALSE;
   return TRUE;
 }
 

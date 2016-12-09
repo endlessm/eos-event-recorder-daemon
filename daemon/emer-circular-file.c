@@ -698,6 +698,7 @@ emer_circular_file_read (EmerCircularFile *self,
                          gsize             data_bytes_to_read,
                          gsize            *num_elems,
                          guint64          *token,
+                         gboolean         *has_invalid,
                          GError          **error)
 {
   EmerCircularFilePrivate *priv =
@@ -728,6 +729,8 @@ emer_circular_file_read (EmerCircularFile *self,
   guint64 curr_data_bytes = 0;
   guint64 curr_disk_bytes = 0;
   GInputStream *input_stream = G_INPUT_STREAM (file_input_stream);
+
+  *has_invalid = FALSE;
   while (curr_disk_bytes < priv->size)
     {
       guint64 elem_size;
@@ -744,6 +747,7 @@ emer_circular_file_read (EmerCircularFile *self,
           g_warning ("Discarding invalid data found after byte %" G_GINT64_FORMAT,
                      (priv->head + curr_disk_bytes) % priv->max_size);
           set_metadata (self, curr_disk_bytes, priv->head, error);
+          *has_invalid = TRUE;
           break;
         }
 

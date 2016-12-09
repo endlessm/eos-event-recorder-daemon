@@ -1045,6 +1045,7 @@ emer_persistent_cache_read (EmerPersistentCache *self,
                             gsize                cost,
                             gsize               *num_variants,
                             guint64             *token,
+                            gboolean            *has_invalid,
                             GError             **error)
 {
   EmerPersistentCachePrivate *priv =
@@ -1057,7 +1058,7 @@ emer_persistent_cache_read (EmerPersistentCache *self,
 
   gboolean read_succeeded =
     emer_circular_file_read (priv->variant_file, &elems, cost, &num_elems,
-                             &local_token, error);
+                             &local_token, has_invalid, error);
   if (!read_succeeded)
     return FALSE;
 
@@ -1104,7 +1105,7 @@ emer_persistent_cache_read (EmerPersistentCache *self,
   if (corrupt_data)
     {
       /* Somehow the circular file contains corrupt data, meaning that we
-       * can't trust its contents anymore so we clean up and return an error. */
+       * can't trust its contents at all, so we clean up and return an error. */
       gsize j = i;
 
       while (j < num_elems)

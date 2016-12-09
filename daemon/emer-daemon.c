@@ -108,6 +108,17 @@
   "uploading is disabled. You may enable uploading by setting " \
   "uploading_enabled to true in " PERMISSIONS_FILE
 
+/* Event ID to send a metric event when the cache has been found to be corrupt
+ * resulting in the removal of all its data to get it back to a clear state.
+ * This event will not include any useful payload (just an empty one). */
+#define CACHE_IS_CORRUPT_EVENT_ID "d84b9a19-9353-73eb-70bf-f91a584abcbd"
+
+/* Event ID to send a metric event when some elements in the cache are invalid.
+ * The payload for this event will be formated as a '(tt)' GVariant containing
+ * the number of valid elements found and the number of bytes read.
+ */
+#define CACHE_HAS_INVALID_ELEMENTS_EVENT_ID "cbfbcbdb-6af2-f1db-9e11-6cc25846e296"
+
 typedef struct _NetworkCallbackData
 {
   EmerDaemon *daemon;
@@ -117,6 +128,13 @@ typedef struct _NetworkCallbackData
   gint attempt_num;
   GTask *upload_task;
 } NetworkCallbackData;
+
+typedef struct _CacheMetricEventData
+{
+  EmerDaemon *daemon;
+  const char *event_id;
+  GVariant *payload;
+} CacheMetricEventData;
 
 typedef struct _EmerDaemonPrivate
 {
@@ -138,6 +156,7 @@ typedef struct _EmerDaemonPrivate
   gchar *server_uri;
 
   guint upload_events_timeout_source_id;
+  guint report_invalid_cache_data_source_id;
 
   EmerMachineIdProvider *machine_id_provider;
   EmerNetworkSendProvider *network_send_provider;
@@ -548,6 +567,91 @@ add_events_to_builders (GVariant       **events,
     }
 }
 
+static gboolean
+parse_event_id (const gchar *unparsed_event_id,
+                uuid_t       parsed_event_id)
+{
+  gint parse_failed = uuid_parse (unparsed_event_id, parsed_event_id);
+  if (parse_failed != 0)
+    {
+      g_warning ("Attempt to parse UUID \"%s\" failed. Make sure you created "
+                 "this UUID with uuidgen -r. You may need to sudo apt-get "
+                 "install uuid-runtime first.", unparsed_event_id);
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
+static gboolean
+report_invalid_data_in_cache_on_idle (CacheMetricEventData *callback_data)
+{
+  EmerDaemon *self = callback_data->daemon;
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+  const char *event_id = callback_data->event_id;
+  GVariant *payload = callback_data->payload;
+  GVariant *actual_payload = NULL;
+
+  gint64 relative_time;
+  if (!emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time))
+    {
+      g_critical ("Getting relative timestamp failed.");
+      goto free;
+    }
+
+  uuid_t parsed_event_id;
+  if (!parse_event_id (event_id, parsed_event_id))
+    {
+      g_critical ("Could not parse event ID");
+      goto free;
+    }
+
+  GVariantBuilder uuid_builder;
+  get_uuid_builder (parsed_event_id, &uuid_builder);
+  GVariant *event_id_variant = g_variant_builder_end (&uuid_builder);
+
+  if (payload != NULL)
+    {
+      actual_payload = payload;
+    }
+  else
+    {
+      GVariant *unboxed_variant = g_variant_new_boolean (FALSE);
+      actual_payload = g_variant_new_variant (unboxed_variant);
+    }
+
+  emer_daemon_record_singular_event (self,
+                                     getuid (),
+                                     event_id_variant,
+                                     relative_time,
+                                     payload != NULL,
+                                     actual_payload);
+ free:
+  g_free (callback_data);
+
+  priv->report_invalid_cache_data_source_id = 0;
+  return G_SOURCE_REMOVE;
+}
+
+static void
+report_invalid_data_in_cache (EmerDaemon *self,
+                              const char *event_id,
+                              GVariant   *payload)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  CacheMetricEventData *callback_data = g_new (CacheMetricEventData, 1);
+  callback_data->daemon = self;
+  callback_data->event_id = event_id;
+  callback_data->payload = payload != NULL ? payload : NULL;
+
+  /* Do the report in a new iteration of the main loop to make sure we don't
+   * report the event before having finished processing the current cache.
+   */
+  priv->report_invalid_cache_data_source_id =
+    g_idle_add ((GSourceFunc) report_invalid_data_in_cache_on_idle, callback_data);
+}
+
 /* Populates the given variant builders with at most max_bytes of data from the
  * persistent cache. Returns TRUE if the current network request should also
  * include data from the in-memory buffer and FALSE otherwise. Sets read_bytes
@@ -569,21 +673,23 @@ add_stored_events_to_builders (EmerDaemon        *self,
   GVariant **variants;
   gsize num_variants;
   GError *error = NULL;
+  gboolean has_invalid = FALSE;
   gboolean read_succeeded =
     emer_persistent_cache_read (priv->persistent_cache, &variants, max_bytes,
-                                &num_variants, token, &error);
+                                &num_variants, token, &has_invalid, &error);
   if (!read_succeeded)
     {
       if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA))
         {
           GError *local_error = NULL;
-
-          g_critical ("Invalid data read from the persistent cache. Clearing everything...");
           if (!emer_persistent_cache_remove_all (priv->persistent_cache, &local_error))
             {
               g_warning ("Error removing data from the persistent cache: %s", local_error->message);
               g_error_free (local_error);
             }
+
+          g_warning ("Corrupt data read from the persistent cache. All cleared");
+          report_invalid_data_in_cache (self, CACHE_IS_CORRUPT_EVENT_ID, NULL);
         }
       else
         {
@@ -594,6 +700,17 @@ add_stored_events_to_builders (EmerDaemon        *self,
       *read_bytes = 0;
       *token = 0;
       return TRUE;
+    }
+
+  if (has_invalid)
+    {
+      GVariant *payload = g_variant_new ("(tt)", num_variants, token);
+
+      g_warning ("Invalid data found in the persistent cache: "
+                 "%" G_GSIZE_FORMAT " valid records read (%" G_GUINT64_FORMAT " bytes read)",
+                 num_variants, *token);
+
+      report_invalid_data_in_cache (self, CACHE_HAS_INVALID_ELEMENTS_EVENT_ID, payload);
     }
 
   add_events_to_builders (variants, num_variants,
@@ -1130,6 +1247,9 @@ emer_daemon_finalize (GObject *object)
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   g_source_remove (priv->upload_events_timeout_source_id);
+
+  if (priv->report_invalid_cache_data_source_id != 0)
+    g_source_remove (priv->report_invalid_cache_data_source_id);
 
   flush_to_persistent_cache (self);
   g_clear_object (&priv->persistent_cache);

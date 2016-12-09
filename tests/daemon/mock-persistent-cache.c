@@ -126,6 +126,7 @@ emer_persistent_cache_read (EmerPersistentCache *self,
                             gsize                cost,
                             gsize               *num_variants,
                             guint64             *token,
+                            gboolean            *has_invalid,
                             GError             **error)
 {
   EmerPersistentCachePrivate *priv =
@@ -151,6 +152,7 @@ emer_persistent_cache_read (EmerPersistentCache *self,
     }
 
   *token = curr_num_variants;
+  *has_invalid = FALSE;
   return TRUE;
 }
 

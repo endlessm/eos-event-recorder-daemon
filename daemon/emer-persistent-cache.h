@@ -106,6 +106,7 @@ gboolean             emer_persistent_cache_read                 (EmerPersistentC
                                                                  gsize                     cost,
                                                                  gsize                    *num_variants,
                                                                  guint64                  *token,
+                                                                 gboolean                 *has_invalid,
                                                                  GError                  **error);
 
 gboolean             emer_persistent_cache_has_more             (EmerPersistentCache      *self,

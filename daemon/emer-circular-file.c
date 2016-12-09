@@ -704,6 +704,8 @@ emer_circular_file_read (EmerCircularFile *self,
   EmerCircularFilePrivate *priv =
     emer_circular_file_get_instance_private (self);
 
+  *has_invalid = FALSE;
+
   if (priv->size == 0)
     {
       *elems = NULL;
@@ -730,7 +732,6 @@ emer_circular_file_read (EmerCircularFile *self,
   guint64 curr_disk_bytes = 0;
   GInputStream *input_stream = G_INPUT_STREAM (file_input_stream);
 
-  *has_invalid = FALSE;
   while (curr_disk_bytes < priv->size)
     {
       guint64 elem_size;

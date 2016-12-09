@@ -126,6 +126,7 @@ emer_persistent_cache_read (EmerPersistentCache *self,
                             gsize                cost,
                             gsize               *num_variants,
                             guint64             *token,
+                            gboolean            *has_invalid,
                             GError             **error)
 {
   EmerPersistentCachePrivate *priv =
@@ -151,6 +152,7 @@ emer_persistent_cache_read (EmerPersistentCache *self,
     }
 
   *token = curr_num_variants;
+  *has_invalid = FALSE;
   return TRUE;
 }
 
@@ -174,6 +176,18 @@ emer_persistent_cache_remove (EmerPersistentCache *self,
 
   if (token > 0)
     g_ptr_array_remove_range (priv->variant_array, 0, token);
+
+  return TRUE;
+}
+
+gboolean
+emer_persistent_cache_remove_all (EmerPersistentCache *self,
+                                  GError             **error)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  g_ptr_array_remove_range (priv->variant_array, 0, priv->variant_array->len);
 
   return TRUE;
 }

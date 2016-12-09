@@ -154,13 +154,15 @@ assert_strings_read (EmerCircularFile    *circular_file,
   guint64 token = total_disk_size + 1;
 
   GError *error = NULL;
+  gboolean has_invalid;
   gboolean read_succeeded =
     emer_circular_file_read (circular_file, &elems, total_elem_size, &num_elems,
-                             &token, &error);
+                             &token, &has_invalid, &error);
 
   g_assert_no_error (error);
   g_assert_true (read_succeeded);
   g_assert_cmpuint (num_elems, ==, num_strings);
+  g_assert_false (has_invalid);
 
   for (gsize i = 0; i < num_elems; i++)
     {
@@ -190,15 +192,17 @@ assert_circular_file_is_empty (EmerCircularFile *circular_file)
   guint64 token = 1;
 
   GError *error = NULL;
+  gboolean has_invalid;
   gboolean read_succeeded =
     emer_circular_file_read (circular_file, &elems, G_MAXSIZE, &num_elems,
-                             &token, &error);
+                             &token, &has_invalid, &error);
 
   g_assert_no_error (error);
   g_assert_true (read_succeeded);
   g_assert_null (elems);
   g_assert_cmpuint (num_elems, ==, 0);
   g_assert_cmpuint (token, ==, 0);
+  g_assert_false (has_invalid);
 }
 
 static void

@@ -83,6 +83,7 @@ gboolean          emer_circular_file_read     (EmerCircularFile *self,
                                                gsize             num_bytes,
                                                gsize            *num_elems,
                                                guint64          *token,
+                                               gboolean         *has_invalid,
                                                GError          **error);
 
 gboolean          emer_circular_file_has_more (EmerCircularFile *self,

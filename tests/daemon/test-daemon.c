@@ -1159,11 +1159,13 @@ test_daemon_flushes_to_persistent_cache_on_finalize (Fixture      *fixture,
   GVariant **variants;
   gsize num_variants;
   guint64 token;
+  gboolean has_invalid;
   gboolean read_succeeded =
     emer_persistent_cache_read (fixture->mock_persistent_cache, &variants,
-                                G_MAXSIZE, &num_variants, &token,
+                                G_MAXSIZE, &num_variants, &token, &has_invalid,
                                 NULL /* GError */);
   g_assert_true (read_succeeded);
+  g_assert_false (has_invalid);
   assert_singulars_match (variants, num_variants);
 }
 

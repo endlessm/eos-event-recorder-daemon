@@ -106,6 +106,7 @@ gboolean             emer_persistent_cache_read                 (EmerPersistentC
                                                                  gsize                     cost,
                                                                  gsize                    *num_variants,
                                                                  guint64                  *token,
+                                                                 gboolean                 *has_invalid,
                                                                  GError                  **error);
 
 gboolean             emer_persistent_cache_has_more             (EmerPersistentCache      *self,
@@ -113,6 +114,9 @@ gboolean             emer_persistent_cache_has_more             (EmerPersistentC
 
 gboolean             emer_persistent_cache_remove               (EmerPersistentCache      *self,
                                                                  guint64                   token,
+                                                                 GError                  **error);
+
+gboolean             emer_persistent_cache_remove_all           (EmerPersistentCache      *self,
                                                                  GError                  **error);
 
 EmerPersistentCache *emer_persistent_cache_new_full             (const gchar              *directory,

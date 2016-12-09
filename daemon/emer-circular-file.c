@@ -698,6 +698,7 @@ emer_circular_file_read (EmerCircularFile *self,
                          gsize             data_bytes_to_read,
                          gsize            *num_elems,
                          guint64          *token,
+                         gboolean         *has_invalid,
                          GError          **error)
 {
   EmerCircularFilePrivate *priv =
@@ -728,11 +729,27 @@ emer_circular_file_read (EmerCircularFile *self,
   guint64 curr_data_bytes = 0;
   guint64 curr_disk_bytes = 0;
   GInputStream *input_stream = G_INPUT_STREAM (file_input_stream);
+
+  *has_invalid = FALSE;
   while (curr_disk_bytes < priv->size)
     {
       guint64 elem_size;
       if (!read_elem_size (self, input_stream, &elem_size, error))
         goto handle_failed_read;
+
+      /* Reading a zero-sized element here means that we have invalid
+       * data ahead, in which case we need to update the priv->size
+       * pointer so that the next time this is run it does not include
+       * the region of invalid data existing after this point.
+       */
+      if (elem_size == 0)
+        {
+          g_warning ("Discarding invalid data found after byte %" G_GINT64_FORMAT,
+                     (priv->head + curr_disk_bytes) % priv->max_size);
+          set_metadata (self, curr_disk_bytes, priv->head, error);
+          *has_invalid = TRUE;
+          break;
+        }
 
       guint64 next_data_bytes = curr_data_bytes + elem_size;
       if (next_data_bytes > data_bytes_to_read)

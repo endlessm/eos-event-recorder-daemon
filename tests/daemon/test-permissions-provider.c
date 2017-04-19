@@ -412,17 +412,24 @@ on_config_file_changed (GFileMonitor     *monitor,
     g_main_loop_quit (fixture->main_loop);
 }
 
+static gboolean
+file_contents_match (GFile       *file,
+                     const gchar *pattern)
+{
+  g_autofree gchar *contents = NULL;
+  gboolean loaded_file =
+    g_file_load_contents (file, NULL, &contents,
+                          NULL, NULL, NULL);
+  g_assert_true (loaded_file);
+  return g_regex_match_simple (pattern, contents, G_REGEX_MULTILINE, 0);
+}
+
 static void
 test_permissions_provider_set_daemon_enabled_updates_config_file (Fixture      *fixture,
                                                                   gconstpointer unused)
 {
-  gchar *contents;
-  gboolean loaded_file =
-    g_file_load_contents (fixture->permissions_config_file, NULL, &contents,
-                          NULL, NULL, NULL);
-  g_assert_true (loaded_file);
-  g_assert_nonnull (strstr (contents, "enabled=true"));
-  g_free (contents);
+  g_assert_true (file_contents_match (fixture->permissions_config_file,
+                                      "^enabled=true$"));
 
   g_idle_add ((GSourceFunc) set_daemon_enabled_false_idle, fixture);
 
@@ -441,12 +448,8 @@ test_permissions_provider_set_daemon_enabled_updates_config_file (Fixture      *
 
   g_object_unref (monitor);
 
-  loaded_file =
-    g_file_load_contents (fixture->permissions_config_file, NULL, &contents,
-                          NULL, NULL, NULL);
-  g_assert_true (loaded_file);
-  g_assert_nonnull (strstr (contents, "enabled=false"));
-  g_free (contents);
+  g_assert_true (file_contents_match (fixture->permissions_config_file,
+                                      "^enabled=false$"));
 }
 
 gint

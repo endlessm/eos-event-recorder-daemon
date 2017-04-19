@@ -38,6 +38,9 @@ typedef struct _EmerPermissionsProviderPrivate
   /* For reading the config file */
   GFile *permissions_config_file;
 
+  /* Source ID for write_config_file_idle_cb */
+  guint write_config_file_idle_id;
+
   /* For reading the OSTree config file */
   GFile *ostree_config_file;
 } EmerPermissionsProviderPrivate;
@@ -138,24 +141,34 @@ read_config_file_sync (EmerPermissionsProvider *self)
   g_object_notify_by_pspec (G_OBJECT (self), daemon_enabled_pspec);
 }
 
-/* Helper function to run write_config_file_sync() in another thread. */
-static void
-write_task_func (GTask                   *task,
-                 EmerPermissionsProvider *self,
-                 gpointer                 data,
-                 GCancellable            *cancellable)
+static gboolean
+write_config_file_idle_cb (gpointer data)
 {
+  EmerPermissionsProvider *self = EMER_PERMISSIONS_PROVIDER (data);
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
   write_config_file_sync (self);
-  g_task_return_pointer (task, NULL, NULL);
+  priv->write_config_file_idle_id = 0;
+
+  return G_SOURCE_REMOVE;
 }
 
-/* "Fire and forget" write_config_file_sync(). Don't wait for it to finish. */
+/* Schedule a call to write_config_file_sync(). Don't wait for it to finish. */
 static void
-write_config_file_async (EmerPermissionsProvider *self)
+schedule_config_file_update (EmerPermissionsProvider *self)
 {
-  GTask *task = g_task_new (self, NULL, NULL, NULL);
-  g_task_run_in_thread (task, (GTaskThreadFunc)write_task_func);
-  g_object_unref (task);
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  if (priv->write_config_file_idle_id != 0)
+    return;
+
+  priv->write_config_file_idle_id =
+    g_idle_add_full (G_PRIORITY_DEFAULT_IDLE,
+                     write_config_file_idle_cb,
+                     g_object_ref (self),
+                     g_object_unref);
 }
 
 static gchar *
@@ -302,7 +315,7 @@ set_environment (EmerPermissionsProvider *self,
   g_key_file_set_string (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
                          DAEMON_ENVIRONMENT_KEY_NAME, environment);
 
-  write_config_file_async (self);
+  schedule_config_file_update (self);
 }
 
 static void
@@ -528,7 +541,7 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
   g_key_file_set_boolean (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
                           DAEMON_ENABLED_KEY_NAME, enabled);
 
-  write_config_file_async (self);
+  schedule_config_file_update (self);
 
   GParamSpec *daemon_enabled_pspec =
     emer_permissions_provider_props[PROP_DAEMON_ENABLED];

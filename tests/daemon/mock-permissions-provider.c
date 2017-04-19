@@ -108,11 +108,16 @@ emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
 /* Sets the value to return from
  * emer_permissions_provider_get_uploading_enabled(). */
 void
-mock_permissions_provider_set_uploading_enabled (EmerPermissionsProvider *self,
+emer_permissions_provider_set_uploading_enabled (EmerPermissionsProvider *self,
                                                  gboolean                 uploading_enabled)
 {
   EmerPermissionsProviderPrivate *priv =
     emer_permissions_provider_get_instance_private (self);
 
   priv->uploading_enabled = uploading_enabled;
+
+  /* Emit a property notification even though there isn't a property by this
+   * name in this mock object.
+   */
+  g_signal_emit_by_name (self, "notify::uploading-enabled", NULL);
 }

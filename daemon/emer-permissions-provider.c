@@ -64,6 +64,7 @@ enum
   PROP_PERMISSIONS_CONFIG_FILE_PATH,
   PROP_OSTREE_CONFIG_FILE_PATH,
   PROP_DAEMON_ENABLED,
+  PROP_UPLOADING_ENABLED,
   NPROPS
 };
 
@@ -139,6 +140,11 @@ read_config_file_sync (EmerPermissionsProvider *self)
   GParamSpec *daemon_enabled_pspec =
     emer_permissions_provider_props[PROP_DAEMON_ENABLED];
   g_object_notify_by_pspec (G_OBJECT (self), daemon_enabled_pspec);
+
+  GParamSpec *uploading_enabled_pspec =
+    emer_permissions_provider_props[PROP_UPLOADING_ENABLED];
+  g_object_notify_by_pspec (G_OBJECT (self), uploading_enabled_pspec);
+
 }
 
 static gboolean
@@ -369,6 +375,11 @@ emer_permissions_provider_get_property (GObject    *object,
                            emer_permissions_provider_get_daemon_enabled (self));
       break;
 
+    case PROP_UPLOADING_ENABLED:
+      g_value_set_boolean (value,
+                           emer_permissions_provider_get_uploading_enabled (self));
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
     }
@@ -395,6 +406,11 @@ emer_permissions_provider_set_property (GObject      *object,
     case PROP_DAEMON_ENABLED:
       emer_permissions_provider_set_daemon_enabled (self,
                                                     g_value_get_boolean (value));
+      break;
+
+    case PROP_UPLOADING_ENABLED:
+      emer_permissions_provider_set_uploading_enabled (self,
+                                                       g_value_get_boolean (value));
       break;
 
     default:
@@ -439,6 +455,11 @@ emer_permissions_provider_class_init (EmerPermissionsProviderClass *klass)
   emer_permissions_provider_props[PROP_DAEMON_ENABLED] =
     g_param_spec_boolean ("daemon-enabled", "Daemon enabled",
                           "Whether to enable the metrics daemon system-wide",
+                          FALSE,
+                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+  emer_permissions_provider_props[PROP_UPLOADING_ENABLED] =
+    g_param_spec_boolean ("uploading-enabled", "Uploading enabled",
+                          "Whether to upload events via the network",
                           FALSE,
                           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
@@ -580,6 +601,33 @@ emer_permissions_provider_get_uploading_enabled (EmerPermissionsProvider *self)
     }
 
   return uploading_enabled;
+}
+
+/*
+ * emer_permissions_provider_set_uploading_enabled:
+ * @self: the permissions provider
+ * @enabled: whether the event recorder should upload events via the network
+ *
+ * Sets whether the event recorder should upload events via the network. This
+ * setting is moot if the entire daemon is disabled; see
+ * emer_permissions_provider_set_daemon_enabled().
+ */
+void
+emer_permissions_provider_set_uploading_enabled (EmerPermissionsProvider *self,
+                                                 gboolean                 enabled)
+{
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  g_key_file_set_boolean (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
+                          DAEMON_UPLOADING_ENABLED_KEY_NAME, enabled);
+
+  schedule_config_file_update (self);
+
+  GParamSpec *uploading_enabled_pspec =
+    emer_permissions_provider_props[PROP_UPLOADING_ENABLED];
+  g_object_notify_by_pspec (G_OBJECT (self), uploading_enabled_pspec);
+
 }
 
 /*

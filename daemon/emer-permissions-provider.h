@@ -76,6 +76,9 @@ void                     emer_permissions_provider_set_daemon_enabled    (EmerPe
 
 gboolean                 emer_permissions_provider_get_uploading_enabled (EmerPermissionsProvider *self);
 
+void                     emer_permissions_provider_set_uploading_enabled (EmerPermissionsProvider *self,
+                                                                          gboolean                 enabled);
+
 gchar                   *emer_permissions_provider_get_environment       (EmerPermissionsProvider *self);
 
 G_END_DECLS

@@ -262,7 +262,8 @@ static EmerDaemon *
 make_daemon (gint                argc,
              const gchar * const argv[])
 {
-  gchar *persistent_cache_directory = NULL;
+  g_autofree gchar *persistent_cache_directory = NULL;
+  const gchar *persistent_cache_directory_const = PERSISTENT_CACHE_DIR;
   GOptionEntry option_entries[] =
   {
     { "persistent-cache-directory", 'p', G_OPTION_FLAG_NONE,
@@ -288,13 +289,10 @@ make_daemon (gint                argc,
       return NULL;
     }
 
-  if (persistent_cache_directory == NULL)
-    return emer_daemon_new (PERSISTENT_CACHE_DIR);
+  if (persistent_cache_directory != NULL)
+    persistent_cache_directory_const = persistent_cache_directory;
 
-  EmerDaemon *daemon = emer_daemon_new (persistent_cache_directory);
-  g_free (persistent_cache_directory);
-
-  return daemon;
+  return emer_daemon_new (persistent_cache_directory_const);
 }
 
 gint

@@ -329,7 +329,7 @@ test_permissions_provider_get_daemon_enabled_fallback (Fixture      *fixture,
 {
   gboolean daemon_enabled =
     emer_permissions_provider_get_daemon_enabled (fixture->test_object);
-  g_assert_false (daemon_enabled);
+  g_assert_true (daemon_enabled);
   g_test_assert_expected_messages ();
 }
 
@@ -357,7 +357,7 @@ test_permissions_provider_get_uploading_enabled_fallback (Fixture      *fixture,
 {
   gboolean uploading_enabled =
     emer_permissions_provider_get_uploading_enabled (fixture->test_object);
-  g_assert_true (uploading_enabled);
+  g_assert_false (uploading_enabled);
   g_test_assert_expected_messages ();
 }
 

@@ -54,8 +54,8 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerPermissionsProvider, emer_permissions_provider, 
 
 #define FALLBACK_CONFIG_FILE_DATA \
   "[" DAEMON_GLOBAL_GROUP_NAME "]\n" \
-  DAEMON_ENABLED_KEY_NAME "=false\n" \
-  DAEMON_UPLOADING_ENABLED_KEY_NAME "=true\n" \
+  DAEMON_ENABLED_KEY_NAME "=true\n" \
+  DAEMON_UPLOADING_ENABLED_KEY_NAME "=false\n" \
   DAEMON_ENVIRONMENT_KEY_NAME "=production\n"
 
 enum

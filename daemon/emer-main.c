@@ -264,11 +264,16 @@ make_daemon (gint                argc,
 {
   g_autofree gchar *persistent_cache_directory = NULL;
   const gchar *persistent_cache_directory_const = PERSISTENT_CACHE_DIR;
+  g_autofree gchar *config_file_path = NULL;
+  g_autoptr(EmerPermissionsProvider) permissions_provider = NULL;
   GOptionEntry option_entries[] =
   {
     { "persistent-cache-directory", 'p', G_OPTION_FLAG_NONE,
       G_OPTION_ARG_FILENAME, &persistent_cache_directory,
       "Store persistent cache at path", "path"},
+    { "config-file-path", 'c', G_OPTION_FLAG_NONE,
+      G_OPTION_ARG_FILENAME, &config_file_path,
+      "Path to permissions config file", "path"},
     { NULL }
   };
 
@@ -292,7 +297,12 @@ make_daemon (gint                argc,
   if (persistent_cache_directory != NULL)
     persistent_cache_directory_const = persistent_cache_directory;
 
-  return emer_daemon_new (persistent_cache_directory_const);
+  if (config_file_path != NULL)
+    permissions_provider =
+      emer_permissions_provider_new_full (config_file_path, NULL);
+
+  return emer_daemon_new (persistent_cache_directory_const,
+                          permissions_provider);
 }
 
 gint

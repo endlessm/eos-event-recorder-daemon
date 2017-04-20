@@ -62,6 +62,8 @@ struct _EmerPermissionsProviderClass
   GObjectClass parent_class;
 };
 
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(EmerPermissionsProvider, g_object_unref)
+
 GType                    emer_permissions_provider_get_type              (void) G_GNUC_CONST;
 
 EmerPermissionsProvider *emer_permissions_provider_new                   (void);

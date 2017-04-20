@@ -93,7 +93,11 @@ on_set_enabled (EmerEventRecorderServer *server,
                 gboolean                 enabled,
                 EmerDaemon              *daemon)
 {
+  EmerPermissionsProvider *permissions =
+    emer_daemon_get_permissions_provider (daemon);
+
   emer_event_recorder_server_set_enabled (server, enabled);
+  emer_permissions_provider_set_uploading_enabled (permissions, enabled);
   emer_event_recorder_server_complete_set_enabled (server, invocation);
   return TRUE;
 }

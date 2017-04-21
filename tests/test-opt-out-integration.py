@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2014, 2015 Endless Mobile, Inc.
+# Copyright 2014, 2015, 2017 Endless Mobile, Inc.
 
 # This file is part of eos-event-recorder-daemon.
 #
@@ -18,9 +18,10 @@
 # along with eos-event-recorder-daemon.  If not, see
 # <http://www.gnu.org/licenses/>.
 
+import configparser
 import dbus
+import os
 import shlex
-import shutil
 import subprocess
 import tempfile
 import unittest
@@ -33,10 +34,6 @@ _METRICS_IFACE = 'com.endlessm.Metrics.EventRecorderServer'
 class TestOptOutIntegration(dbusmock.DBusTestCase):
     """
     Makes sure the Enabled property can be set and retrieved.
-
-    FIXME This test could be made more useful by adding an option to run the
-    daemon with a different config file, which could then be written to in a
-    unit test.
     """
     @classmethod
     def setUpClass(klass):
@@ -50,11 +47,20 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         # Put polkitd mocks onto the mock system bus.
         (self.polkit_popen, self.polkit_obj) = self.spawn_server_template('polkitd')
 
-        self.persistent_cache_directory = tempfile.mkdtemp()
-        escaped_dir = shlex.quote(self.persistent_cache_directory)
+        self.test_dir = tempfile.TemporaryDirectory(
+            prefix='eos-event-recorder-daemon-test.')
+
+        persistent_cache_directory = os.path.join(self.test_dir.name, 'cache')
+        os.mkdir(persistent_cache_directory)
+        escaped_dir = shlex.quote(persistent_cache_directory)
         persistent_cache_dir_arg = '--persistent-cache-directory=' + escaped_dir
+
+        self.config_file = os.path.join(self.test_dir.name, 'permissions.conf')
+        config_file_arg = '--config-file-path={}'.format(self.config_file)
+
         self.daemon = subprocess.Popen(['./eos-metrics-event-recorder',
-                                        persistent_cache_dir_arg])
+                                        persistent_cache_dir_arg,
+                                        config_file_arg])
 
         # Wait for the service to come up
         self.wait_for_bus_object('com.endlessm.Metrics',
@@ -70,7 +76,8 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
 
         self.polkit_popen.wait()
         self.assertEquals(self.daemon.wait(), 0)
-        shutil.rmtree(self.persistent_cache_directory)
+
+        self.test_dir.cleanup()
 
     def test_opt_out_readable(self):
         """Make sure the Enabled property exists."""
@@ -92,9 +99,16 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         self.interface.SetEnabled(True)
         self.assertTrue(self.interface.Get(_METRICS_IFACE, 'Enabled',
             dbus_interface=dbus.PROPERTIES_IFACE))
+
+        # TODO: this is racy. The updated config file may not have been written
+        # when SetEnabled() returns.
+        self._check_config_file(enabled='true', uploading_enabled='true')
+
         self.interface.SetEnabled(False)
         self.assertFalse(self.interface.Get(_METRICS_IFACE, 'Enabled',
             dbus_interface=dbus.PROPERTIES_IFACE))
+
+        self._check_config_file(enabled='false', uploading_enabled='false')
 
     def test_set_enabled_unauthorized(self):
         """
@@ -102,6 +116,42 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         """
         with self.assertRaisesRegexp(dbus.DBusException, 'org\.freedesktop\.DBus\.Error\.AuthFailed'):
             self.interface.SetEnabled(True)
+
+    def test_upload_doesnt_change_config(self):
+        """
+        Make sure that calling UploadEvents() doesn't spontaneously enable
+        uploading. This seems implausible but did actually happen.
+        UploadEvents() causes the config to be re-read, triggering a change
+        notification on EmerPermissionsProvider:enabled, triggering a (no-op)
+        update of the Enabled D-Bus property to TRUE, which was bound to
+        EmerPermissionsProvider:uploading-enabled so caused that property to
+        be set to TRUE.
+        """
+        # Check defaults look good
+        self._check_config_file(enabled='true', uploading_enabled='false')
+
+        # TODO: it should probably return a more helpful error name than
+        # org.gtk.GDBus.UnmappedGError.Quark._g_2dio_2derror_2dquark.Code14
+        # too...
+        with self.assertRaisesRegex(dbus.exceptions.DBusException,
+                                    r'uploading is disabled') as context:
+            self.interface.UploadEvents()
+
+        # TODO: same race here!
+        self._check_config_file(enabled='true', uploading_enabled='false')
+
+    def test_UploadEvents_fails_if_disabled(self):
+        self.polkit_obj.SetAllowed(['com.endlessm.Metrics.SetEnabled'])
+        self.interface.SetEnabled(False)
+        with self.assertRaisesRegex(dbus.exceptions.DBusException,
+                                    r'metrics system is disabled') as context:
+            self.interface.UploadEvents()
+
+    def _check_config_file(self, enabled, uploading_enabled):
+        config = configparser.ConfigParser()
+        self.assertEquals(config.read(self.config_file), [self.config_file])
+        self.assertEquals(config.get("global", "enabled"), enabled)
+        self.assertEquals(config.get("global", "uploading_enabled"), uploading_enabled)
 
 
 if __name__ == '__main__':

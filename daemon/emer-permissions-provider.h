@@ -62,6 +62,8 @@ struct _EmerPermissionsProviderClass
   GObjectClass parent_class;
 };
 
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(EmerPermissionsProvider, g_object_unref)
+
 GType                    emer_permissions_provider_get_type              (void) G_GNUC_CONST;
 
 EmerPermissionsProvider *emer_permissions_provider_new                   (void);
@@ -75,6 +77,9 @@ void                     emer_permissions_provider_set_daemon_enabled    (EmerPe
                                                                           gboolean                 enabled);
 
 gboolean                 emer_permissions_provider_get_uploading_enabled (EmerPermissionsProvider *self);
+
+void                     emer_permissions_provider_set_uploading_enabled (EmerPermissionsProvider *self,
+                                                                          gboolean                 enabled);
 
 gchar                   *emer_permissions_provider_get_environment       (EmerPermissionsProvider *self);
 

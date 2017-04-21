@@ -952,7 +952,8 @@ static void
 test_daemon_new_succeeds (Fixture      *fixture,
                           gconstpointer unused)
 {
-  EmerDaemon *daemon = emer_daemon_new (NULL /* persistent cache directory */);
+  EmerDaemon *daemon = emer_daemon_new (NULL /* persistent cache directory */,
+                                        NULL /* permissions provider */);
   g_assert_nonnull (daemon);
   g_object_unref (daemon);
 }
@@ -1055,12 +1056,12 @@ static void
 test_daemon_only_reports_singulars_when_uploading_enabled (Fixture      *fixture,
                                                            gconstpointer unused)
 {
-  mock_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
+  emer_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
                                                    FALSE);
   record_singulars (fixture->test_object);
   assert_uploading_disabled (fixture);
 
-  mock_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
+  emer_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
                                                    TRUE);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_singulars_received);
@@ -1071,12 +1072,12 @@ static void
 test_daemon_only_reports_aggregates_when_uploading_enabled (Fixture      *fixture,
                                                             gconstpointer unused)
 {
-  mock_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
+  emer_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
                                                    FALSE);
   record_aggregates (fixture->test_object);
   assert_uploading_disabled (fixture);
 
-  mock_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
+  emer_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
                                                    TRUE);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_aggregates_received);
@@ -1087,12 +1088,12 @@ static void
 test_daemon_only_reports_sequences_when_uploading_enabled (Fixture      *fixture,
                                                            gconstpointer unused)
 {
-  mock_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
+  emer_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
                                                    FALSE);
   record_sequence (fixture->test_object);
   assert_uploading_disabled (fixture);
 
-  mock_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
+  emer_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
                                                    TRUE);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_sequence_received);

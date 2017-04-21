@@ -38,6 +38,9 @@ typedef struct _EmerPermissionsProviderPrivate
   /* For reading the config file */
   GFile *permissions_config_file;
 
+  /* Source ID for write_config_file_idle_cb */
+  guint write_config_file_idle_id;
+
   /* For reading the OSTree config file */
   GFile *ostree_config_file;
 } EmerPermissionsProviderPrivate;
@@ -51,8 +54,8 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerPermissionsProvider, emer_permissions_provider, 
 
 #define FALLBACK_CONFIG_FILE_DATA \
   "[" DAEMON_GLOBAL_GROUP_NAME "]\n" \
-  DAEMON_ENABLED_KEY_NAME "=false\n" \
-  DAEMON_UPLOADING_ENABLED_KEY_NAME "=true\n" \
+  DAEMON_ENABLED_KEY_NAME "=true\n" \
+  DAEMON_UPLOADING_ENABLED_KEY_NAME "=false\n" \
   DAEMON_ENVIRONMENT_KEY_NAME "=production\n"
 
 enum
@@ -61,6 +64,7 @@ enum
   PROP_PERMISSIONS_CONFIG_FILE_PATH,
   PROP_OSTREE_CONFIG_FILE_PATH,
   PROP_DAEMON_ENABLED,
+  PROP_UPLOADING_ENABLED,
   NPROPS
 };
 
@@ -136,26 +140,41 @@ read_config_file_sync (EmerPermissionsProvider *self)
   GParamSpec *daemon_enabled_pspec =
     emer_permissions_provider_props[PROP_DAEMON_ENABLED];
   g_object_notify_by_pspec (G_OBJECT (self), daemon_enabled_pspec);
+
+  GParamSpec *uploading_enabled_pspec =
+    emer_permissions_provider_props[PROP_UPLOADING_ENABLED];
+  g_object_notify_by_pspec (G_OBJECT (self), uploading_enabled_pspec);
+
 }
 
-/* Helper function to run write_config_file_sync() in another thread. */
-static void
-write_task_func (GTask                   *task,
-                 EmerPermissionsProvider *self,
-                 gpointer                 data,
-                 GCancellable            *cancellable)
+static gboolean
+write_config_file_idle_cb (gpointer data)
 {
+  EmerPermissionsProvider *self = EMER_PERMISSIONS_PROVIDER (data);
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
   write_config_file_sync (self);
-  g_task_return_pointer (task, NULL, NULL);
+  priv->write_config_file_idle_id = 0;
+
+  return G_SOURCE_REMOVE;
 }
 
-/* "Fire and forget" write_config_file_sync(). Don't wait for it to finish. */
+/* Schedule a call to write_config_file_sync(). Don't wait for it to finish. */
 static void
-write_config_file_async (EmerPermissionsProvider *self)
+schedule_config_file_update (EmerPermissionsProvider *self)
 {
-  GTask *task = g_task_new (self, NULL, NULL, NULL);
-  g_task_run_in_thread (task, (GTaskThreadFunc)write_task_func);
-  g_object_unref (task);
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  if (priv->write_config_file_idle_id != 0)
+    return;
+
+  priv->write_config_file_idle_id =
+    g_idle_add_full (G_PRIORITY_DEFAULT_IDLE,
+                     write_config_file_idle_cb,
+                     g_object_ref (self),
+                     g_object_unref);
 }
 
 static gchar *
@@ -302,7 +321,7 @@ set_environment (EmerPermissionsProvider *self,
   g_key_file_set_string (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
                          DAEMON_ENVIRONMENT_KEY_NAME, environment);
 
-  write_config_file_async (self);
+  schedule_config_file_update (self);
 }
 
 static void
@@ -356,6 +375,11 @@ emer_permissions_provider_get_property (GObject    *object,
                            emer_permissions_provider_get_daemon_enabled (self));
       break;
 
+    case PROP_UPLOADING_ENABLED:
+      g_value_set_boolean (value,
+                           emer_permissions_provider_get_uploading_enabled (self));
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
     }
@@ -382,6 +406,11 @@ emer_permissions_provider_set_property (GObject      *object,
     case PROP_DAEMON_ENABLED:
       emer_permissions_provider_set_daemon_enabled (self,
                                                     g_value_get_boolean (value));
+      break;
+
+    case PROP_UPLOADING_ENABLED:
+      emer_permissions_provider_set_uploading_enabled (self,
+                                                       g_value_get_boolean (value));
       break;
 
     default:
@@ -426,6 +455,11 @@ emer_permissions_provider_class_init (EmerPermissionsProviderClass *klass)
   emer_permissions_provider_props[PROP_DAEMON_ENABLED] =
     g_param_spec_boolean ("daemon-enabled", "Daemon enabled",
                           "Whether to enable the metrics daemon system-wide",
+                          FALSE,
+                          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+  emer_permissions_provider_props[PROP_UPLOADING_ENABLED] =
+    g_param_spec_boolean ("uploading-enabled", "Uploading enabled",
+                          "Whether to upload events via the network",
                           FALSE,
                           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
@@ -528,7 +562,7 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
   g_key_file_set_boolean (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
                           DAEMON_ENABLED_KEY_NAME, enabled);
 
-  write_config_file_async (self);
+  schedule_config_file_update (self);
 
   GParamSpec *daemon_enabled_pspec =
     emer_permissions_provider_props[PROP_DAEMON_ENABLED];
@@ -567,6 +601,33 @@ emer_permissions_provider_get_uploading_enabled (EmerPermissionsProvider *self)
     }
 
   return uploading_enabled;
+}
+
+/*
+ * emer_permissions_provider_set_uploading_enabled:
+ * @self: the permissions provider
+ * @enabled: whether the event recorder should upload events via the network
+ *
+ * Sets whether the event recorder should upload events via the network. This
+ * setting is moot if the entire daemon is disabled; see
+ * emer_permissions_provider_set_daemon_enabled().
+ */
+void
+emer_permissions_provider_set_uploading_enabled (EmerPermissionsProvider *self,
+                                                 gboolean                 enabled)
+{
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  g_key_file_set_boolean (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
+                          DAEMON_UPLOADING_ENABLED_KEY_NAME, enabled);
+
+  schedule_config_file_update (self);
+
+  GParamSpec *uploading_enabled_pspec =
+    emer_permissions_provider_props[PROP_UPLOADING_ENABLED];
+  g_object_notify_by_pspec (G_OBJECT (self), uploading_enabled_pspec);
+
 }
 
 /*

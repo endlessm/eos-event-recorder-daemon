@@ -93,7 +93,11 @@ on_set_enabled (EmerEventRecorderServer *server,
                 gboolean                 enabled,
                 EmerDaemon              *daemon)
 {
+  EmerPermissionsProvider *permissions =
+    emer_daemon_get_permissions_provider (daemon);
+
   emer_event_recorder_server_set_enabled (server, enabled);
+  emer_permissions_provider_set_uploading_enabled (permissions, enabled);
   emer_event_recorder_server_complete_set_enabled (server, invocation);
   return TRUE;
 }
@@ -258,12 +262,18 @@ static EmerDaemon *
 make_daemon (gint                argc,
              const gchar * const argv[])
 {
-  gchar *persistent_cache_directory = NULL;
+  g_autofree gchar *persistent_cache_directory = NULL;
+  const gchar *persistent_cache_directory_const = PERSISTENT_CACHE_DIR;
+  g_autofree gchar *config_file_path = NULL;
+  g_autoptr(EmerPermissionsProvider) permissions_provider = NULL;
   GOptionEntry option_entries[] =
   {
     { "persistent-cache-directory", 'p', G_OPTION_FLAG_NONE,
       G_OPTION_ARG_FILENAME, &persistent_cache_directory,
       "Store persistent cache at path", "path"},
+    { "config-file-path", 'c', G_OPTION_FLAG_NONE,
+      G_OPTION_ARG_FILENAME, &config_file_path,
+      "Path to permissions config file", "path"},
     { NULL }
   };
 
@@ -284,13 +294,15 @@ make_daemon (gint                argc,
       return NULL;
     }
 
-  if (persistent_cache_directory == NULL)
-    return emer_daemon_new (PERSISTENT_CACHE_DIR);
+  if (persistent_cache_directory != NULL)
+    persistent_cache_directory_const = persistent_cache_directory;
 
-  EmerDaemon *daemon = emer_daemon_new (persistent_cache_directory);
-  g_free (persistent_cache_directory);
+  if (config_file_path != NULL)
+    permissions_provider =
+      emer_permissions_provider_new_full (config_file_path, NULL);
 
-  return daemon;
+  return emer_daemon_new (persistent_cache_directory_const,
+                          permissions_provider);
 }
 
 gint

@@ -29,9 +29,6 @@
 
 G_BEGIN_DECLS
 
-void mock_permissions_provider_set_uploading_enabled (EmerPermissionsProvider *self,
-                                                      gboolean                 uploading_enabled);
-
 G_END_DECLS
 
 #endif /* MOCK_PERMISSIONS_PROVIDER_H */

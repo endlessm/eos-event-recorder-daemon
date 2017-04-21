@@ -93,6 +93,11 @@ typedef struct {
 
   gboolean notify_daemon_called;
   gboolean notify_daemon_called_with;
+
+  gboolean notify_uploading_called;
+  gboolean notify_uploading_called_with;
+
+  guint num_config_file_changes;
 } Fixture;
 
 /* Callback for notify::daemon-enabled that records what it was called with and
@@ -106,6 +111,20 @@ on_notify_daemon_enabled (EmerPermissionsProvider *permissions_provider,
     fixture->notify_daemon_called_with =
       emer_permissions_provider_get_daemon_enabled (permissions_provider);
   fixture->notify_daemon_called = TRUE;
+  g_main_loop_quit (fixture->main_loop);
+}
+
+/* Callback for notify::uploading-enabled that records what it was called with and
+quits the main loop so the test can continue. */
+static void
+on_notify_uploading_enabled (EmerPermissionsProvider *permissions_provider,
+                             GParamSpec              *pspec,
+                             Fixture                 *fixture)
+{
+  if (!fixture->notify_uploading_called)
+    fixture->notify_uploading_called_with =
+      emer_permissions_provider_get_uploading_enabled (permissions_provider);
+  fixture->notify_uploading_called = TRUE;
   g_main_loop_quit (fixture->main_loop);
 }
 
@@ -173,9 +192,12 @@ setup_config_files (Fixture     *fixture,
   g_free (ostree_config_file_path);
 
   fixture->main_loop = g_main_loop_new (NULL, FALSE);
-  fixture->notify_daemon_called = FALSE;
+
   g_signal_connect (fixture->test_object, "notify::daemon-enabled",
                     G_CALLBACK (on_notify_daemon_enabled), fixture);
+  g_signal_connect (fixture->test_object, "notify::uploading-enabled",
+                    G_CALLBACK (on_notify_uploading_enabled), fixture);
+
 
   /* Failsafe: stop waiting for signals in async tests after
      SIGNAL_TIMEOUT_SEC seconds. */
@@ -307,7 +329,7 @@ test_permissions_provider_get_daemon_enabled_fallback (Fixture      *fixture,
 {
   gboolean daemon_enabled =
     emer_permissions_provider_get_daemon_enabled (fixture->test_object);
-  g_assert_false (daemon_enabled);
+  g_assert_true (daemon_enabled);
   g_test_assert_expected_messages ();
 }
 
@@ -335,7 +357,7 @@ test_permissions_provider_get_uploading_enabled_fallback (Fixture      *fixture,
 {
   gboolean uploading_enabled =
     emer_permissions_provider_get_uploading_enabled (fixture->test_object);
-  g_assert_true (uploading_enabled);
+  g_assert_false (uploading_enabled);
   g_test_assert_expected_messages ();
 }
 
@@ -395,8 +417,13 @@ test_permissions_provider_set_daemon_enabled (Fixture      *fixture,
 {
   g_idle_add ((GSourceFunc) set_daemon_enabled_false_idle, fixture);
   g_main_loop_run (fixture->main_loop);
+
   g_assert_true (fixture->notify_daemon_called);
   g_assert_false (fixture->notify_daemon_called_with);
+  g_assert_false (emer_permissions_provider_get_daemon_enabled (fixture->test_object));
+
+  g_assert_false(fixture->notify_uploading_called);
+  g_assert_true (emer_permissions_provider_get_uploading_enabled (fixture->test_object));
 }
 
 /* Callback for file monitor change, which quits the main loop. */
@@ -409,20 +436,32 @@ on_config_file_changed (GFileMonitor     *monitor,
 {
   if (event_type == G_FILE_MONITOR_EVENT_CREATED ||
       event_type == G_FILE_MONITOR_EVENT_CHANGED)
-    g_main_loop_quit (fixture->main_loop);
+    {
+      fixture->num_config_file_changes++;
+      g_main_loop_quit (fixture->main_loop);
+    }
+}
+
+static gboolean
+file_contents_match (GFile       *file,
+                     const gchar *pattern)
+{
+  g_autofree gchar *contents = NULL;
+  gboolean loaded_file =
+    g_file_load_contents (file, NULL, &contents,
+                          NULL, NULL, NULL);
+  g_assert_true (loaded_file);
+  return g_regex_match_simple (pattern, contents, G_REGEX_MULTILINE, 0);
 }
 
 static void
 test_permissions_provider_set_daemon_enabled_updates_config_file (Fixture      *fixture,
                                                                   gconstpointer unused)
 {
-  gchar *contents;
-  gboolean loaded_file =
-    g_file_load_contents (fixture->permissions_config_file, NULL, &contents,
-                          NULL, NULL, NULL);
-  g_assert_true (loaded_file);
-  g_assert_nonnull (strstr (contents, "enabled=true"));
-  g_free (contents);
+  g_assert_true (file_contents_match (fixture->permissions_config_file,
+                                      "^enabled=true$"));
+  g_assert_true (file_contents_match (fixture->permissions_config_file,
+                                      "^uploading_enabled=true$"));
 
   g_idle_add ((GSourceFunc) set_daemon_enabled_false_idle, fixture);
 
@@ -438,15 +477,75 @@ test_permissions_provider_set_daemon_enabled_updates_config_file (Fixture      *
   and a "changed" or "created" file monitor event. */
   g_main_loop_run (fixture->main_loop);
   g_main_loop_run (fixture->main_loop);
+  g_assert_cmpuint (fixture->num_config_file_changes, ==, 1);
 
   g_object_unref (monitor);
 
-  loaded_file =
-    g_file_load_contents (fixture->permissions_config_file, NULL, &contents,
-                          NULL, NULL, NULL);
-  g_assert_true (loaded_file);
-  g_assert_nonnull (strstr (contents, "enabled=false"));
-  g_free (contents);
+  g_assert_true (file_contents_match (fixture->permissions_config_file,
+                                      "^enabled=false$"));
+  g_assert_true (file_contents_match (fixture->permissions_config_file,
+                                      "^uploading_enabled=true$"));
+}
+
+/* This is run in an idle function so that it doesn't quit the main loop before
+the main loop has started. */
+static gboolean
+set_uploading_enabled_false_idle (Fixture *fixture)
+{
+  emer_permissions_provider_set_uploading_enabled (fixture->test_object, FALSE);
+  return G_SOURCE_REMOVE;
+}
+
+static void
+test_permissions_provider_set_uploading_enabled (Fixture      *fixture,
+                                                 gconstpointer unused)
+{
+  g_idle_add ((GSourceFunc) set_uploading_enabled_false_idle, fixture);
+  g_main_loop_run (fixture->main_loop);
+
+  g_assert_false (fixture->notify_daemon_called);
+  g_assert_true (emer_permissions_provider_get_daemon_enabled (fixture->test_object));
+
+  g_assert_true (fixture->notify_uploading_called);
+  g_assert_false (fixture->notify_uploading_called_with);
+  g_assert_false (emer_permissions_provider_get_uploading_enabled (fixture->test_object));
+}
+
+
+static void
+test_permissions_provider_set_uploading_enabled_updates_config_file (Fixture      *fixture,
+                                                                     gconstpointer unused)
+{
+  g_assert_true (file_contents_match (fixture->permissions_config_file,
+                                      "^enabled=true$"));
+  g_assert_true (file_contents_match (fixture->permissions_config_file,
+                                      "^uploading_enabled=true$"));
+
+  g_idle_add ((GSourceFunc) set_uploading_enabled_false_idle, fixture);
+
+  GFileMonitor *monitor =
+    g_file_monitor_file (fixture->permissions_config_file, G_FILE_MONITOR_NONE,
+                         NULL, NULL);
+  g_assert_nonnull (monitor);
+
+  g_signal_connect (monitor, "changed", G_CALLBACK (on_config_file_changed),
+                    fixture);
+
+  /* Run the main loop twice, to wait for two events: the property notification
+  and a "changed" or "created" file monitor event. */
+  g_main_loop_run (fixture->main_loop);
+  g_main_loop_run (fixture->main_loop);
+  g_assert_cmpuint (fixture->num_config_file_changes, ==, 1);
+
+  g_object_unref (monitor);
+
+  g_assert_true (emer_permissions_provider_get_daemon_enabled (fixture->test_object));
+  g_assert_false (emer_permissions_provider_get_uploading_enabled (fixture->test_object));
+
+  g_assert_true (file_contents_match (fixture->permissions_config_file,
+                                      "^enabled=true$"));
+  g_assert_true (file_contents_match (fixture->permissions_config_file,
+                                      "^uploading_enabled=false$"));
 }
 
 gint
@@ -529,6 +628,14 @@ main (gint                argc,
                                  PERMISSIONS_CONFIG_FILE_ENABLED_TEST,
                                  setup_with_config_file,
                                  test_permissions_provider_set_daemon_enabled_updates_config_file);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/set-uploading-enabled",
+                                 PERMISSIONS_CONFIG_FILE_ENABLED_TEST,
+                                 setup_with_config_file,
+                                 test_permissions_provider_set_uploading_enabled);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/set-uploading-enabled-updates-config-file",
+                                 PERMISSIONS_CONFIG_FILE_ENABLED_TEST,
+                                 setup_with_config_file,
+                                 test_permissions_provider_set_uploading_enabled_updates_config_file);
 
 #undef ADD_PERMISSIONS_PROVIDER_TEST
 

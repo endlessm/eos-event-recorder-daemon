@@ -1444,10 +1444,12 @@ emer_daemon_init (EmerDaemon *self)
  * Returns: (transfer full): a new #EmerDaemon with the default configuration.
  */
 EmerDaemon *
-emer_daemon_new (const gchar *persistent_cache_directory)
+emer_daemon_new (const gchar             *persistent_cache_directory,
+                 EmerPermissionsProvider *permissions_provider)
 {
   return g_object_new (EMER_TYPE_DAEMON,
                        "persistent-cache-directory", persistent_cache_directory,
+                       "permissions-provider", permissions_provider,
                        NULL);
 }
 

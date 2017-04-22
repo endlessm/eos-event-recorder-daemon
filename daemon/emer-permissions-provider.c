@@ -108,6 +108,36 @@ write_config_file_sync (EmerPermissionsProvider *self)
   g_free (permissions_config_file_path);
 }
 
+static gboolean
+write_config_file_idle_cb (gpointer data)
+{
+  EmerPermissionsProvider *self = EMER_PERMISSIONS_PROVIDER (data);
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  write_config_file_sync (self);
+  priv->write_config_file_idle_id = 0;
+
+  return G_SOURCE_REMOVE;
+}
+
+/* Schedule a call to write_config_file_sync(). Don't wait for it to finish. */
+static void
+schedule_config_file_update (EmerPermissionsProvider *self)
+{
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  if (priv->write_config_file_idle_id != 0)
+    return;
+
+  priv->write_config_file_idle_id =
+    g_idle_add_full (G_PRIORITY_DEFAULT_IDLE,
+                     write_config_file_idle_cb,
+                     g_object_ref (self),
+                     g_object_unref);
+}
+
 /* Read config values from the config file, and if that fails assume the
 default. Also emits a property notification. */
 static void
@@ -145,36 +175,6 @@ read_config_file_sync (EmerPermissionsProvider *self)
     emer_permissions_provider_props[PROP_UPLOADING_ENABLED];
   g_object_notify_by_pspec (G_OBJECT (self), uploading_enabled_pspec);
 
-}
-
-static gboolean
-write_config_file_idle_cb (gpointer data)
-{
-  EmerPermissionsProvider *self = EMER_PERMISSIONS_PROVIDER (data);
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  write_config_file_sync (self);
-  priv->write_config_file_idle_id = 0;
-
-  return G_SOURCE_REMOVE;
-}
-
-/* Schedule a call to write_config_file_sync(). Don't wait for it to finish. */
-static void
-schedule_config_file_update (EmerPermissionsProvider *self)
-{
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  if (priv->write_config_file_idle_id != 0)
-    return;
-
-  priv->write_config_file_idle_id =
-    g_idle_add_full (G_PRIORITY_DEFAULT_IDLE,
-                     write_config_file_idle_cb,
-                     g_object_ref (self),
-                     g_object_unref);
 }
 
 static gchar *

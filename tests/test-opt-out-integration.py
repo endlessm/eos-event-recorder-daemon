@@ -24,6 +24,7 @@ import os
 import shlex
 import subprocess
 import tempfile
+import time
 import unittest
 
 import dbusmock
@@ -95,13 +96,14 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         Make sure the Enabled property's value persists and accessing SetEnabled
         succeeds when it is set to allowed.
         """
+        # Check defaults look good and erase the file before our next change
+        self._check_config_file(enabled='true', uploading_enabled='false')
+
         self.polkit_obj.SetAllowed(['com.endlessm.Metrics.SetEnabled'])
         self.interface.SetEnabled(True)
         self.assertTrue(self.interface.Get(_METRICS_IFACE, 'Enabled',
             dbus_interface=dbus.PROPERTIES_IFACE))
 
-        # TODO: this is racy. The updated config file may not have been written
-        # when SetEnabled() returns.
         self._check_config_file(enabled='true', uploading_enabled='true')
 
         self.interface.SetEnabled(False)
@@ -127,7 +129,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         EmerPermissionsProvider:uploading-enabled so caused that property to
         be set to TRUE.
         """
-        # Check defaults look good
+        # Check defaults look good and erase the file before our next change
         self._check_config_file(enabled='true', uploading_enabled='false')
 
         # TODO: it should probably return a more helpful error name than
@@ -137,7 +139,6 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
                                     r'uploading is disabled') as context:
             self.interface.UploadEvents()
 
-        # TODO: same race here!
         self._check_config_file(enabled='true', uploading_enabled='false')
 
     def test_UploadEvents_fails_if_disabled(self):
@@ -148,10 +149,19 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
             self.interface.UploadEvents()
 
     def _check_config_file(self, enabled, uploading_enabled):
+        # the config file is written asyncronously by the daemon,
+        # so may not exist at the start of a test
+        while not os.path.exists(self.config_file):
+            time.sleep(0.05)
+
         config = configparser.ConfigParser()
         self.assertEquals(config.read(self.config_file), [self.config_file])
         self.assertEquals(config.get("global", "enabled"), enabled)
         self.assertEquals(config.get("global", "uploading_enabled"), uploading_enabled)
+
+        # erase the file after reading it to guarantee that the next time it
+        # exists, it's up to date. the daemon doesn't read it once started.
+        os.unlink(self.config_file)
 
 
 if __name__ == '__main__':

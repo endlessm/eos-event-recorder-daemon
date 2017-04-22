@@ -154,6 +154,7 @@ read_config_file_sync (EmerPermissionsProvider *self)
   if (!load_succeeded)
     {
       load_fallback_data (self);
+      schedule_config_file_update (self);
 
       if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
         g_critical ("Permissions config file '%s' was invalid or could not be "

@@ -108,45 +108,6 @@ write_config_file_sync (EmerPermissionsProvider *self)
   g_free (permissions_config_file_path);
 }
 
-/* Read config values from the config file, and if that fails assume the
-default. Also emits a property notification. */
-static void
-read_config_file_sync (EmerPermissionsProvider *self)
-{
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  GError *error = NULL;
-
-  gchar *path = g_file_get_path (priv->permissions_config_file);
-  gboolean load_succeeded =
-    g_key_file_load_from_file (priv->permissions, path, G_KEY_FILE_NONE, &error);
-  if (!load_succeeded)
-    {
-      load_fallback_data (self);
-
-      if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
-        g_critical ("Permissions config file '%s' was invalid or could not be "
-                    "read. Loading fallback data. Error: %s.", path,
-                    error->message);
-      /* If the config file was simply not there, fail silently and stick
-       * with the defaults. */
-
-      g_clear_error (&error);
-    }
-
-  g_free (path);
-
-  GParamSpec *daemon_enabled_pspec =
-    emer_permissions_provider_props[PROP_DAEMON_ENABLED];
-  g_object_notify_by_pspec (G_OBJECT (self), daemon_enabled_pspec);
-
-  GParamSpec *uploading_enabled_pspec =
-    emer_permissions_provider_props[PROP_UPLOADING_ENABLED];
-  g_object_notify_by_pspec (G_OBJECT (self), uploading_enabled_pspec);
-
-}
-
 static gboolean
 write_config_file_idle_cb (gpointer data)
 {
@@ -175,6 +136,46 @@ schedule_config_file_update (EmerPermissionsProvider *self)
                      write_config_file_idle_cb,
                      g_object_ref (self),
                      g_object_unref);
+}
+
+/* Read config values from the config file, and if that fails assume the
+default. Also emits a property notification. */
+static void
+read_config_file_sync (EmerPermissionsProvider *self)
+{
+  EmerPermissionsProviderPrivate *priv =
+    emer_permissions_provider_get_instance_private (self);
+
+  GError *error = NULL;
+
+  gchar *path = g_file_get_path (priv->permissions_config_file);
+  gboolean load_succeeded =
+    g_key_file_load_from_file (priv->permissions, path, G_KEY_FILE_NONE, &error);
+  if (!load_succeeded)
+    {
+      load_fallback_data (self);
+      schedule_config_file_update (self);
+
+      if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
+        g_critical ("Permissions config file '%s' was invalid or could not be "
+                    "read. Loading fallback data. Error: %s.", path,
+                    error->message);
+      /* If the config file was simply not there, fail silently and stick
+       * with the defaults. */
+
+      g_clear_error (&error);
+    }
+
+  g_free (path);
+
+  GParamSpec *daemon_enabled_pspec =
+    emer_permissions_provider_props[PROP_DAEMON_ENABLED];
+  g_object_notify_by_pspec (G_OBJECT (self), daemon_enabled_pspec);
+
+  GParamSpec *uploading_enabled_pspec =
+    emer_permissions_provider_props[PROP_UPLOADING_ENABLED];
+  g_object_notify_by_pspec (G_OBJECT (self), uploading_enabled_pspec);
+
 }
 
 static gchar *

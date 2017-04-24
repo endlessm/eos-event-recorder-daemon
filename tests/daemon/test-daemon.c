@@ -72,6 +72,7 @@ typedef struct _Fixture
   EmerPersistentCache *mock_persistent_cache;
 
   GSubprocess *mock_server;
+  gchar *server_uri;
 
   gint64 relative_time;
   gint64 absolute_time;
@@ -913,6 +914,20 @@ reap_when_parent_dies (gpointer unused)
 // Setup/Teardown functions next:
 
 static void
+create_test_object (Fixture *fixture)
+{
+  fixture->test_object =
+    emer_daemon_new_full (g_rand_new_with_seed (18),
+                          fixture->server_uri,
+                          2 /* network send interval */,
+                          fixture->mock_machine_id_provider,
+                          fixture->mock_network_send_provider,
+                          fixture->mock_permissions_provider,
+                          fixture->mock_persistent_cache,
+                          100000 /* max bytes buffered */);
+}
+
+static void
 setup (Fixture      *fixture,
        gconstpointer unused)
 {
@@ -930,7 +945,7 @@ setup (Fixture      *fixture,
   g_assert_nonnull (fixture->mock_server);
   g_object_unref (subprocess_launcher);
 
-  gchar *server_uri = get_server_uri (fixture->mock_server);
+  fixture->server_uri = get_server_uri (fixture->mock_server);
 
   fixture->mock_machine_id_provider = emer_machine_id_provider_new ();
   fixture->mock_network_send_provider =
@@ -938,16 +953,8 @@ setup (Fixture      *fixture,
   fixture->mock_permissions_provider = emer_permissions_provider_new ();
   fixture->mock_persistent_cache =
     emer_persistent_cache_new (NULL /* directory */, NULL /* GError */);
-  fixture->test_object =
-    emer_daemon_new_full (g_rand_new_with_seed (18),
-                          server_uri,
-                          2 /* network send interval */,
-                          fixture->mock_machine_id_provider,
-                          fixture->mock_network_send_provider,
-                          fixture->mock_permissions_provider,
-                          fixture->mock_persistent_cache,
-                          100000 /* max bytes buffered */);
-  g_free (server_uri);
+
+  create_test_object (fixture);
 }
 
 static void
@@ -960,6 +967,7 @@ teardown (Fixture      *fixture,
   g_object_unref (fixture->mock_permissions_provider);
   g_object_unref (fixture->mock_persistent_cache);
   terminate_subprocess_and_wait (fixture->mock_server);
+  g_free (fixture->server_uri);
 }
 
 // Unit Tests next:
@@ -1184,6 +1192,14 @@ test_daemon_flushes_to_persistent_cache_on_finalize (Fixture      *fixture,
   g_assert_true (read_succeeded);
   g_assert_false (has_invalid);
   assert_singulars_match (variants, num_variants);
+
+  /* Create a new daemon */
+  create_test_object (fixture);
+
+  /* It should upload those cached events */
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_singulars_received);
+  wait_for_upload_to_finish (fixture);
 }
 
 static void

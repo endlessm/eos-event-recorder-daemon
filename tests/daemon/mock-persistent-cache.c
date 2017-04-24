@@ -191,3 +191,12 @@ emer_persistent_cache_remove_all (EmerPersistentCache *self,
 
   return TRUE;
 }
+
+gboolean
+mock_persistent_cache_is_empty (EmerPersistentCache *self)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  return priv->variant_array->len == 0;
+}

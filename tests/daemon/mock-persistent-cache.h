@@ -32,6 +32,8 @@ G_BEGIN_DECLS
 #define BOOT_TIME_OFFSET G_GINT64_CONSTANT (73)
 #define MAX_NUM_VARIANTS 10
 
+gboolean             mock_persistent_cache_is_empty             (EmerPersistentCache      *self);
+
 G_END_DECLS
 
 #endif /* MOCK_PERSISTENT_CACHE_H */

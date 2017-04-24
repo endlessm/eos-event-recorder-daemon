@@ -141,7 +141,11 @@ typedef struct _EmerDaemonPrivate
 {
   guint network_send_interval;
   GQueue *upload_queue;
-  gboolean uploading;
+
+  /* Non-NULL iff an upload is in flight. An owned reference to the
+   * cancellable held by NetworkCallbackData.upload_task.
+   */
+  GCancellable *current_upload_cancellable;
 
   SoupSession *http_session;
 
@@ -215,7 +219,8 @@ finish_network_callback (NetworkCallbackData *callback_data)
   g_object_unref (callback_data->upload_task);
   g_free (callback_data);
 
-  priv->uploading = FALSE;
+  g_clear_object (&priv->current_upload_cancellable);
+
   g_signal_emit (self, emer_daemon_signals[SIGNAL_UPLOAD_FINISHED], 0u);
 }
 
@@ -493,10 +498,26 @@ handle_http_response (SoupSession         *http_session,
   g_object_get (http_message, "status-code", &status_code, NULL);
   if (SOUP_STATUS_IS_SUCCESSFUL (status_code))
     {
+      GCancellable *cancellable =
+        g_task_get_cancellable (callback_data->upload_task);
+
+      if (g_cancellable_is_cancelled (cancellable))
+        {
+          /* Daemon was disabled, but we've already sent the request
+           * successfully. Disabling the daemon discards all cached and
+           * buffered events, so don't try to do that here too. Just allow the
+           * task to return success.
+           */
+          g_cancellable_reset (cancellable);
+        }
+      else
+        {
+          remove_from_persistent_cache (self, callback_data->token);
+          remove_events (self, callback_data->num_buffer_events);
+          flush_to_persistent_cache (self);
+        }
+
       g_task_return_boolean (callback_data->upload_task, TRUE);
-      remove_from_persistent_cache (self, callback_data->token);
-      remove_events (self, callback_data->num_buffer_events);
-      flush_to_persistent_cache (self);
       finish_network_callback (callback_data);
       return;
     }
@@ -505,6 +526,12 @@ handle_http_response (SoupSession         *http_session,
   g_object_get (http_message, "reason-phrase", &reason_phrase, NULL);
   g_warning ("Attempt to upload metrics failed: %s.", reason_phrase);
   g_free (reason_phrase);
+
+  if (g_task_return_error_if_cancelled (callback_data->upload_task))
+    {
+      finish_network_callback (callback_data);
+      return;
+    }
 
   if (++callback_data->attempt_num >= NETWORK_ATTEMPT_LIMIT)
     {
@@ -841,7 +868,7 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  if (priv->uploading)
+  if (priv->current_upload_cancellable != NULL)
     return;
 
   GTask *upload_task = g_queue_pop_head (priv->upload_queue);
@@ -866,7 +893,8 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
       goto handle_upload_failed;
     }
 
-  priv->uploading = TRUE;
+  priv->current_upload_cancellable = g_object_ref (
+    g_task_get_cancellable (upload_task));
 
   NetworkCallbackData *callback_data = g_new (NetworkCallbackData, 1);
   callback_data->daemon = self;
@@ -988,7 +1016,7 @@ upload_events (EmerDaemon         *self,
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   GTask *upload_task =
-    g_task_new (self, NULL /* GCancellable */, callback, user_data);
+    g_task_new (self, g_cancellable_new (), callback, user_data);
   gsize *max_size = g_new (gsize, 1);
   *max_size = max_upload_size;
   g_task_set_task_data (upload_task, max_size, g_free);
@@ -1005,7 +1033,8 @@ log_upload_error (EmerDaemon   *self,
   if (!emer_daemon_upload_events_finish (self, result, &error))
     {
       if (!g_error_matches (error, EMER_ERROR, EMER_ERROR_METRICS_DISABLED) &&
-          !g_error_matches (error, EMER_ERROR, EMER_ERROR_UPLOADING_DISABLED))
+          !g_error_matches (error, EMER_ERROR, EMER_ERROR_UPLOADING_DISABLED) &&
+          !g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
         {
           g_warning ("Failed to upload events: %s.", error->message);
         }
@@ -1051,6 +1080,23 @@ on_permissions_changed (EmerPermissionsProvider *permissions_provider,
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   priv->recording_enabled =
     emer_permissions_provider_get_daemon_enabled (permissions_provider);
+
+  if (!priv->recording_enabled)
+    {
+      /* Discard any outstanding events */
+      GError *error = NULL;
+
+      remove_events (self, priv->variant_array->len);
+
+      if (!emer_persistent_cache_remove_all (priv->persistent_cache, &error))
+        {
+          g_warning ("failed to clear persistent cache: %s", error->message);
+          g_clear_error (&error);
+        }
+
+      /* If NULL (because no upload is in progress), this is a no-op. */
+      g_cancellable_cancel (priv->current_upload_cancellable);
+    }
 }
 
 /*
@@ -1248,6 +1294,9 @@ emer_daemon_finalize (GObject *object)
 {
   EmerDaemon *self = EMER_DAEMON (object);
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  /* While an upload is ongoing, the GTask holds a ref to the EmerDaemon. */
+  g_warn_if_fail (priv->current_upload_cancellable == NULL);
 
   g_source_remove (priv->upload_events_timeout_source_id);
 

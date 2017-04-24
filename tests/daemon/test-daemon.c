@@ -1173,6 +1173,123 @@ test_daemon_does_not_record_sequences_when_daemon_disabled (Fixture      *fixtur
 }
 
 static void
+test_daemon_discards_in_memory_singulars_when_daemon_disabled (Fixture      *fixture,
+                                                               gconstpointer unused)
+{
+  /* Record some events, but disable metrics before they can be submitted */
+  record_singulars (fixture->test_object);
+
+  emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
+                                                FALSE);
+  assert_metrics_disabled (fixture);
+  g_assert_true (mock_persistent_cache_is_empty (fixture->mock_persistent_cache));
+
+  /* Re-enable, and wait for the next tick. No events should be submitted. */
+  emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
+                                                TRUE);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_no_events_received);
+  wait_for_upload_to_finish (fixture);
+}
+
+static void
+test_daemon_discards_in_flight_singulars_when_daemon_disabled (Fixture      *fixture,
+                                                               gconstpointer unused)
+{
+  /* Record some events, and wait for them to be submitted */
+  record_singulars (fixture->test_object);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_singulars_received);
+
+  /* Before the server sends a reply, disable the daemon */
+  emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
+                                                FALSE);
+  assert_metrics_disabled (fixture);
+  g_assert_true (mock_persistent_cache_is_empty (fixture->mock_persistent_cache));
+
+  /* Now allow the server to reply */
+  wait_for_upload_to_finish (fixture);
+
+  /* Re-enable, and wait for the next tick. No (more) events should be submitted. */
+  emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
+                                                TRUE);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_no_events_received);
+  wait_for_upload_to_finish (fixture);
+
+  /* Record some different events, and ensure they're submitted correctly */
+  record_sequence (fixture->test_object);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_sequence_received);
+  wait_for_upload_to_finish (fixture);
+}
+
+static void
+test_daemon_discards_failed_in_flight_singulars_when_daemon_disabled (Fixture      *fixture,
+                                                                      gconstpointer unused)
+{
+  /* Record some events, and wait for them to be submitted */
+  record_singulars (fixture->test_object);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_singulars_received);
+
+  /* Before the server sends a reply, disable the daemon */
+  emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
+                                                FALSE);
+  assert_metrics_disabled (fixture);
+  g_assert_true (mock_persistent_cache_is_empty (fixture->mock_persistent_cache));
+
+  /* Re-enable the daemon, and send some different events */
+  emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
+                                                TRUE);
+  record_sequence (fixture->test_object);
+
+  /* Now send back an error to the first batch  */
+  send_http_response (fixture->mock_server, SOUP_STATUS_INTERNAL_SERVER_ERROR);
+
+  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
+                         "Attempt to upload metrics failed: Internal Server "
+                         "Error.");
+
+  /* The first batch, which were pending when the daemon was disabled, should
+   * have been discarded; the new batch should be sent.
+   */
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_sequence_received);
+  /* By now it should have warned about the first attempt */
+  g_test_assert_expected_messages ();
+  wait_for_upload_to_finish (fixture);
+}
+
+static void
+test_daemon_discards_persistent_cache_when_daemon_disabled (Fixture      *fixture,
+                                                            gconstpointer unused)
+{
+  /* Pre-seed the persistent cache with an event */
+  g_autoptr(GVariant) variant = g_variant_ref_sink (make_large_singular ());
+  gsize num_variants_stored;
+  gboolean store_succeeded =
+    emer_persistent_cache_store (fixture->mock_persistent_cache, &variant, 1,
+                                 &num_variants_stored,
+                                 NULL /* GError */);
+  g_assert_true (store_succeeded);
+  g_assert_cmpuint (num_variants_stored, ==, 1);
+
+  /* Disable metrics before that event can be submitted */
+  emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
+                                                FALSE);
+  assert_metrics_disabled (fixture);
+  g_assert_true (mock_persistent_cache_is_empty (fixture->mock_persistent_cache));
+
+  /* Re-enable, and wait for the next tick. No events should be submitted. */
+  emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
+                                                TRUE);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_no_events_received);
+  wait_for_upload_to_finish (fixture);
+}
+
+static void
 test_daemon_flushes_to_persistent_cache_on_finalize (Fixture      *fixture,
                                                      gconstpointer unused)
 {
@@ -1269,6 +1386,14 @@ main (gint                argc,
                    test_daemon_does_not_record_aggregates_when_daemon_disabled);
   ADD_DAEMON_TEST ("/daemon/does-not-record-sequences-when-daemon-disabled",
                    test_daemon_does_not_record_sequences_when_daemon_disabled);
+  ADD_DAEMON_TEST ("/daemon/discards/in-memory-singulars-when-daemon-disabled",
+                   test_daemon_discards_in_memory_singulars_when_daemon_disabled);
+  ADD_DAEMON_TEST ("/daemon/discards/in-flight-singulars-when-daemon-disabled",
+                   test_daemon_discards_in_flight_singulars_when_daemon_disabled);
+  ADD_DAEMON_TEST ("/daemon/discards/failed-in-flight-singulars-when-daemon-disabled",
+                   test_daemon_discards_failed_in_flight_singulars_when_daemon_disabled);
+  ADD_DAEMON_TEST ("/daemon/discards/persistent-cache-when-daemon-disabled",
+                   test_daemon_discards_persistent_cache_when_daemon_disabled);
   ADD_DAEMON_TEST ("/daemon/flushes-to-persistent-cache-on-finalize",
                    test_daemon_flushes_to_persistent_cache_on_finalize);
   ADD_DAEMON_TEST ("/daemon/limits-network-upload-size",

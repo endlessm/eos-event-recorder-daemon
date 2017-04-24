@@ -76,7 +76,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         self.daemon.terminate()
 
         self.polkit_popen.wait()
-        self.assertEquals(self.daemon.wait(), 0)
+        self.assertEqual(self.daemon.wait(), 0)
 
         self.test_dir.cleanup()
 
@@ -87,7 +87,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
 
     def test_opt_out_not_writable(self):
         """Make sure the Enabled property is not writable."""
-        with self.assertRaisesRegexp(dbus.DBusException, 'org\.freedesktop\.DBus\.Error\.InvalidArgs'):
+        with self.assertRaisesRegex(dbus.DBusException, 'org\.freedesktop\.DBus\.Error\.InvalidArgs'):
             self.interface.Set(_METRICS_IFACE, 'Enabled', False,
                 dbus_interface=dbus.PROPERTIES_IFACE)
 
@@ -116,7 +116,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         """
         Make sure that accessing SetEnabled fails if not explicitly authorized.
         """
-        with self.assertRaisesRegexp(dbus.DBusException, 'org\.freedesktop\.DBus\.Error\.AuthFailed'):
+        with self.assertRaisesRegex(dbus.DBusException, 'org\.freedesktop\.DBus\.Error\.AuthFailed'):
             self.interface.SetEnabled(True)
 
     def test_upload_doesnt_change_config(self):
@@ -159,9 +159,9 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
                 time.sleep(0.05)
 
         config = configparser.ConfigParser()
-        self.assertEquals(config.read(self.config_file), [self.config_file])
-        self.assertEquals(config.get("global", "enabled"), enabled)
-        self.assertEquals(config.get("global", "uploading_enabled"), uploading_enabled)
+        self.assertEqual(config.read(self.config_file), [self.config_file])
+        self.assertEqual(config.get("global", "enabled"), enabled)
+        self.assertEqual(config.get("global", "uploading_enabled"), uploading_enabled)
 
         # erase the file after reading it to guarantee that the next time it
         # exists, it's up to date. the daemon doesn't read it once started.

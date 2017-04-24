@@ -149,10 +149,14 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
             self.interface.UploadEvents()
 
     def _check_config_file(self, enabled, uploading_enabled):
-        # the config file is written asyncronously by the daemon,
-        # so may not exist at the start of a test
-        while not os.path.exists(self.config_file):
-            time.sleep(0.05)
+        # the config file is written asynchronously by the daemon,
+        # so may not exist immediately after a change is made - wait
+        # for up to 1 second for it to be written
+        for i in range(20):
+            if os.path.exists(self.config_file):
+                break
+            else:
+                time.sleep(0.05)
 
         config = configparser.ConfigParser()
         self.assertEquals(config.read(self.config_file), [self.config_file])

@@ -142,20 +142,10 @@ make_testing_cache (void)
   EmerCacheVersionProvider *cache_version_provider =
     emer_cache_version_provider_new (NULL);
   GError *error = NULL;
-  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
-                         "Failed to unlink old cache file " TEST_DIRECTORY
-                         "cache_individual.metrics. Error: *.");
-  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
-                         "Failed to unlink old cache file " TEST_DIRECTORY
-                         "cache_aggregate.metrics. Error: *.");
-  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
-                         "Failed to unlink old cache file " TEST_DIRECTORY
-                         "cache_sequence.metrics. Error: *.");
   EmerPersistentCache *cache =
     emer_persistent_cache_new_full (TEST_DIRECTORY, cache_size_provider,
                                     boot_id_provider, cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL, &error);
-  g_test_assert_expected_messages ();
   g_assert_no_error (error);
   g_assert_nonnull (cache);
 
@@ -601,20 +591,10 @@ test_persistent_cache_store_when_full (gboolean     *unused,
   EmerCacheVersionProvider *cache_version_provider =
     emer_cache_version_provider_new (NULL);
   GError *error = NULL;
-  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
-                         "Failed to unlink old cache file " TEST_DIRECTORY
-                         "cache_individual.metrics. Error: *.");
-  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
-                         "Failed to unlink old cache file " TEST_DIRECTORY
-                         "cache_aggregate.metrics. Error: *.");
-  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
-                         "Failed to unlink old cache file " TEST_DIRECTORY
-                         "cache_sequence.metrics. Error: *.");
   EmerPersistentCache *cache =
     emer_persistent_cache_new_full (TEST_DIRECTORY, cache_size_provider,
                                     boot_id_provider, cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL, &error);
-  g_test_assert_expected_messages ();
   g_assert_no_error (error);
   g_assert_nonnull (cache);
 
@@ -826,20 +806,10 @@ test_persistent_cache_purges_when_out_of_date (gboolean     *unused,
   EmerCacheVersionProvider *cache_version_provider =
     emer_cache_version_provider_new (NULL);
   GError *error = NULL;
-  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
-                         "Failed to unlink old cache file " TEST_DIRECTORY
-                         "cache_individual.metrics. Error: *.");
-  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
-                         "Failed to unlink old cache file " TEST_DIRECTORY
-                         "cache_aggregate.metrics. Error: *.");
-  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
-                         "Failed to unlink old cache file " TEST_DIRECTORY
-                         "cache_sequence.metrics. Error: *.");
   EmerPersistentCache *cache =
     emer_persistent_cache_new_full (TEST_DIRECTORY, cache_size_provider,
                                     boot_id_provider, cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL, &error);
-  g_test_assert_expected_messages ();
   g_assert_no_error (error);
   g_assert_nonnull (cache);
 

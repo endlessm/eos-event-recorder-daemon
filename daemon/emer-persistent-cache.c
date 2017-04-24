@@ -198,7 +198,7 @@ unlink_old_file (EmerPersistentCache *self,
     emer_persistent_cache_get_instance_private (self);
 
   gchar *path = g_build_filename (priv->cache_directory, filename, NULL);
-  if (g_unlink (path) != 0)
+  if (g_unlink (path) != 0 && errno != ENOENT)
     {
       const gchar *error_string = g_strerror (errno);
       g_warning ("Failed to unlink old cache file %s. Error: %s.",

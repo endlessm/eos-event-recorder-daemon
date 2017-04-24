@@ -41,6 +41,7 @@
 #include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
+#include "emer-types.h"
 #include "mock-permissions-provider.h"
 #include "mock-persistent-cache.h"
 #include "shared/metrics-util.h"
@@ -101,6 +102,7 @@ typedef struct _UploadEventsCallbackData
 {
   GMainLoop *main_loop;
   GSubprocess *mock_server;
+  EmerError error_code;
 } UploadEventsCallbackData;
 
 // Helper methods first:
@@ -431,7 +433,7 @@ assert_no_data_uploaded (EmerDaemon               *daemon,
 {
   GError *error = NULL;
   g_assert_false (emer_daemon_upload_events_finish (daemon, result, &error));
-  g_assert_error (error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED);
+  g_assert_error (error, EMER_ERROR, callback_data->error_code);
   g_error_free (error);
 
   GPollableInputStream *pollable_input_stream =
@@ -442,12 +444,14 @@ assert_no_data_uploaded (EmerDaemon               *daemon,
 }
 
 static void
-assert_uploading_disabled (Fixture *fixture)
+assert_upload_events_fails (Fixture     *fixture,
+                            EmerError    error_code)
 {
   UploadEventsCallbackData callback_data =
     {
       g_main_loop_new (NULL /* GMainContext */, FALSE),
       fixture->mock_server,
+      error_code,
     };
 
   emer_daemon_upload_events (fixture->test_object,
@@ -461,6 +465,18 @@ assert_uploading_disabled (Fixture *fixture)
 
   g_source_remove (timeout_id);
   g_main_loop_unref (callback_data.main_loop);
+}
+
+static void
+assert_uploading_disabled (Fixture     *fixture)
+{
+  assert_upload_events_fails (fixture, EMER_ERROR_UPLOADING_DISABLED);
+}
+
+static void
+assert_metrics_disabled (Fixture     *fixture)
+{
+  assert_upload_events_fails (fixture, EMER_ERROR_METRICS_DISABLED);
 }
 
 static void
@@ -1107,7 +1123,7 @@ test_daemon_does_not_record_singulars_when_daemon_disabled (Fixture      *fixtur
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 FALSE);
   record_singulars (fixture->test_object);
-  assert_uploading_disabled (fixture);
+  assert_metrics_disabled (fixture);
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 TRUE);
@@ -1123,7 +1139,7 @@ test_daemon_does_not_record_aggregates_when_daemon_disabled (Fixture      *fixtu
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 FALSE);
   record_aggregates (fixture->test_object);
-  assert_uploading_disabled (fixture);
+  assert_metrics_disabled (fixture);
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 TRUE);
@@ -1139,7 +1155,7 @@ test_daemon_does_not_record_sequences_when_daemon_disabled (Fixture      *fixtur
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 FALSE);
   record_sequence (fixture->test_object);
-  assert_uploading_disabled (fixture);
+  assert_metrics_disabled (fixture);
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 TRUE);

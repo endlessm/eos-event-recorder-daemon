@@ -39,6 +39,7 @@
 #include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
+#include "emer-types.h"
 #include "shared/metrics-util.h"
 
 /*
@@ -927,7 +928,7 @@ upload_permitted (EmerDaemon *self,
 
   if (!priv->recording_enabled)
     {
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED,
+      g_set_error (error, EMER_ERROR, EMER_ERROR_METRICS_DISABLED,
                    METRICS_DISABLED_MESSAGE);
       return FALSE;
     }
@@ -937,7 +938,7 @@ upload_permitted (EmerDaemon *self,
   if (!uploading_enabled)
     {
       flush_to_persistent_cache (self);
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED,
+      g_set_error (error, EMER_ERROR, EMER_ERROR_UPLOADING_DISABLED,
                    UPLOADING_DISABLED_MESSAGE);
       return FALSE;
     }
@@ -1003,10 +1004,12 @@ log_upload_error (EmerDaemon   *self,
   GError *error = NULL;
   if (!emer_daemon_upload_events_finish (self, result, &error))
     {
-      if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED) ||
-          (g_strcmp0 (error->message, METRICS_DISABLED_MESSAGE) != 0 &&
-           g_strcmp0 (error->message, UPLOADING_DISABLED_MESSAGE) != 0))
-        g_warning ("Failed to upload events: %s.", error->message);
+      if (!g_error_matches (error, EMER_ERROR, EMER_ERROR_METRICS_DISABLED) &&
+          !g_error_matches (error, EMER_ERROR, EMER_ERROR_UPLOADING_DISABLED))
+        {
+          g_warning ("Failed to upload events: %s.", error->message);
+        }
+
       g_error_free (error);
     }
 }

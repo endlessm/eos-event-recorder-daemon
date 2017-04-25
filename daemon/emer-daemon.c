@@ -296,6 +296,9 @@ flush_to_persistent_cache (EmerDaemon *self)
   if (!priv->recording_enabled)
     return;
 
+  if (priv->variant_array->len == 0)
+    return;
+
   gsize num_events_stored;
   GError *error = NULL;
   gboolean store_succeeded =

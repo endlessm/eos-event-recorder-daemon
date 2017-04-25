@@ -125,6 +125,7 @@ typedef struct _NetworkCallbackData
   EmerDaemon *daemon;
   GVariant *request_body;
   guint64 token;
+  gsize num_stored_events;
   gsize num_buffer_events;
   gint attempt_num;
   GTask *upload_task;
@@ -311,6 +312,8 @@ flush_to_persistent_cache (EmerDaemon *self)
       return;
     }
 
+  g_message ("Flushed %" G_GSIZE_FORMAT " events to persistent cache.",
+             num_events_stored);
   remove_events (self, num_events_stored);
 }
 
@@ -517,6 +520,12 @@ handle_http_response (SoupSession         *http_session,
           flush_to_persistent_cache (self);
         }
 
+      g_message ("Uploaded "
+                 "%" G_GSIZE_FORMAT " events from persistent cache, "
+                 "%" G_GSIZE_FORMAT " events from buffer to %s.",
+                 callback_data->num_stored_events,
+                 callback_data->num_buffer_events,
+                 priv->server_uri);
       g_task_return_boolean (callback_data->upload_task, TRUE);
       finish_network_callback (callback_data);
       return;
@@ -690,6 +699,7 @@ report_invalid_data_in_cache (EmerDaemon *self,
 static gboolean
 add_stored_events_to_builders (EmerDaemon        *self,
                                gsize              max_bytes,
+                               gsize             *read_variants,
                                gsize             *read_bytes,
                                guint64           *token,
                                GVariantBuilder   *singulars,
@@ -725,6 +735,7 @@ add_stored_events_to_builders (EmerDaemon        *self,
         }
 
       g_error_free (error);
+      *read_variants = 0;
       *read_bytes = 0;
       *token = 0;
       return TRUE;
@@ -750,6 +761,7 @@ add_stored_events_to_builders (EmerDaemon        *self,
 
   g_free (variants);
 
+  *read_variants = num_variants;
   *read_bytes = curr_read_bytes;
 
   return !emer_persistent_cache_has_more (priv->persistent_cache, *token);
@@ -784,6 +796,7 @@ static GVariant *
 create_request_body (EmerDaemon *self,
                      gsize       max_bytes,
                      guint64    *token,
+                     gsize      *num_stored_events,
                      gsize      *num_buffer_events,
                      GError    **error)
 {
@@ -813,7 +826,8 @@ create_request_body (EmerDaemon *self,
 
   gsize num_bytes_read;
   gboolean add_from_buffer =
-    add_stored_events_to_builders (self, max_bytes, &num_bytes_read, token,
+    add_stored_events_to_builders (self, max_bytes, num_stored_events,
+                                   &num_bytes_read, token,
                                    &singulars, &aggregates, &sequences);
 
   if (add_from_buffer)
@@ -883,10 +897,11 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
 
   gsize *max_upload_size = g_task_get_task_data (upload_task);
   guint64 token;
+  gsize num_stored_events;
   gsize num_buffer_events;
   GVariant *request_body =
-    create_request_body (self, *max_upload_size, &token, &num_buffer_events,
-                         &error);
+    create_request_body (self, *max_upload_size, &token, &num_stored_events,
+                         &num_buffer_events, &error);
   if (request_body == NULL)
     {
       g_task_return_error (upload_task, error);
@@ -900,6 +915,7 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
   callback_data->daemon = self;
   callback_data->request_body = request_body;
   callback_data->token = token;
+  callback_data->num_stored_events = num_stored_events;
   callback_data->num_buffer_events = num_buffer_events;
   callback_data->attempt_num = 0;
   callback_data->upload_task = upload_task;

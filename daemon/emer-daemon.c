@@ -223,6 +223,7 @@ finish_network_callback (NetworkCallbackData *callback_data)
   g_clear_object (&priv->current_upload_cancellable);
 
   g_signal_emit (self, emer_daemon_signals[SIGNAL_UPLOAD_FINISHED], 0u);
+  g_object_unref (self);
 }
 
 static gboolean
@@ -915,7 +916,7 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
     g_task_get_cancellable (upload_task));
 
   NetworkCallbackData *callback_data = g_new (NetworkCallbackData, 1);
-  callback_data->daemon = self;
+  callback_data->daemon = g_object_ref (self);
   callback_data->request_body = request_body;
   callback_data->token = token;
   callback_data->num_stored_events = num_stored_events;

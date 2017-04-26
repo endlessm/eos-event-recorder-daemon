@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2014, 2015 Endless Mobile, Inc. */
+/* Copyright 2017 Endless Mobile, Inc. */
 
 /*
  * This file is part of eos-event-recorder-daemon.
@@ -20,20 +20,22 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MOCK_PERSISTENT_CACHE_H
-#define MOCK_PERSISTENT_CACHE_H
+#ifndef EMER_TYPES_H
+#define EMER_TYPES_H
 
-#include <glib-object.h>
-
-#include "emer-persistent-cache.h"
+#include <glib.h>
 
 G_BEGIN_DECLS
 
-#define BOOT_TIME_OFFSET G_GINT64_CONSTANT (73)
-#define MAX_NUM_VARIANTS 10
+typedef enum {
+    EMER_ERROR_METRICS_DISABLED,
+    EMER_ERROR_UPLOADING_DISABLED,
+    EMER_ERROR_LAST = EMER_ERROR_UPLOADING_DISABLED, /*< skip >*/
+} EmerError;
 
-gboolean             mock_persistent_cache_is_empty             (EmerPersistentCache      *self);
+#define EMER_ERROR (emer_error_quark ())
+GQuark emer_error_quark (void);
 
 G_END_DECLS
 
-#endif /* MOCK_PERSISTENT_CACHE_H */
+#endif // EMER_TYPES_H

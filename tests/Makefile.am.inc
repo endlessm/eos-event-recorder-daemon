@@ -83,6 +83,7 @@ tests_daemon_test_daemon_dbusdaemon_SOURCES = \
 	daemon/emer-permissions-provider.h \
 	tests/daemon/mock-persistent-cache.c tests/daemon/mock-persistent-cache.h \
 	shared/metrics-util.c shared/metrics-util.h \
+	daemon/emer-types.c daemon/emer-types.h \
 	$(NULL)
 tests_daemon_test_daemon_dbusdaemon_CPPFLAGS = $(DAEMON_TEST_FLAGS)
 tests_daemon_test_daemon_dbusdaemon_LDADD = $(DAEMON_TEST_LIBS)

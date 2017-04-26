@@ -39,6 +39,7 @@
 #include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
+#include "emer-types.h"
 #include "shared/metrics-util.h"
 
 /*
@@ -124,6 +125,7 @@ typedef struct _NetworkCallbackData
   EmerDaemon *daemon;
   GVariant *request_body;
   guint64 token;
+  gsize num_stored_events;
   gsize num_buffer_events;
   gint attempt_num;
   GTask *upload_task;
@@ -140,7 +142,11 @@ typedef struct _EmerDaemonPrivate
 {
   guint network_send_interval;
   GQueue *upload_queue;
-  gboolean uploading;
+
+  /* Non-NULL iff an upload is in flight. An owned reference to the
+   * cancellable held by NetworkCallbackData.upload_task.
+   */
+  GCancellable *current_upload_cancellable;
 
   SoupSession *http_session;
 
@@ -214,8 +220,10 @@ finish_network_callback (NetworkCallbackData *callback_data)
   g_object_unref (callback_data->upload_task);
   g_free (callback_data);
 
-  priv->uploading = FALSE;
+  g_clear_object (&priv->current_upload_cancellable);
+
   g_signal_emit (self, emer_daemon_signals[SIGNAL_UPLOAD_FINISHED], 0u);
+  g_object_unref (self);
 }
 
 static gboolean
@@ -289,6 +297,9 @@ flush_to_persistent_cache (EmerDaemon *self)
   if (!priv->recording_enabled)
     return;
 
+  if (priv->variant_array->len == 0)
+    return;
+
   gsize num_events_stored;
   GError *error = NULL;
   gboolean store_succeeded =
@@ -305,6 +316,8 @@ flush_to_persistent_cache (EmerDaemon *self)
       return;
     }
 
+  g_message ("Flushed %" G_GSIZE_FORMAT " events to persistent cache.",
+             num_events_stored);
   remove_events (self, num_events_stored);
 }
 
@@ -492,10 +505,32 @@ handle_http_response (SoupSession         *http_session,
   g_object_get (http_message, "status-code", &status_code, NULL);
   if (SOUP_STATUS_IS_SUCCESSFUL (status_code))
     {
+      GCancellable *cancellable =
+        g_task_get_cancellable (callback_data->upload_task);
+
+      if (g_cancellable_is_cancelled (cancellable))
+        {
+          /* Daemon was disabled, but we've already sent the request
+           * successfully. Disabling the daemon discards all cached and
+           * buffered events, so don't try to do that here too. Just allow the
+           * task to return success.
+           */
+          g_cancellable_reset (cancellable);
+        }
+      else
+        {
+          remove_from_persistent_cache (self, callback_data->token);
+          remove_events (self, callback_data->num_buffer_events);
+          flush_to_persistent_cache (self);
+        }
+
+      g_message ("Uploaded "
+                 "%" G_GSIZE_FORMAT " events from persistent cache, "
+                 "%" G_GSIZE_FORMAT " events from buffer to %s.",
+                 callback_data->num_stored_events,
+                 callback_data->num_buffer_events,
+                 priv->server_uri);
       g_task_return_boolean (callback_data->upload_task, TRUE);
-      remove_from_persistent_cache (self, callback_data->token);
-      remove_events (self, callback_data->num_buffer_events);
-      flush_to_persistent_cache (self);
       finish_network_callback (callback_data);
       return;
     }
@@ -504,6 +539,12 @@ handle_http_response (SoupSession         *http_session,
   g_object_get (http_message, "reason-phrase", &reason_phrase, NULL);
   g_warning ("Attempt to upload metrics failed: %s.", reason_phrase);
   g_free (reason_phrase);
+
+  if (g_task_return_error_if_cancelled (callback_data->upload_task))
+    {
+      finish_network_callback (callback_data);
+      return;
+    }
 
   if (++callback_data->attempt_num >= NETWORK_ATTEMPT_LIMIT)
     {
@@ -662,6 +703,7 @@ report_invalid_data_in_cache (EmerDaemon *self,
 static gboolean
 add_stored_events_to_builders (EmerDaemon        *self,
                                gsize              max_bytes,
+                               gsize             *read_variants,
                                gsize             *read_bytes,
                                guint64           *token,
                                GVariantBuilder   *singulars,
@@ -697,6 +739,7 @@ add_stored_events_to_builders (EmerDaemon        *self,
         }
 
       g_error_free (error);
+      *read_variants = 0;
       *read_bytes = 0;
       *token = 0;
       return TRUE;
@@ -722,6 +765,7 @@ add_stored_events_to_builders (EmerDaemon        *self,
 
   g_free (variants);
 
+  *read_variants = num_variants;
   *read_bytes = curr_read_bytes;
 
   return !emer_persistent_cache_has_more (priv->persistent_cache, *token);
@@ -756,6 +800,7 @@ static GVariant *
 create_request_body (EmerDaemon *self,
                      gsize       max_bytes,
                      guint64    *token,
+                     gsize      *num_stored_events,
                      gsize      *num_buffer_events,
                      GError    **error)
 {
@@ -785,7 +830,8 @@ create_request_body (EmerDaemon *self,
 
   gsize num_bytes_read;
   gboolean add_from_buffer =
-    add_stored_events_to_builders (self, max_bytes, &num_bytes_read, token,
+    add_stored_events_to_builders (self, max_bytes, num_stored_events,
+                                   &num_bytes_read, token,
                                    &singulars, &aggregates, &sequences);
 
   if (add_from_buffer)
@@ -840,7 +886,7 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  if (priv->uploading)
+  if (priv->current_upload_cancellable != NULL)
     return;
 
   GTask *upload_task = g_queue_pop_head (priv->upload_queue);
@@ -855,22 +901,25 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
 
   gsize *max_upload_size = g_task_get_task_data (upload_task);
   guint64 token;
+  gsize num_stored_events;
   gsize num_buffer_events;
   GVariant *request_body =
-    create_request_body (self, *max_upload_size, &token, &num_buffer_events,
-                         &error);
+    create_request_body (self, *max_upload_size, &token, &num_stored_events,
+                         &num_buffer_events, &error);
   if (request_body == NULL)
     {
       g_task_return_error (upload_task, error);
       goto handle_upload_failed;
     }
 
-  priv->uploading = TRUE;
+  priv->current_upload_cancellable = g_object_ref (
+    g_task_get_cancellable (upload_task));
 
   NetworkCallbackData *callback_data = g_new (NetworkCallbackData, 1);
-  callback_data->daemon = self;
+  callback_data->daemon = g_object_ref (self);
   callback_data->request_body = request_body;
   callback_data->token = token;
+  callback_data->num_stored_events = num_stored_events;
   callback_data->num_buffer_events = num_buffer_events;
   callback_data->attempt_num = 0;
   callback_data->upload_task = upload_task;
@@ -927,7 +976,7 @@ upload_permitted (EmerDaemon *self,
 
   if (!priv->recording_enabled)
     {
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED,
+      g_set_error (error, EMER_ERROR, EMER_ERROR_METRICS_DISABLED,
                    METRICS_DISABLED_MESSAGE);
       return FALSE;
     }
@@ -937,7 +986,7 @@ upload_permitted (EmerDaemon *self,
   if (!uploading_enabled)
     {
       flush_to_persistent_cache (self);
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED,
+      g_set_error (error, EMER_ERROR, EMER_ERROR_UPLOADING_DISABLED,
                    UPLOADING_DISABLED_MESSAGE);
       return FALSE;
     }
@@ -987,7 +1036,7 @@ upload_events (EmerDaemon         *self,
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   GTask *upload_task =
-    g_task_new (self, NULL /* GCancellable */, callback, user_data);
+    g_task_new (self, g_cancellable_new (), callback, user_data);
   gsize *max_size = g_new (gsize, 1);
   *max_size = max_upload_size;
   g_task_set_task_data (upload_task, max_size, g_free);
@@ -1003,10 +1052,13 @@ log_upload_error (EmerDaemon   *self,
   GError *error = NULL;
   if (!emer_daemon_upload_events_finish (self, result, &error))
     {
-      if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_PERMISSION_DENIED) ||
-          (g_strcmp0 (error->message, METRICS_DISABLED_MESSAGE) != 0 &&
-           g_strcmp0 (error->message, UPLOADING_DISABLED_MESSAGE) != 0))
-        g_warning ("Failed to upload events: %s.", error->message);
+      if (!g_error_matches (error, EMER_ERROR, EMER_ERROR_METRICS_DISABLED) &&
+          !g_error_matches (error, EMER_ERROR, EMER_ERROR_UPLOADING_DISABLED) &&
+          !g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+        {
+          g_warning ("Failed to upload events: %s.", error->message);
+        }
+
       g_error_free (error);
     }
 }
@@ -1048,6 +1100,23 @@ on_permissions_changed (EmerPermissionsProvider *permissions_provider,
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   priv->recording_enabled =
     emer_permissions_provider_get_daemon_enabled (permissions_provider);
+
+  if (!priv->recording_enabled)
+    {
+      /* Discard any outstanding events */
+      GError *error = NULL;
+
+      remove_events (self, priv->variant_array->len);
+
+      if (!emer_persistent_cache_remove_all (priv->persistent_cache, &error))
+        {
+          g_warning ("failed to clear persistent cache: %s", error->message);
+          g_clear_error (&error);
+        }
+
+      /* If NULL (because no upload is in progress), this is a no-op. */
+      g_cancellable_cancel (priv->current_upload_cancellable);
+    }
 }
 
 /*
@@ -1245,6 +1314,9 @@ emer_daemon_finalize (GObject *object)
 {
   EmerDaemon *self = EMER_DAEMON (object);
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  /* While an upload is ongoing, the GTask holds a ref to the EmerDaemon. */
+  g_warn_if_fail (priv->current_upload_cancellable == NULL);
 
   g_source_remove (priv->upload_events_timeout_source_id);
 

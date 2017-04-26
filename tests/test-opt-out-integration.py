@@ -76,7 +76,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         self.daemon.terminate()
 
         self.polkit_popen.wait()
-        self.assertEquals(self.daemon.wait(), 0)
+        self.assertEqual(self.daemon.wait(), 0)
 
         self.test_dir.cleanup()
 
@@ -87,7 +87,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
 
     def test_opt_out_not_writable(self):
         """Make sure the Enabled property is not writable."""
-        with self.assertRaisesRegexp(dbus.DBusException, 'org\.freedesktop\.DBus\.Error\.InvalidArgs'):
+        with self.assertRaisesRegex(dbus.DBusException, 'org\.freedesktop\.DBus\.Error\.InvalidArgs'):
             self.interface.Set(_METRICS_IFACE, 'Enabled', False,
                 dbus_interface=dbus.PROPERTIES_IFACE)
 
@@ -116,7 +116,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         """
         Make sure that accessing SetEnabled fails if not explicitly authorized.
         """
-        with self.assertRaisesRegexp(dbus.DBusException, 'org\.freedesktop\.DBus\.Error\.AuthFailed'):
+        with self.assertRaisesRegex(dbus.DBusException, 'org\.freedesktop\.DBus\.Error\.AuthFailed'):
             self.interface.SetEnabled(True)
 
     def test_upload_doesnt_change_config(self):
@@ -132,12 +132,11 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         # Check defaults look good and erase the file before our next change
         self._check_config_file(enabled='true', uploading_enabled='false')
 
-        # TODO: it should probably return a more helpful error name than
-        # org.gtk.GDBus.UnmappedGError.Quark._g_2dio_2derror_2dquark.Code14
-        # too...
         with self.assertRaisesRegex(dbus.exceptions.DBusException,
                                     r'uploading is disabled') as context:
             self.interface.UploadEvents()
+        self.assertEqual(context.exception.get_dbus_name(),
+                         "com.endlessm.Metrics.Error.UploadingDisabled")
 
         self._check_config_file(enabled='true', uploading_enabled='false')
 
@@ -147,6 +146,8 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         with self.assertRaisesRegex(dbus.exceptions.DBusException,
                                     r'metrics system is disabled') as context:
             self.interface.UploadEvents()
+        self.assertEqual(context.exception.get_dbus_name(),
+                         "com.endlessm.Metrics.Error.MetricsDisabled")
 
     def _check_config_file(self, enabled, uploading_enabled):
         # the config file is written asynchronously by the daemon,
@@ -159,9 +160,9 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
                 time.sleep(0.05)
 
         config = configparser.ConfigParser()
-        self.assertEquals(config.read(self.config_file), [self.config_file])
-        self.assertEquals(config.get("global", "enabled"), enabled)
-        self.assertEquals(config.get("global", "uploading_enabled"), uploading_enabled)
+        self.assertEqual(config.read(self.config_file), [self.config_file])
+        self.assertEqual(config.get("global", "enabled"), enabled)
+        self.assertEqual(config.get("global", "uploading_enabled"), uploading_enabled)
 
         # erase the file after reading it to guarantee that the next time it
         # exists, it's up to date. the daemon doesn't read it once started.

@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2014, 2015 Endless Mobile, Inc. */
+/* Copyright 2017 Endless Mobile, Inc. */
 
 /*
  * This file is part of eos-event-recorder-daemon.
@@ -20,20 +20,26 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MOCK_PERSISTENT_CACHE_H
-#define MOCK_PERSISTENT_CACHE_H
+#include "emer-types.h"
 
-#include <glib-object.h>
+#include <gio/gio.h>
 
-#include "emer-persistent-cache.h"
+#define EMER_ERROR_DOMAIN "com.endlessm.Metrics.Error"
 
-G_BEGIN_DECLS
+static const GDBusErrorEntry emer_error_entries[] = {
+    { EMER_ERROR_METRICS_DISABLED, EMER_ERROR_DOMAIN ".MetricsDisabled" },
+    { EMER_ERROR_UPLOADING_DISABLED, EMER_ERROR_DOMAIN ".UploadingDisabled" },
+};
 
-#define BOOT_TIME_OFFSET G_GINT64_CONSTANT (73)
-#define MAX_NUM_VARIANTS 10
+G_STATIC_ASSERT (G_N_ELEMENTS (emer_error_entries) == EMER_ERROR_LAST + 1);
 
-gboolean             mock_persistent_cache_is_empty             (EmerPersistentCache      *self);
-
-G_END_DECLS
-
-#endif /* MOCK_PERSISTENT_CACHE_H */
+GQuark
+emer_error_quark (void)
+{
+  static volatile gsize quark_volatile = 0;
+  g_dbus_error_register_error_domain ("emer-error-quark",
+                                      &quark_volatile,
+                                      emer_error_entries,
+                                      G_N_ELEMENTS (emer_error_entries));
+  return (GQuark) quark_volatile;
+}

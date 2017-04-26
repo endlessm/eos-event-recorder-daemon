@@ -156,7 +156,11 @@ read_cache_version (EmerCacheVersionProvider *self)
   if (!g_key_file_load_from_file (priv->key_file, priv->path, G_KEY_FILE_NONE,
                                   &error))
     {
-      g_warning ("Failed to read cache version. Error: %s.", error->message);
+      if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
+        {
+          g_warning ("Failed to read cache version. Error: %s.", error->message);
+        }
+
       g_error_free (error);
       return FALSE;
     }

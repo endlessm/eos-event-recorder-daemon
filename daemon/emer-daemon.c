@@ -1035,8 +1035,8 @@ upload_events (EmerDaemon         *self,
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  GTask *upload_task =
-    g_task_new (self, g_cancellable_new (), callback, user_data);
+  g_autoptr(GCancellable) cancellable = g_cancellable_new ();
+  GTask *upload_task = g_task_new (self, cancellable, callback, user_data);
   gsize *max_size = g_new (gsize, 1);
   *max_size = max_upload_size;
   g_task_set_task_data (upload_task, max_size, g_free);

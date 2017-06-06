@@ -1230,11 +1230,6 @@ emer_daemon_constructed (GObject *object)
   EmerDaemon *self = EMER_DAEMON (object);
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  gchar *environment =
-    emer_permissions_provider_get_environment (priv->permissions_provider);
-  schedule_upload (self, environment);
-  g_free (environment);
-
   if (priv->persistent_cache == NULL)
     {
       GError *error = NULL;
@@ -1254,6 +1249,11 @@ emer_daemon_constructed (GObject *object)
         emer_network_send_provider_new (network_send_path);
       g_free (network_send_path);
     }
+
+  gchar *environment =
+    emer_permissions_provider_get_environment (priv->permissions_provider);
+  schedule_upload (self, environment);
+  g_free (environment);
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->constructed (object);
 }

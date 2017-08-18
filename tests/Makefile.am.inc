@@ -38,7 +38,7 @@ DAEMON_TEST_FLAGS = \
 	-DPERSISTENT_CACHE_DIR="\"$(persistentcachedir)\"" \
 	-DTEST_DIR="\"$(srcdir)/tests/\"" \
 	$(NULL)
-DAEMON_TEST_LIBS = @EOS_EVENT_RECORDER_DAEMON_LIBS@
+DAEMON_TEST_LIBS = @EOS_EVENT_RECORDER_DAEMON_LIBS@ -lm
 
 tests_daemon_test_boot_id_provider_SOURCES = \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \

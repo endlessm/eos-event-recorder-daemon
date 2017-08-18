@@ -22,6 +22,7 @@
 
 #include "emer-daemon.h"
 
+#include <math.h>
 #include <time.h>
 #include <uuid/uuid.h>
 
@@ -128,6 +129,7 @@ typedef struct _NetworkCallbackData
   gsize num_stored_events;
   gsize num_buffer_events;
   gint attempt_num;
+  guint backoff_timeout_source_id;
 } NetworkCallbackData;
 
 typedef struct _CacheMetricEventData
@@ -212,6 +214,8 @@ static void handle_http_response (SoupSession *http_session,
 static void
 network_callback_data_free (NetworkCallbackData *callback_data)
 {
+  if (callback_data->backoff_timeout_source_id != 0)
+    g_source_remove (callback_data->backoff_timeout_source_id);
   g_clear_pointer (&callback_data->request_body, g_variant_unref);
   g_free (callback_data);
 }
@@ -341,9 +345,9 @@ remove_from_persistent_cache (EmerDaemon *self,
     }
 }
 
-static void
-backoff (GRand *rand,
-         gint   attempt_num)
+static guint
+get_random_backoff_interval (GRand *rand,
+                             gint   attempt_num)
 {
   gulong base_backoff_sec = INITIAL_BACKOFF_SEC;
   for (gint i = 0; i < attempt_num - 1; i++)
@@ -351,9 +355,8 @@ backoff (GRand *rand,
 
   gdouble random_factor = g_rand_double_range (rand, 1, 2);
   gdouble randomized_backoff_sec = random_factor * (gdouble) base_backoff_sec;
-  gulong randomized_backoff_usec =
-    (gulong) (G_USEC_PER_SEC * randomized_backoff_sec);
-  g_usleep (randomized_backoff_usec);
+
+  return (guint) round (randomized_backoff_sec);
 }
 
 /*
@@ -495,6 +498,32 @@ queue_http_request (GTask *upload_task)
                               upload_task);
 }
 
+static gboolean
+handle_backoff_timer (GTask *upload_task)
+{
+  EmerDaemon *self = g_task_get_source_object (upload_task);
+
+  NetworkCallbackData *callback_data = g_task_get_task_data (upload_task);
+  callback_data->backoff_timeout_source_id = 0;
+
+  GError *error = NULL;
+  GVariant *updated_request_body =
+    get_updated_request_body (self, callback_data->request_body, &error);
+
+  if (updated_request_body == NULL)
+    {
+      g_task_return_error (upload_task, error);
+      finish_network_callback (upload_task);
+      return G_SOURCE_REMOVE;
+    }
+
+  g_variant_unref (callback_data->request_body);
+  callback_data->request_body = updated_request_body;
+  queue_http_request (upload_task);
+
+  return G_SOURCE_REMOVE;
+}
+
 // Handles HTTP or HTTPS responses.
 static void
 handle_http_response (SoupSession *http_session,
@@ -564,21 +593,12 @@ handle_http_response (SoupSession *http_session,
       SOUP_STATUS_IS_CLIENT_ERROR (status_code) ||
       SOUP_STATUS_IS_SERVER_ERROR (status_code))
     {
-      backoff (priv->rand, callback_data->attempt_num);
-
-      GError *error = NULL;
-      GVariant *updated_request_body =
-        get_updated_request_body (self, callback_data->request_body, &error);
-      if (updated_request_body == NULL)
-        {
-          g_task_return_error (upload_task, error);
-          finish_network_callback (upload_task);
-          return;
-        }
-
-      g_variant_unref (callback_data->request_body);
-      callback_data->request_body = updated_request_body;
-      queue_http_request (upload_task);
+      guint random_backoff_interval =
+        get_random_backoff_interval (priv->rand, callback_data->attempt_num);
+      callback_data->backoff_timeout_source_id =
+        g_timeout_add_seconds (random_backoff_interval,
+                               (GSourceFunc) handle_backoff_timer,
+                               upload_task);
 
       /* Old message is unreffed automatically, because it is not requeued. */
       return;

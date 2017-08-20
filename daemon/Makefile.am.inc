@@ -58,4 +58,4 @@ eos_metrics_event_recorder_CPPFLAGS = \
 	-DPERSISTENT_CACHE_DIR="\"$(persistentcachedir)\"" \
 	$(NULL)
 
-eos_metrics_event_recorder_LDADD = $(EOS_EVENT_RECORDER_DAEMON_LIBS)
+eos_metrics_event_recorder_LDADD = $(EOS_EVENT_RECORDER_DAEMON_LIBS) -lm

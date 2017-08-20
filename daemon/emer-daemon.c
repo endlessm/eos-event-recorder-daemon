@@ -22,6 +22,7 @@
 
 #include "emer-daemon.h"
 
+#include <math.h>
 #include <time.h>
 #include <uuid/uuid.h>
 
@@ -122,13 +123,13 @@
 
 typedef struct _NetworkCallbackData
 {
-  EmerDaemon *daemon;
   GVariant *request_body;
   guint64 token;
+  gsize max_upload_size;
   gsize num_stored_events;
   gsize num_buffer_events;
   gint attempt_num;
-  GTask *upload_task;
+  guint backoff_timeout_source_id;
 } NetworkCallbackData;
 
 typedef struct _CacheMetricEventData
@@ -206,24 +207,29 @@ static guint emer_daemon_signals[NSIGNALS] = { 0u, };
 
 static gboolean handle_upload_timer (EmerDaemon *self);
 
-static void handle_http_response (SoupSession         *http_session,
-                                  SoupMessage         *http_message,
-                                  NetworkCallbackData *callback_data);
+static void handle_http_response (SoupSession *http_session,
+                                  SoupMessage *http_message,
+                                  GTask       *upload_task);
 
 static void
-finish_network_callback (NetworkCallbackData *callback_data)
+network_callback_data_free (NetworkCallbackData *callback_data)
 {
-  EmerDaemon *self = callback_data->daemon;
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  g_variant_unref (callback_data->request_body);
-  g_object_unref (callback_data->upload_task);
+  if (callback_data->backoff_timeout_source_id != 0)
+    g_source_remove (callback_data->backoff_timeout_source_id);
+  g_clear_pointer (&callback_data->request_body, g_variant_unref);
   g_free (callback_data);
+}
+
+static void
+finish_network_callback (GTask *upload_task)
+{
+  EmerDaemon *self = g_task_get_source_object (upload_task);
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   g_clear_object (&priv->current_upload_cancellable);
 
   g_signal_emit (self, emer_daemon_signals[SIGNAL_UPLOAD_FINISHED], 0u);
-  g_object_unref (self);
+  g_object_unref (upload_task);
 }
 
 static gboolean
@@ -339,9 +345,9 @@ remove_from_persistent_cache (EmerDaemon *self,
     }
 }
 
-static void
-backoff (GRand *rand,
-         gint   attempt_num)
+static guint
+get_random_backoff_interval (GRand *rand,
+                             gint   attempt_num)
 {
   gulong base_backoff_sec = INITIAL_BACKOFF_SEC;
   for (gint i = 0; i < attempt_num - 1; i++)
@@ -349,9 +355,8 @@ backoff (GRand *rand,
 
   gdouble random_factor = g_rand_double_range (rand, 1, 2);
   gdouble randomized_backoff_sec = random_factor * (gdouble) base_backoff_sec;
-  gulong randomized_backoff_usec =
-    (gulong) (G_USEC_PER_SEC * randomized_backoff_sec);
-  g_usleep (randomized_backoff_usec);
+
+  return (guint) round (randomized_backoff_sec);
 }
 
 /*
@@ -442,19 +447,20 @@ get_updated_request_body (EmerDaemon *self,
 }
 
 static void
-queue_http_request (NetworkCallbackData *callback_data)
+queue_http_request (GTask *upload_task)
 {
-  EmerDaemon *self = callback_data->daemon;
+  EmerDaemon *self = g_task_get_source_object (upload_task);
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+  NetworkCallbackData *callback_data = g_task_get_task_data (upload_task);
 
   gconstpointer serialized_request_body =
     g_variant_get_data (callback_data->request_body);
   if (serialized_request_body == NULL)
     {
-      g_task_return_new_error (callback_data->upload_task, G_IO_ERROR,
+      g_task_return_new_error (upload_task, G_IO_ERROR,
                                G_IO_ERROR_INVALID_DATA,
                                "Could not serialize network request body");
-      finish_network_callback (callback_data);
+      finish_network_callback (upload_task);
       return;
     }
 
@@ -470,8 +476,8 @@ queue_http_request (NetworkCallbackData *callback_data)
                         &error);
   if (compressed_request_body == NULL)
     {
-      g_task_return_error (callback_data->upload_task, error);
-      finish_network_callback (callback_data);
+      g_task_return_error (upload_task, error);
+      finish_network_callback (upload_task);
       return;
     }
 
@@ -489,24 +495,51 @@ queue_http_request (NetworkCallbackData *callback_data)
                             compressed_request_body_length);
   soup_session_queue_message (priv->http_session, http_message,
                               (SoupSessionCallback) handle_http_response,
-                              callback_data);
+                              upload_task);
+}
+
+static gboolean
+handle_backoff_timer (GTask *upload_task)
+{
+  EmerDaemon *self = g_task_get_source_object (upload_task);
+
+  NetworkCallbackData *callback_data = g_task_get_task_data (upload_task);
+  callback_data->backoff_timeout_source_id = 0;
+
+  GError *error = NULL;
+  GVariant *updated_request_body =
+    get_updated_request_body (self, callback_data->request_body, &error);
+
+  if (updated_request_body == NULL)
+    {
+      g_task_return_error (upload_task, error);
+      finish_network_callback (upload_task);
+      return G_SOURCE_REMOVE;
+    }
+
+  g_variant_unref (callback_data->request_body);
+  callback_data->request_body = updated_request_body;
+  queue_http_request (upload_task);
+
+  return G_SOURCE_REMOVE;
 }
 
 // Handles HTTP or HTTPS responses.
 static void
-handle_http_response (SoupSession         *http_session,
-                      SoupMessage         *http_message,
-                      NetworkCallbackData *callback_data)
+handle_http_response (SoupSession *http_session,
+                      SoupMessage *http_message,
+                      GTask       *upload_task)
 {
-  EmerDaemon *self = callback_data->daemon;
+  EmerDaemon *self = g_task_get_source_object (upload_task);
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+  NetworkCallbackData *callback_data = g_task_get_task_data (upload_task);
 
   guint status_code;
   g_object_get (http_message, "status-code", &status_code, NULL);
   if (SOUP_STATUS_IS_SUCCESSFUL (status_code))
     {
       GCancellable *cancellable =
-        g_task_get_cancellable (callback_data->upload_task);
+        g_task_get_cancellable (upload_task);
 
       if (g_cancellable_is_cancelled (cancellable))
         {
@@ -530,8 +563,8 @@ handle_http_response (SoupSession         *http_session,
                  callback_data->num_stored_events,
                  callback_data->num_buffer_events,
                  priv->server_uri);
-      g_task_return_boolean (callback_data->upload_task, TRUE);
-      finish_network_callback (callback_data);
+      g_task_return_boolean (upload_task, TRUE);
+      finish_network_callback (upload_task);
       return;
     }
 
@@ -540,19 +573,19 @@ handle_http_response (SoupSession         *http_session,
   g_warning ("Attempt to upload metrics failed: %s.", reason_phrase);
   g_free (reason_phrase);
 
-  if (g_task_return_error_if_cancelled (callback_data->upload_task))
+  if (g_task_return_error_if_cancelled (upload_task))
     {
-      finish_network_callback (callback_data);
+      finish_network_callback (upload_task);
       return;
     }
 
   if (++callback_data->attempt_num >= NETWORK_ATTEMPT_LIMIT)
     {
-      g_task_return_new_error (callback_data->upload_task, G_IO_ERROR,
+      g_task_return_new_error (upload_task, G_IO_ERROR,
                                G_IO_ERROR_FAILED,
                                "Maximum number of network attempts (%d) "
                                "reached", NETWORK_ATTEMPT_LIMIT);
-      finish_network_callback (callback_data);
+      finish_network_callback (upload_task);
       return;
     }
 
@@ -560,30 +593,21 @@ handle_http_response (SoupSession         *http_session,
       SOUP_STATUS_IS_CLIENT_ERROR (status_code) ||
       SOUP_STATUS_IS_SERVER_ERROR (status_code))
     {
-      backoff (priv->rand, callback_data->attempt_num);
-
-      GError *error = NULL;
-      GVariant *updated_request_body =
-        get_updated_request_body (self, callback_data->request_body, &error);
-      if (updated_request_body == NULL)
-        {
-          g_task_return_error (callback_data->upload_task, error);
-          finish_network_callback (callback_data);
-          return;
-        }
-
-      g_variant_unref (callback_data->request_body);
-      callback_data->request_body = updated_request_body;
-      queue_http_request (callback_data);
+      guint random_backoff_interval =
+        get_random_backoff_interval (priv->rand, callback_data->attempt_num);
+      callback_data->backoff_timeout_source_id =
+        g_timeout_add_seconds (random_backoff_interval,
+                               (GSourceFunc) handle_backoff_timer,
+                               upload_task);
 
       /* Old message is unreffed automatically, because it is not requeued. */
       return;
     }
 
-  g_task_return_new_error (callback_data->upload_task, G_IO_ERROR,
+  g_task_return_new_error (upload_task, G_IO_ERROR,
                            G_IO_ERROR_FAILED, "Received HTTP status code: %u",
                            status_code);
-  finish_network_callback (callback_data);
+  finish_network_callback (upload_task);
 }
 
 static void
@@ -899,13 +923,13 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
       goto handle_upload_failed;
     }
 
-  gsize *max_upload_size = g_task_get_task_data (upload_task);
+  NetworkCallbackData *callback_data = g_task_get_task_data (upload_task);
   guint64 token;
   gsize num_stored_events;
   gsize num_buffer_events;
   GVariant *request_body =
-    create_request_body (self, *max_upload_size, &token, &num_stored_events,
-                         &num_buffer_events, &error);
+    create_request_body (self, callback_data->max_upload_size, &token,
+                         &num_stored_events, &num_buffer_events, &error);
   if (request_body == NULL)
     {
       g_task_return_error (upload_task, error);
@@ -915,20 +939,16 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
   priv->current_upload_cancellable = g_object_ref (
     g_task_get_cancellable (upload_task));
 
-  NetworkCallbackData *callback_data = g_new (NetworkCallbackData, 1);
-  callback_data->daemon = g_object_ref (self);
   callback_data->request_body = request_body;
   callback_data->token = token;
   callback_data->num_stored_events = num_stored_events;
   callback_data->num_buffer_events = num_buffer_events;
   callback_data->attempt_num = 0;
-  callback_data->upload_task = upload_task;
 
-  queue_http_request (callback_data);
+  queue_http_request (upload_task);
   return;
 
 handle_upload_failed:
-  g_object_unref (upload_task);
   g_signal_emit (self, emer_daemon_signals[SIGNAL_UPLOAD_FINISHED], 0u);
 }
 
@@ -1037,9 +1057,11 @@ upload_events (EmerDaemon         *self,
 
   g_autoptr(GCancellable) cancellable = g_cancellable_new ();
   GTask *upload_task = g_task_new (self, cancellable, callback, user_data);
-  gsize *max_size = g_new (gsize, 1);
-  *max_size = max_upload_size;
-  g_task_set_task_data (upload_task, max_size, g_free);
+  // The rest of the fields will be populated when the request is dequeued
+  NetworkCallbackData *callback_data = g_new0 (NetworkCallbackData, 1);
+  callback_data->max_upload_size = max_upload_size;
+  g_task_set_task_data (upload_task, callback_data,
+                        (GDestroyNotify) network_callback_data_free);
   g_queue_push_tail (priv->upload_queue, upload_task);
   dequeue_and_do_upload (self, environment);
 }

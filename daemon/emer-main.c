@@ -96,7 +96,7 @@ on_set_enabled (EmerEventRecorderServer *server,
   EmerPermissionsProvider *permissions =
     emer_daemon_get_permissions_provider (daemon);
 
-  emer_event_recorder_server_set_enabled (server, enabled);
+  emer_permissions_provider_set_daemon_enabled (permissions, enabled);
   emer_permissions_provider_set_uploading_enabled (permissions, enabled);
   emer_event_recorder_server_complete_set_enabled (server, invocation);
   return TRUE;
@@ -228,7 +228,7 @@ on_bus_acquired (GDBusConnection *system_bus,
   EmerPermissionsProvider *permissions =
     emer_daemon_get_permissions_provider (daemon);
   g_object_bind_property (permissions, "daemon-enabled", server, "enabled",
-                          G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
+                          G_BINDING_DEFAULT | G_BINDING_SYNC_CREATE);
 
   GError *error = NULL;
   if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (server),

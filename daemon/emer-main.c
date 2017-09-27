@@ -96,7 +96,7 @@ on_set_enabled (EmerEventRecorderServer *server,
   EmerPermissionsProvider *permissions =
     emer_daemon_get_permissions_provider (daemon);
 
-  emer_event_recorder_server_set_enabled (server, enabled);
+  emer_permissions_provider_set_daemon_enabled (permissions, enabled);
   emer_permissions_provider_set_uploading_enabled (permissions, enabled);
   emer_event_recorder_server_complete_set_enabled (server, invocation);
   return TRUE;
@@ -200,6 +200,46 @@ quit_main_loop (GMainLoop *main_loop)
   return G_SOURCE_REMOVE;
 }
 
+static gboolean
+sync_recorder_server_enabled_for_upload (GBinding     *binding,
+                                         const GValue *from_value,
+                                         GValue       *to_value,
+                                         gpointer      user_data)
+{
+  EmerEventRecorderServer *server =
+    EMER_EVENT_RECORDER_SERVER (g_binding_get_target (binding));
+  EmerPermissionsProvider *permissions =
+    EMER_PERMISSIONS_PROVIDER (g_binding_get_source (binding));
+
+  gboolean daemon_enabled =
+    emer_permissions_provider_get_daemon_enabled (permissions);
+  gboolean uploading_enabled = g_value_get_boolean (from_value);
+
+  g_value_set_boolean (to_value, daemon_enabled && uploading_enabled);
+
+  return TRUE;
+}
+
+static gboolean
+sync_recorder_server_enabled_for_daemon (GBinding     *binding,
+                                         const GValue *from_value,
+                                         GValue       *to_value,
+                                         gpointer      user_data)
+{
+  EmerEventRecorderServer *server =
+    EMER_EVENT_RECORDER_SERVER (g_binding_get_target (binding));
+  EmerPermissionsProvider *permissions =
+    EMER_PERMISSIONS_PROVIDER (g_binding_get_source (binding));
+
+  gboolean daemon_enabled = g_value_get_boolean (from_value);
+  gboolean uploading_enabled =
+    emer_permissions_provider_get_uploading_enabled (permissions);
+
+  g_value_set_boolean (to_value, daemon_enabled && uploading_enabled);
+
+  return TRUE;
+}
+
 /*
  * Called when a reference to the system bus is acquired. This is where you are
  * supposed to export your well-known name, not in name_acquired; that is too
@@ -227,8 +267,14 @@ on_bus_acquired (GDBusConnection *system_bus,
 
   EmerPermissionsProvider *permissions =
     emer_daemon_get_permissions_provider (daemon);
-  g_object_bind_property (permissions, "daemon-enabled", server, "enabled",
-                          G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
+  g_object_bind_property_full (permissions, "daemon-enabled", server, "enabled",
+                               G_BINDING_DEFAULT | G_BINDING_SYNC_CREATE,
+                               sync_recorder_server_enabled_for_daemon, NULL,
+                               daemon, NULL);
+  g_object_bind_property_full (permissions, "uploading-enabled", server, "enabled",
+                               G_BINDING_DEFAULT | G_BINDING_SYNC_CREATE,
+                               sync_recorder_server_enabled_for_upload, NULL,
+                               daemon, NULL);
 
   GError *error = NULL;
   if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (server),

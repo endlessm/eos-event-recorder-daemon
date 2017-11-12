@@ -82,7 +82,7 @@ GType                  emer_machine_id_provider_get_type (void) G_GNUC_CONST;
 
 EmerMachineIdProvider *emer_machine_id_provider_new      (void);
 
-EmerMachineIdProvider *emer_machine_id_provider_new_full (const gchar           *machine_id_file_path);
+EmerMachineIdProvider *emer_machine_id_provider_new_full (const gchar **machine_id_file_paths);
 
 gboolean               emer_machine_id_provider_get_id   (EmerMachineIdProvider *self,
                                                           uuid_t                 machine_id);

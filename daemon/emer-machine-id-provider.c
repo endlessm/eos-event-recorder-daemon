@@ -21,18 +21,22 @@
  */
 
 #include "emer-machine-id-provider.h"
+#include "emer-types.h"
 
 #include <string.h>
 #include <uuid/uuid.h>
 
+#include <gio/gio.h>
+
 #include <glib/gprintf.h>
 #include <glib/gstdio.h>
+#include <glib/gstrfuncs.h>
 
 #include "shared/metrics-util.h"
 
 typedef struct EmerMachineIdProviderPrivate
 {
-  gchar *path;
+  GStrv paths;
   uuid_t id;
 } EmerMachineIdProviderPrivate;
 
@@ -60,11 +64,25 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerMachineIdProvider, emer_machine_id_provider, G_T
 enum
 {
   PROP_0,
-  PROP_PATH,
+  PROP_PATHS,
   NPROPS
 };
 
 static GParamSpec *emer_machine_id_provider_props[NPROPS] = { NULL, };
+
+static GStrv
+dup_strv (GStrv input)
+{
+  gsize length = g_strv_length (input);
+  GStrv mem = g_new0 (gchar *, length + 1);
+  gsize i;
+
+  for (i = 0; i < length; ++i)
+    mem[i] = g_strdup (input[i]);
+
+  mem[length] = NULL;
+  return mem;
+}
 
 /*
  * SECTION:emer-machine-id-provider
@@ -78,23 +96,23 @@ static GParamSpec *emer_machine_id_provider_props[NPROPS] = { NULL, };
  * code needs it.
  */
 
-static const gchar *
-get_id_path (EmerMachineIdProvider *self)
+static const GStrv
+get_id_paths (EmerMachineIdProvider *self)
 {
   EmerMachineIdProviderPrivate *priv =
     emer_machine_id_provider_get_instance_private (self);
 
-  return priv->path;
+  return priv->paths;
 }
 
 static void
-set_id_path (EmerMachineIdProvider *self,
-             const gchar           *given_path)
+set_id_paths (EmerMachineIdProvider *self,
+              const GStrv            given_paths)
 {
   EmerMachineIdProviderPrivate *priv =
     emer_machine_id_provider_get_instance_private (self);
 
-  priv->path = g_strdup (given_path);
+  priv->paths = dup_strv (given_paths);
 }
 
 static void
@@ -106,8 +124,8 @@ emer_machine_id_provider_get_property (GObject    *object,
   EmerMachineIdProvider *self = EMER_MACHINE_ID_PROVIDER (object);
   switch (property_id)
     {
-    case PROP_PATH:
-      g_value_set_string (value, get_id_path (self));
+    case PROP_PATHS:
+      g_value_set_boxed (value, get_id_paths (self));
       break;
 
     default:
@@ -124,8 +142,8 @@ emer_machine_id_provider_set_property (GObject      *object,
   EmerMachineIdProvider *self = EMER_MACHINE_ID_PROVIDER (object);
   switch (property_id)
     {
-      case PROP_PATH:
-        set_id_path (self, g_value_get_string (value));
+      case PROP_PATHS:
+        set_id_paths (self, g_value_get_boxed (value));
         break;
 
     default:
@@ -140,7 +158,7 @@ emer_machine_id_provider_finalize (GObject *object)
   EmerMachineIdProviderPrivate *priv =
     emer_machine_id_provider_get_instance_private (self);
 
-  g_free (priv->path);
+  g_strfreev (priv->paths);
 
   G_OBJECT_CLASS (emer_machine_id_provider_parent_class)->finalize (object);
 }
@@ -155,11 +173,11 @@ emer_machine_id_provider_class_init (EmerMachineIdProviderClass *klass)
   object_class->finalize = emer_machine_id_provider_finalize;
 
   /* Blurb string is good enough default documentation for this */
-  emer_machine_id_provider_props[PROP_PATH] =
-    g_param_spec_string ("path", "Path",
-                         "The path to the file where the unique identifier is stored.",
-                         DEFAULT_MACHINE_ID_FILEPATH,
-                         G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
+  emer_machine_id_provider_props[PROP_PATHS] =
+    g_param_spec_boxed ("paths", "Paths",
+                        "The paths in priority order to the files where the unique identifier is stored.",
+                        G_TYPE_STRV,
+                        G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, NPROPS,
                                      emer_machine_id_provider_props);
@@ -173,7 +191,8 @@ emer_machine_id_provider_init (EmerMachineIdProvider *self)
 
 /*
  * emer_machine_id_provider_new_full:
- * @machine_id_file_path: path to a file; see #EmerMachineIdProvider:path
+ * @machine_id_file_paths: candidate path to a file to read with the
+ *                         machien id see #EmerMachineIdProvider:path
  *
  * Testing function for creating a new #EmerMachineIdProvider in the C API.
  * You only need to use this if you are creating a mock ID provider for unit
@@ -186,10 +205,10 @@ emer_machine_id_provider_init (EmerMachineIdProvider *self)
  * Free with g_object_unref() when done if using C.
  */
 EmerMachineIdProvider *
-emer_machine_id_provider_new_full (const gchar *machine_id_file_path)
+emer_machine_id_provider_new_full (const gchar **machine_id_file_paths)
 {
   return g_object_new (EMER_TYPE_MACHINE_ID_PROVIDER,
-                       "path", machine_id_file_path,
+                       "paths", machine_id_file_paths,
                        NULL);
 }
 
@@ -204,7 +223,14 @@ emer_machine_id_provider_new_full (const gchar *machine_id_file_path)
 EmerMachineIdProvider *
 emer_machine_id_provider_new (void)
 {
-  return g_object_new (EMER_TYPE_MACHINE_ID_PROVIDER, NULL);
+  const gchar *default_paths[] = {
+    DEFAULT_MACHINE_ID_FILEPATH,
+    NULL
+  };
+
+  return g_object_new (EMER_TYPE_MACHINE_ID_PROVIDER,
+                       "paths", default_paths,
+                       NULL);
 }
 
 /*
@@ -224,50 +250,104 @@ hyphenate_uuid (gchar *uuid_sans_hyphens)
 }
 
 static gboolean
-read_machine_id (EmerMachineIdProvider *self)
+read_one_machine_id (const gchar  *machine_id_path,
+                     uuid_t        id,
+                     GError      **error)
 {
-  EmerMachineIdProviderPrivate *priv =
-    emer_machine_id_provider_get_instance_private (self);
-
   gchar *machine_id_sans_hyphens;
   gsize machine_id_sans_hyphens_length;
-  GError *error = NULL;
   gboolean read_succeeded =
-    g_file_get_contents (priv->path, &machine_id_sans_hyphens,
-                         &machine_id_sans_hyphens_length, &error);
+    g_file_get_contents (machine_id_path, &machine_id_sans_hyphens,
+                         &machine_id_sans_hyphens_length, error);
   if (!read_succeeded)
-    {
-      g_critical ("Failed to read machine ID file (%s).", priv->path);
-      return FALSE;
-    }
+    return FALSE;
 
   if (strlen (machine_id_sans_hyphens) != machine_id_sans_hyphens_length)
     {
-      g_critical ("Machine ID file (%s) contained null byte, but should be "
-                  "hexadecimal.",
-                  priv->path);
+      g_set_error (error,
+                   EMER_ERROR,
+                   EMER_ERROR_INVALID_MACHINE_ID,
+                   "Machine ID file (%s) contained null byte, but should be "
+                   "hexadecimal.",
+                   machine_id_path);
       return FALSE;
     }
 
   if (machine_id_sans_hyphens_length != FILE_LENGTH)
     {
-      g_critical ("Machine ID file (%s) contained %" G_GSIZE_FORMAT " bytes, "
-                  "but expected %d bytes.",
-                  priv->path, machine_id_sans_hyphens_length, FILE_LENGTH);
+      g_set_error (error,
+                   EMER_ERROR,
+                   EMER_ERROR_INVALID_MACHINE_ID,
+                   "Machine ID file (%s) contained %" G_GSIZE_FORMAT " bytes, "
+                   "but expected %d bytes.",
+                   machine_id_path,
+                   machine_id_sans_hyphens_length,
+                   FILE_LENGTH);
       return FALSE;
     }
 
   gchar *hyphenated_machine_id = hyphenate_uuid (machine_id_sans_hyphens);
   g_free (machine_id_sans_hyphens);
 
-  gint parse_failed = uuid_parse (hyphenated_machine_id, priv->id);
+  gint parse_failed = uuid_parse (hyphenated_machine_id, id);
   g_free (hyphenated_machine_id);
 
   if (parse_failed != 0)
     {
-      g_critical ("Machine ID file (%s) did not contain UUID.", priv->path);
+      g_set_error (error,
+                   EMER_ERROR,
+                   EMER_ERROR_INVALID_MACHINE_ID,
+                   "Machine ID file (%s) did not contain UUID.",
+                   machine_id_path);
       return FALSE;
     }
+
+  return TRUE;
+}
+
+static gboolean
+read_machine_id (EmerMachineIdProvider *self)
+{
+  EmerMachineIdProviderPrivate *priv =
+    emer_machine_id_provider_get_instance_private (self);
+  GStrv iter;
+  uuid_t id;
+
+  uuid_clear (id);
+
+  for (iter = priv->paths; *iter != NULL; ++iter)
+    {
+      g_autoptr(GError) local_error = NULL;
+
+      if (!read_one_machine_id (*iter, id, &local_error))
+        {
+          if (g_error_matches (local_error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
+            {
+              g_debug ("Machine ID file %s does not exist, tring the next one.",
+                       *iter);
+            }
+          else if (g_error_matches (local_error,
+                                    EMER_ERROR,
+                                    EMER_ERROR_INVALID_MACHINE_ID))
+            {
+              g_critical ("Failed to read machine id %s: %s",
+                          *iter,
+                          local_error->message);
+            }
+          continue;
+        }
+
+      break;
+    }
+
+  if (uuid_is_null (id))
+    {
+      g_critical ("Failed to read in a unique machine id");
+      return FALSE;
+    }
+
+  uuid_copy (priv->id, id);
+  uuid_clear (id);
 
   return TRUE;
 }
@@ -279,7 +359,9 @@ read_machine_id (EmerMachineIdProvider *self)
  * allocated 16-byte return location for a UUID.
  *
  * Retrieves an ID (in the form of a UUID) that is unique to this machine, for
- * use in anonymously identifying metrics data.
+ * use in anonymously identifying metrics data from one of the machine-id
+ * provider paths, in priority order. If a file does not exist in a higher
+ * priority path, a lower priority path will be tried.
  *
  * Returns: a boolean indicating success or failure of retrieval.
  * If this returns %FALSE, the UUID cannot be trusted to be valid.
@@ -311,4 +393,16 @@ emer_machine_id_provider_get_id (EmerMachineIdProvider *self,
 
   uuid_copy (machine_id, priv->id);
   return TRUE;
+}
+
+void
+emer_machine_id_provider_reload (EmerMachineIdProvider *self)
+{
+  EmerMachineIdProviderPrivate *priv =
+    emer_machine_id_provider_get_instance_private (self);
+  g_autofree gchar *formatted_paths = g_strjoin (" \n", priv->paths);
+
+  g_message ("EmerMachineIdProvider: Will reload from:\n %s", formatted_paths);
+
+  priv->id_is_valid = FALSE;
 }

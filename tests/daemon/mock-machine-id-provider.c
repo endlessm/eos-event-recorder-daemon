@@ -49,7 +49,7 @@ emer_machine_id_provider_new (void)
 }
 
 EmerMachineIdProvider *
-emer_machine_id_provider_new_full (const gchar *machine_id_file_path)
+emer_machine_id_provider_new_full (const gchar **machine_id_file_path)
 {
   return emer_machine_id_provider_new ();
 }

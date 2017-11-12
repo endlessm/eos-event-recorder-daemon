@@ -31,7 +31,9 @@
 #define HYPHENS_IN_ID 4
 
 #define TESTING_FILE_PATH "/tmp/testing-machine-id"
+#define TESTING_OVERRIDE_FILE_PATH "/tmp/override-testing-machine-id"
 #define TESTING_ID        "04448f74fde24bd7a16f8da17869d5c3\n"
+#define TESTING_OVERRIDE_ID        "04448f74fde24bd7a16f8da17869d5c4\n"
 /*
  * The expected size in bytes of the file located at
  * #EmerMachineIdProvider:path.
@@ -45,11 +47,11 @@
 // Helper Functiobns
 
 static gboolean
-write_testing_machine_id ()
+write_testing_machine_id (const gchar *path, const gchar *id)
 {
-  GFile *file = g_file_new_for_path (TESTING_FILE_PATH);
+  GFile *file = g_file_new_for_path (path);
   gboolean success = g_file_replace_contents (file,
-                                              TESTING_ID,
+                                              id,
                                               FILE_LENGTH,
                                               NULL,
                                               FALSE,
@@ -76,7 +78,8 @@ setup (gboolean     *unused,
        gconstpointer dontuseme)
 {
   g_unlink (TESTING_FILE_PATH);
-  write_testing_machine_id ();
+  g_unlink (TESTING_OVERRIDE_FILE_PATH);
+  write_testing_machine_id (TESTING_FILE_PATH, TESTING_ID);
 }
 
 static void
@@ -84,6 +87,7 @@ teardown (gboolean     *unused,
           gconstpointer dontuseme)
 {
   g_unlink (TESTING_FILE_PATH);
+  g_unlink (TESTING_OVERRIDE_FILE_PATH);
 }
 
 // Testing Cases
@@ -102,8 +106,55 @@ static void
 test_machine_id_provider_can_get_id (gboolean     *unused,
                                      gconstpointer dontuseme)
 {
+  const gchar *paths[] = {
+    TESTING_FILE_PATH,
+    NULL
+  };
   EmerMachineIdProvider *id_provider =
-    emer_machine_id_provider_new_full (TESTING_FILE_PATH);
+    emer_machine_id_provider_new_full (paths);
+  uuid_t id;
+  g_assert (emer_machine_id_provider_get_id (id_provider, id));
+  gchar unparsed_id[HYPHENS_IN_ID + FILE_LENGTH];
+  uuid_unparse_lower (id, unparsed_id);
+  gchar* unhypenated_id = unhyphenate_uuid (unparsed_id);
+  g_assert_cmpstr (TESTING_ID, ==, unhypenated_id);
+  g_free (unhypenated_id);
+  g_object_unref (id_provider);
+}
+
+static void
+test_machine_id_provider_can_get_id_override (gboolean     *unused,
+                                              gconstpointer dontuseme)
+{
+  const gchar *paths[] = {
+    TESTING_OVERRIDE_FILE_PATH,
+    TESTING_FILE_PATH,
+    NULL
+  };
+  EmerMachineIdProvider *id_provider =
+    emer_machine_id_provider_new_full (paths);
+  uuid_t id;
+  write_testing_machine_id (TESTING_OVERRIDE_FILE_PATH, TESTING_OVERRIDE_ID);
+  g_assert (emer_machine_id_provider_get_id (id_provider, id));
+  gchar unparsed_id[HYPHENS_IN_ID + FILE_LENGTH];
+  uuid_unparse_lower (id, unparsed_id);
+  gchar* unhypenated_id = unhyphenate_uuid (unparsed_id);
+  g_assert_cmpstr (TESTING_OVERRIDE_ID, ==, unhypenated_id);
+  g_free (unhypenated_id);
+  g_object_unref (id_provider);
+}
+
+static void
+test_machine_id_provider_can_get_id_override_not_exist (gboolean     *unused,
+                                                        gconstpointer dontuseme)
+{
+  const gchar *paths[] = {
+    TESTING_OVERRIDE_FILE_PATH,
+    TESTING_FILE_PATH,
+    NULL
+  };
+  EmerMachineIdProvider *id_provider =
+    emer_machine_id_provider_new_full (paths);
   uuid_t id;
   g_assert (emer_machine_id_provider_get_id (id_provider, id));
   gchar unparsed_id[HYPHENS_IN_ID + FILE_LENGTH];
@@ -128,6 +179,10 @@ main (gint                argc,
                        test_machine_id_provider_new_succeeds);
   ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-get-id",
                        test_machine_id_provider_can_get_id);
+  ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-get-id-override",
+                       test_machine_id_provider_can_get_id_override);
+  ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-get-id-override-not-exist",
+                       test_machine_id_provider_can_get_id_override_not_exist);
 
 #undef ADD_CACHE_TEST_FUNC
   return g_test_run ();

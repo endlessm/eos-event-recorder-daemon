@@ -53,6 +53,9 @@ BUILT_SOURCES =
 # Binaries that should be produced but not installed.
 noinst_PROGRAMS =
 
+# Libraries that should be produced but not installed.
+noinst_LTLIBRARIES = 
+
 persistentcachedir=$(localstatedir)/cache/metrics/
 configdir=$(sysconfdir)/metrics/
 permissions_file=$(configdir)eos-metrics-permissions.conf
@@ -97,6 +100,9 @@ EOS_COVERAGE_BLACKLIST_PATTERNS =	\
 
 AM_CFLAGS += @EOS_C_COVERAGE_CFLAGS@
 AM_LDFLAGS += @EOS_C_COVERAGE_LDFLAGS@
+
+# # # COMMON LIBRARY # # #
+include $(top_srcdir)/shared/Makefile.am.inc
 
 # # # DBUS DAEMON ("EVENT RECORDER SERVER") # # #
 

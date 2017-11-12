@@ -25,21 +25,11 @@
   <http://www.gnu.org/licenses/>.
   -->
 
-  <vendor>Endless Metrics</vendor>
-  <vendor_url>https://endlessm.com/</vendor_url>
+  <vendor>Endless Metrics System Helper</vendor>
+  <vendor_url>https://endlessos.com/</vendor_url>
 
-  <action id="com.endlessm.Metrics.SetEnabled">
-    <description>Enable or disable the metrics system</description>
-    <annotate key="org.freedesktop.policykit.owner">unix-user:metrics unix-group:metrics</annotate>
-    <defaults>
-      <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
-      <allow_active>no</allow_active>
-    </defaults>
-  </action>
-
-  <action id="com.endlessm.Metrics.ResetTrackingId">
-    <description>Reset the tracking id used by the metrics system</description>
+  <action id="com.endlessm.MetricsSystemHelper.ResetTrackingId">
+    <description>Write a new tracking id to the override directory</description>
     <annotate key="org.freedesktop.policykit.owner">unix-user:metrics unix-group:metrics</annotate>
     <defaults>
       <allow_any>no</allow_any>

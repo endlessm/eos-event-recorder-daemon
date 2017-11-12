@@ -77,7 +77,7 @@ dist_systembussecuritypolicy_DATA =
 
 # policykit
 policydir = ${datadir}/polkit-1/actions
-dist_policy_DATA = data/com.endlessm.Metrics.policy
+dist_policy_DATA = 
 
 policyrulesdir = $(datadir)/polkit-1/rules.d
 dist_policyrules_DATA = 
@@ -130,8 +130,10 @@ AM_LDFLAGS = @EOS_C_COVERAGE_LDFLAGS@
 # # # COMMON LIBRARY # # #
 include $(top_srcdir)/shared/Makefile.am.inc
 
-# # # DBUS DAEMON ("EVENT RECORDER SERVER") # # #
+# # # SYSTEM HELPER # # #
+include $(top_srcdir)/system-helper/Makefile.am.inc
 
+# # # DBUS DAEMON ("EVENT RECORDER SERVER") # # #
 include $(top_srcdir)/daemon/Makefile.am.inc
 
 # # # TOOLS # # #

@@ -26,6 +26,9 @@
 #include <uuid/uuid.h>
 
 #include <glib.h>
+#include <gio/gio.h>
+
+#define UUID_SERIALIZED_LEN 37
 
 guint64
 swap_bytes_64_if_big_endian (guint64 value)
@@ -91,4 +94,35 @@ destroy_variants (GVariant **variants,
     g_variant_unref (variants[i]);
 
   g_free (variants);
+}
+
+gboolean
+write_tracking_id_file (const gchar  *path,
+                        GError      **error)
+{
+  uuid_t override_machine_id;
+  gchar serialized_override_machine_id[UUID_SERIALIZED_LEN];
+  g_autoptr(GFile) file = g_file_new_for_path (path);
+  g_autoptr(GFile) directory = g_file_get_parent (file);
+  g_autoptr(GError) local_error = NULL;
+
+  uuid_clear (override_machine_id);
+  uuid_generate (override_machine_id);
+  uuid_unparse (override_machine_id, serialized_override_machine_id);
+
+  if (!g_file_make_directory_with_parents (directory, NULL, &local_error))
+    {
+      if (!g_error_matches (local_error, G_IO_ERROR, G_IO_ERROR_EXISTS))
+        {
+          g_propagate_error (error, g_steal_pointer (&local_error));
+          return FALSE;
+        }
+
+      g_clear_error (&local_error);
+    }
+
+  if (!g_file_set_contents (path, serialized_override_machine_id, -1, error))
+    return FALSE;
+
+  return TRUE;
 }

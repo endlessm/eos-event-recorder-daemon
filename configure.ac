@@ -45,7 +45,7 @@ AC_CONFIG_SRCDIR([daemon/emer-daemon.h])
 AM_INIT_AUTOMAKE([-Wall -Wno-portability foreign 1.11 parallel-tests
     subdir-objects tar-ustar])
 # Avoid spewing garbage over the terminal ('make V=1' to see the garbage)
-AM_SILENT_RULES([yes])
+AM_SILENT_RULES([no])
 # Keep Autotools macros local to this source tree
 AC_CONFIG_MACRO_DIR([m4])
 # Use Libtool
@@ -75,9 +75,15 @@ EMER_REQUIRED_MODULES="$EOS_METRICS_REQUIREMENT \
                        $UUID_REQUIREMENT"
 EMER_SHARED_REQUIRED_MODULES="$GIO_REQUIREMENT \
                               $GOBJECT_REQUIREMENT \
+                              $POLKIT_REQUIREMENT \
                               $UUID_REQUIREMENT"
+EMER_SYSTEM_HELPER_REQUIRED_MODULES="$GIO_REQUIREMENT \
+                                     $GOBJECT_REQUIREMENT \
+                                     $POLKIT_REQUIREMENT \
+                                     $UUID_REQUIREMENT"
 AC_SUBST(EMER_REQUIRED_MODULES)
 AC_SUBST(EMER_SHARED_REQUIRED_MODULES)
+AC_SUBST(EMER_SYSTEM_HELPER_REQUIRED_MODULES)
 
 # Required build tools
 # --------------------
@@ -157,6 +163,7 @@ AS_IF([test -f $EVENT_RECORDER_SERVER_XML],
 # ------------------
 PKG_CHECK_MODULES([EOS_EVENT_RECORDER_DAEMON], [$EMER_REQUIRED_MODULES])
 PKG_CHECK_MODULES([EOS_EVENT_RECORDER_SHARED], [$EMER_SHARED_REQUIRED_MODULES])
+PKG_CHECK_MODULES([EOS_METRICS_SYSTEM_HELPER], [$EMER_SYSTEM_HELPER_REQUIRED_MODULES])
 # This indicates a required dbus mocking interface for unit testing.
 AX_PYTHON_MODULE_VERSION([dbusmock], 0.10)
 

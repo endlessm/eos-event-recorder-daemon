@@ -86,6 +86,7 @@ EmerMachineIdProvider *emer_machine_id_provider_new_full (const gchar **machine_
 
 gboolean               emer_machine_id_provider_get_id   (EmerMachineIdProvider *self,
                                                           uuid_t                 machine_id);
+void                   emer_machine_id_provider_reload (EmerMachineIdProvider *self);
 
 G_END_DECLS
 

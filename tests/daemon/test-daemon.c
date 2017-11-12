@@ -42,6 +42,7 @@
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
 #include "emer-types.h"
+#include "mock-machine-id-provider.h"
 #include "mock-permissions-provider.h"
 #include "mock-persistent-cache.h"
 #include "shared/metrics-util.h"
@@ -77,6 +78,8 @@ typedef struct _Fixture
   gint64 relative_time;
   gint64 absolute_time;
   gchar *request_path;
+
+  gchar *tempfiles_dir;
 } Fixture;
 
 typedef void (*ProcessBytesSourceFunc) (GByteArray *, gpointer);
@@ -924,13 +927,17 @@ create_test_object (Fixture *fixture)
                           fixture->mock_network_send_provider,
                           fixture->mock_permissions_provider,
                           fixture->mock_persistent_cache,
-                          100000 /* max bytes buffered */);
+                          100000 /* max bytes buffered */,
+                          NULL /* override machine id path */);
 }
 
 static void
 setup (Fixture      *fixture,
        gconstpointer unused)
 {
+  g_autoptr(GFileIOStream) stream = NULL;
+  g_autoptr(GError) error = NULL;
+
   // The mock server should be sent SIGTERM when this process exits.
   GSubprocessLauncher *subprocess_launcher =
     g_subprocess_launcher_new (G_SUBPROCESS_FLAGS_STDIN_PIPE |
@@ -953,6 +960,8 @@ setup (Fixture      *fixture,
   fixture->mock_permissions_provider = emer_permissions_provider_new ();
   fixture->mock_persistent_cache =
     emer_persistent_cache_new (NULL /* directory */, NULL /* GError */);
+
+  g_assert_no_error (error);
 
   create_test_object (fixture);
 }
@@ -1353,6 +1362,64 @@ test_daemon_limits_network_upload_size (Fixture      *fixture,
   wait_for_upload_to_finish (fixture);
 }
 
+static void
+test_daemon_refresh_and_reload_machine_id (Fixture       *fixture,
+                                           gconstpointer  unused)
+{
+  g_autoptr(GFileIOStream) stream = NULL;
+  g_autoptr(GError) error = NULL;
+  g_autoptr(GFile) override_machine_id_file =
+    g_file_new_tmp ("machine-id-override-XXXXXX",
+                    &stream,
+                    &error);
+  g_autofree gchar *override_machine_id_file_path =
+    g_file_get_path (override_machine_id_file);
+  uuid_t initial_machine_id;
+  uuid_t new_machine_id;
+
+  g_assert_no_error (error);
+
+  /* Get the initial machine-id for comparing against later */
+  emer_machine_id_provider_get_id (fixture->mock_machine_id_provider,
+                                   initial_machine_id);
+
+  /* Remove old machine-id provider and install a new one that looks in the
+   * override path now */
+  g_object_unref (fixture->mock_machine_id_provider);
+  fixture->mock_machine_id_provider =
+    emer_machine_id_provider_new_with_override_path (override_machine_id_file_path);
+
+  g_object_unref (fixture->test_object);
+  fixture->test_object =
+    emer_daemon_new_full (g_rand_new_with_seed (18),
+                          fixture->server_uri,
+                          2 /* network send interval */,
+                          fixture->mock_machine_id_provider,
+                          fixture->mock_network_send_provider,
+                          fixture->mock_permissions_provider,
+                          fixture->mock_persistent_cache,
+                          100000 /* max bytes buffered */,
+                          override_machine_id_file_path);
+
+  /* Overwrite machine-id */
+  emer_daemon_reset_tracking_id (fixture->test_object, &error);
+  g_assert_no_error (error);
+
+  /* New machine id should now be different */
+  emer_machine_id_provider_get_id (fixture->mock_machine_id_provider,
+                                   new_machine_id);
+
+  g_assert (uuid_compare (initial_machine_id, new_machine_id) != 0);
+
+  /* Send some metrics using the newly created daemon. We'll assert
+   * one we receive the metrics that the received metric has the same
+   * machine-id as the one provided by the machine-id provider */
+  record_singulars (fixture->test_object);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_singulars_received);
+  wait_for_upload_to_finish (fixture);
+}
+
 gint
 main (gint                argc,
       const gchar * const argv[])
@@ -1398,6 +1465,8 @@ main (gint                argc,
                    test_daemon_flushes_to_persistent_cache_on_finalize);
   ADD_DAEMON_TEST ("/daemon/limits-network-upload-size",
                    test_daemon_limits_network_upload_size);
+  ADD_DAEMON_TEST ("/daemon/refresh-and-reload-machine-id",
+                   test_daemon_refresh_and_reload_machine_id);
 
 #undef ADD_DAEMON_TEST
 

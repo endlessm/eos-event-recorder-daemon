@@ -38,6 +38,7 @@ typedef struct EmerMachineIdProviderPrivate
 {
   GStrv paths;
   uuid_t id;
+  gboolean id_is_valid;
 } EmerMachineIdProviderPrivate;
 
 G_DEFINE_TYPE_WITH_PRIVATE (EmerMachineIdProvider, emer_machine_id_provider, G_TYPE_OBJECT)
@@ -60,6 +61,14 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerMachineIdProvider, emer_machine_id_provider, G_T
  * details.
  */
 #define DEFAULT_MACHINE_ID_FILEPATH "/etc/machine-id"
+
+/*
+ * Filepath where an overridden random UUID, separate from /etc/machine-id
+ * is stored. The machine-id might be read from this path and used as the
+ * tracking ID in cases where we don't want to continue using the machine-id,
+ * either on user request or when we enter the demo mode.
+ */
+#define TRACKING_ID_OVERRIDE SYSCONFDIR "/eos-metrics-event-recorder/machine-id-override"
 
 enum
 {
@@ -183,10 +192,13 @@ emer_machine_id_provider_class_init (EmerMachineIdProviderClass *klass)
                                      emer_machine_id_provider_props);
 }
 
-// Mandatory empty function.
 static void
 emer_machine_id_provider_init (EmerMachineIdProvider *self)
 {
+  EmerMachineIdProviderPrivate *priv =
+    emer_machine_id_provider_get_instance_private (self);
+
+  priv->id_is_valid = FALSE;
 }
 
 /*
@@ -224,6 +236,7 @@ EmerMachineIdProvider *
 emer_machine_id_provider_new (void)
 {
   const gchar *default_paths[] = {
+    TRACKING_ID_OVERRIDE,
     DEFAULT_MACHINE_ID_FILEPATH,
     NULL
   };
@@ -373,23 +386,17 @@ emer_machine_id_provider_get_id (EmerMachineIdProvider *self,
   EmerMachineIdProviderPrivate *priv =
     emer_machine_id_provider_get_instance_private (self);
 
-  static gboolean id_is_valid = FALSE;
-  G_LOCK_DEFINE_STATIC (id_is_valid);
-
-  G_LOCK (id_is_valid);
-  if (!id_is_valid)
+  if (!priv->id_is_valid)
     {
       if (read_machine_id (self))
         {
-          id_is_valid = TRUE;
+          priv->id_is_valid = TRUE;
         }
       else
         {
-          G_UNLOCK (id_is_valid);
           return FALSE;
         }
     }
-  G_UNLOCK (id_is_valid);
 
   uuid_copy (machine_id, priv->id);
   return TRUE;
@@ -400,9 +407,9 @@ emer_machine_id_provider_reload (EmerMachineIdProvider *self)
 {
   EmerMachineIdProviderPrivate *priv =
     emer_machine_id_provider_get_instance_private (self);
-  g_autofree gchar *formatted_paths = g_strjoin (" \n", priv->paths);
+  g_autofree gchar *formatted_paths = g_strjoinv ("\n", priv->paths);
 
-  g_message ("EmerMachineIdProvider: Will reload from:\n %s", formatted_paths);
+  g_message ("EmerMachineIdProvider: Will reload from:\n%s", formatted_paths);
 
   priv->id_is_valid = FALSE;
 }

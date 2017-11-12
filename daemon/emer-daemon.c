@@ -41,6 +41,7 @@
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
 #include "emer-types.h"
+#include "system-helper/emer-metrics-system-helper.h"
 #include "shared/metrics-util.h"
 
 /*
@@ -168,6 +169,7 @@ typedef struct _EmerDaemonPrivate
   EmerMachineIdProvider *machine_id_provider;
   EmerNetworkSendProvider *network_send_provider;
   EmerPermissionsProvider *permissions_provider;
+  const gchar             *override_machine_id_path;
 
   gchar *persistent_cache_directory;
   EmerPersistentCache *persistent_cache;
@@ -191,6 +193,7 @@ enum
   PROP_PERSISTENT_CACHE_DIRECTORY,
   PROP_PERSISTENT_CACHE,
   PROP_MAX_BYTES_BUFFERED,
+  PROP_OVERRIDE_MACHINE_ID_PATH,
   NPROPS
 };
 
@@ -1247,6 +1250,15 @@ set_max_bytes_buffered (EmerDaemon *self,
 }
 
 static void
+set_override_machine_id_path (EmerDaemon  *self,
+                              const gchar *override_machine_id_path)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+  g_clear_pointer (&priv->override_machine_id_path, g_free);
+  priv->override_machine_id_path = g_strdup (override_machine_id_path);
+}
+
+static void
 emer_daemon_constructed (GObject *object)
 {
   EmerDaemon *self = EMER_DAEMON (object);
@@ -1322,6 +1334,10 @@ emer_daemon_set_property (GObject      *object,
       set_persistent_cache (self, g_value_get_object (value));
       break;
 
+    case PROP_OVERRIDE_MACHINE_ID_PATH:
+      set_override_machine_id_path (self, g_value_get_string (value));
+      break;
+
     case PROP_MAX_BYTES_BUFFERED:
       set_max_bytes_buffered (self, g_value_get_ulong (value));
       break;
@@ -1360,6 +1376,7 @@ emer_daemon_finalize (GObject *object)
   g_clear_object (&priv->machine_id_provider);
   g_clear_object (&priv->network_send_provider);
   g_clear_object (&priv->permissions_provider);
+  g_clear_pointer (&priv->override_machine_id_path, g_free);
   g_clear_pointer (&priv->persistent_cache_directory, g_free);
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->finalize (object);
@@ -1461,6 +1478,23 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                          G_PARAM_STATIC_STRINGS);
 
   /*
+   * EmerDaemon:override-machine-id-path:
+   *
+   * A path to store an overridden machine-id used as the unique identifier
+   * for the machine. This generally would only be used by the tests such
+   * that the daemon could write a new machine-id override on
+   * ResetTrackingId to a user writable directory without having to
+   * use the system helper.
+   */
+  emer_daemon_props[PROP_OVERRIDE_MACHINE_ID_PATH] =
+    g_param_spec_string ("override-machine-id-path",
+                         "Machine ID path override",
+                         "A different directory for the machine-id override",
+                         NULL,
+                         G_PARAM_CONSTRUCT | G_PARAM_WRITABLE |
+                         G_PARAM_STATIC_STRINGS);
+
+  /*
    * EmerDaemon:persistent-cache-directory:
    *
    * A directory for temporarily storing events until they are uploaded to the
@@ -1547,6 +1581,44 @@ emer_daemon_new (const gchar             *persistent_cache_directory,
                        NULL);
 }
 
+gboolean
+emer_daemon_reset_tracking_id (EmerDaemon  *self,
+                               GError     **error)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  if (priv->override_machine_id_path != NULL)
+    {
+      if (!write_tracking_id_file (priv->override_machine_id_path, error))
+        return FALSE;
+    }
+  else
+    {
+      g_debug ("Using system helper to write machine id override");
+
+      EmerMetricsSystemHelper *helper =
+        emer_metrics_system_helper_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
+                                                           G_DBUS_PROXY_FLAGS_NONE,
+                                                           "com.endlessm.MetricsSystemHelper",
+                                                           "/com/endlessm/MetricsSystemHelper",
+                                                           NULL,
+                                                           error);
+
+      if (helper == NULL)
+        return FALSE;
+
+      if (!emer_metrics_system_helper_call_reset_tracking_id_sync (helper,
+                                                                   NULL,
+                                                                   error))
+        return FALSE;
+    }
+
+  if (priv->machine_id_provider != NULL)
+    emer_machine_id_provider_reload (priv->machine_id_provider);
+
+  return TRUE;
+}
+
 /*
  * emer_daemon_new_full:
  * @rand: (allow-none): random number generator to use for randomized
@@ -1581,7 +1653,8 @@ emer_daemon_new_full (GRand                   *rand,
                       EmerNetworkSendProvider *network_send_provider,
                       EmerPermissionsProvider *permissions_provider,
                       EmerPersistentCache     *persistent_cache,
-                      gulong                   max_bytes_buffered)
+                      gulong                   max_bytes_buffered,
+                      const gchar             *override_machine_id_path)
 {
   return g_object_new (EMER_TYPE_DAEMON,
                        "random-number-generator", rand,
@@ -1592,6 +1665,7 @@ emer_daemon_new_full (GRand                   *rand,
                        "permissions-provider", permissions_provider,
                        "persistent-cache", persistent_cache,
                        "max-bytes-buffered", max_bytes_buffered,
+                       "override-machine-id-path", override_machine_id_path,
                        NULL);
 }
 

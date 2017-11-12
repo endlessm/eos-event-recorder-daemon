@@ -102,6 +102,23 @@ on_set_enabled (EmerEventRecorderServer *server,
   return TRUE;
 }
 
+static gboolean
+on_reset_tracking_id (EmerEventRecorderServer *server,
+                      GDBusMethodInvocation   *invocation,
+                      EmerDaemon              *daemon)
+{
+  g_autoptr(GError) error = NULL;
+
+  if (!emer_daemon_reset_tracking_id (daemon, &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return TRUE;
+    }
+
+  emer_event_recorder_server_complete_reset_tracking_id (server, invocation);
+  return TRUE;
+}
+
 static void
 handle_upload_finished (EmerDaemon       *daemon,
                         GAsyncResult     *result,
@@ -134,6 +151,57 @@ on_upload_events (EmerEventRecorderServer *server,
   return TRUE;
 }
 
+typedef enum {
+  AUTHORIZED_METHOD_NONE = 0,
+  AUTHORIZED_METHOD_SET_ENABLED,
+  AUTHORIZED_METHOD_RESET_TRACKING_ID
+} AuthorizedMethod;
+
+static const gchar *not_authorized_error_messages[] = {
+  NULL,
+  "Disabling metrics is only allowed from system settings",
+  "Only privileged users can reset the tracking id",
+};
+static const gsize n_not_authorized_error_messages = G_N_ELEMENTS (not_authorized_error_messages);
+
+static const gchar *
+not_authorized_error_message_for_method (AuthorizedMethod method)
+{
+  gsize method_index = (gsize) method;
+
+  g_assert (method_index > 0 && method_index <= n_not_authorized_error_messages);
+
+  return not_authorized_error_messages[method_index];
+}
+
+static const gchar *authorized_method_names[] = {
+  NULL,
+  "com.endlessm.Metrics.SetEnabled",
+  "com.endlessm.Metrics.ResetTrackingId",
+};
+static const gsize n_authorized_method_names = G_N_ELEMENTS (authorized_method_names);
+
+static const gchar *
+authorized_method_name (AuthorizedMethod method)
+{
+  gsize method_index = (gsize) method;
+
+  g_assert (method_index > 0 && method_index <= n_authorized_method_names);
+
+  return authorized_method_names[method_index];
+}
+
+static AuthorizedMethod
+lookup_authorized_method_from_name (const gchar *method_name)
+{
+  if (g_strcmp0 (method_name, "SetEnabled") == 0)
+    return AUTHORIZED_METHOD_SET_ENABLED;
+  else if (g_strcmp0 (method_name, "ResetTrackingId") == 0)
+    return AUTHORIZED_METHOD_RESET_TRACKING_ID;
+
+  return AUTHORIZED_METHOD_NONE;
+}
+
 /*
  * This handler is run in a separate thread, so all operations can be
  * synchronous.
@@ -145,7 +213,9 @@ on_authorize_method_check (GDBusInterfaceSkeleton *interface,
 {
   const gchar *method_name =
     g_dbus_method_invocation_get_method_name (invocation);
-  if (strcmp (method_name, "SetEnabled") != 0)
+  AuthorizedMethod authorized_method = lookup_authorized_method_from_name (method_name);
+
+  if (authorized_method == AUTHORIZED_METHOD_NONE)
     return TRUE;
 
   GError *error = NULL;
@@ -165,7 +235,7 @@ on_authorize_method_check (GDBusInterfaceSkeleton *interface,
   PolkitAuthorizationResult *result =
     polkit_authority_check_authorization_sync (authority,
                                                subject,
-                                               "com.endlessm.Metrics.SetEnabled",
+                                               authorized_method_name (authorized_method),
                                                NULL /*PolkitDetails*/,
                                                POLKIT_CHECK_AUTHORIZATION_FLAGS_NONE,
                                                NULL /*GCancellable*/,
@@ -186,8 +256,7 @@ on_authorize_method_check (GDBusInterfaceSkeleton *interface,
     g_dbus_method_invocation_return_error (invocation,
                                            G_DBUS_ERROR,
                                            G_DBUS_ERROR_AUTH_FAILED,
-                                           "Disabling metrics is only "
-                                           "allowed from system settings");
+                                           not_authorized_error_message_for_method (authorized_method));
 
   g_object_unref (result);
   return authorized;
@@ -262,6 +331,8 @@ on_bus_acquired (GDBusConnection *system_bus,
                     G_CALLBACK (on_set_enabled), daemon);
   g_signal_connect (server, "handle-upload-events",
                     G_CALLBACK (on_upload_events), daemon);
+  g_signal_connect (server, "handle-reset-tracking-id",
+                    G_CALLBACK (on_reset_tracking_id), daemon);
   g_signal_connect (server, "g-authorize-method",
                     G_CALLBACK (on_authorize_method_check), daemon);
 

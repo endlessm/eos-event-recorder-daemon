@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=com.endlessm.MetricsSystemHelper
+Exec=/usr/libexec/eos-metrics-system-helper
+User=root

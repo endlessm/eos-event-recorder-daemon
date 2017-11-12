@@ -20,34 +20,17 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#ifndef METRICS_UTIL_H
-#define METRICS_UTIL_H
+#ifndef MOCK_MACHINE_ID_PROVIDER_H
+#define MOCK_MACHINE_ID_PROVIDER_H
+
+#include "emer-machine-id-provider.h"
 
 #include <glib.h>
-#include <uuid/uuid.h>
-
-/*
- * The number of elements in a uuid_t. uuid_t is assumed to be a fixed-length
- * array of guchar.
- */
-#define UUID_LENGTH (sizeof (uuid_t) / sizeof (guchar))
 
 G_BEGIN_DECLS
 
-guint64   swap_bytes_64_if_big_endian (guint64          value);
-
-GVariant *swap_bytes_if_big_endian    (GVariant        *variant);
-
-void      get_uuid_builder            (uuid_t           uuid,
-                                       GVariantBuilder *uuid_builder);
-
-GVariant *deep_copy_variant           (GVariant        *variant);
-
-void      destroy_variants            (GVariant       **variants,
-                                       gsize            num_variants);
-gboolean  write_tracking_id_file      (const gchar  *path,
-                                       GError      **error);
+EmerMachineIdProvider * emer_machine_id_provider_new_with_override_path (const gchar *machine_id_file_path);
 
 G_END_DECLS
 
-#endif /* METRICS_UTIL_H */
+#endif /* MOCK_PERMISSIONS_PROVIDER_H */

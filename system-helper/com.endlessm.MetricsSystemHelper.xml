@@ -1,0 +1,41 @@
+<?xml version="1.1" encoding="UTF-8"?>
+
+<!--
+Copyright 2017 Endless Mobile, Inc.
+
+This file is part of eos-metrics-event-recorder.
+
+eos-metrics is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published
+by the Free Software Foundation, either version 2.1 of the License, or
+(at your option) any later version.
+
+eos-metrics is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public
+License along with eos-metrics.  If not, see
+<http://www.gnu.org/licenses/>.
+-->
+
+<node name="/com/endlessm/MetricsSystemHelper">
+
+  <!--
+    com.endlessm.Metrics.SystemHelper:
+    @short_description: System daemon for performing privileged actions on
+                        the filesystem for the metrics daemon.
+
+    This interface describes the communication between the event recorder
+    and a system helper used to write override files.
+  -->
+  <interface name="com.endlessm.MetricsSystemHelper">
+    <!--
+      ResetTrackingId:
+
+      Write a new tracking ID to the location of the tracking-id overide path.
+    -->
+    <method name="ResetTrackingId"/>
+  </interface>
+</node>

@@ -82,7 +82,8 @@ EmerDaemon *             emer_daemon_new_full                 (GRand            
                                                                EmerNetworkSendProvider *network_send_provider,
                                                                EmerPermissionsProvider *permissions_provider,
                                                                EmerPersistentCache     *persistent_cache,
-                                                               gulong                   max_bytes_buffered);
+                                                               gulong                   max_bytes_buffered,
+                                                               const gchar             *override_machine_id_path);
 
 void                     emer_daemon_record_singular_event    (EmerDaemon              *self,
                                                                guint32                  user_id,
@@ -110,6 +111,8 @@ void                     emer_daemon_upload_events            (EmerDaemon       
 
 gboolean                 emer_daemon_upload_events_finish     (EmerDaemon              *self,
                                                                GAsyncResult            *result,
+                                                               GError                 **error);
+gboolean                 emer_daemon_reset_tracking_id        (EmerDaemon              *self,
                                                                GError                 **error);
 
 EmerPermissionsProvider *emer_daemon_get_permissions_provider (EmerDaemon              *self);

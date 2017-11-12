@@ -36,11 +36,13 @@ DAEMON_TEST_FLAGS = \
 	-DCONFIG_DIR="\"$(configdir)\"" \
 	-DPERMISSIONS_FILE="\"$(permissions_file)\"" \
 	-DPERSISTENT_CACHE_DIR="\"$(persistentcachedir)\"" \
+	-DSYSCONFDIR="\"$(sysconfdir)\"" \
 	-DTEST_DIR="\"$(srcdir)/tests/\"" \
 	$(NULL)
 DAEMON_TEST_LIBS = \
 	@EOS_EVENT_RECORDER_DAEMON_LIBS@ \
 	$(top_builddir)/shared/libeos-metrics-event-recorder-shared.la \
+	$(top_builddir)/system-helper/libeos-metrics-system-helper.la \
 	-lm
 
 tests_daemon_test_boot_id_provider_SOURCES = \

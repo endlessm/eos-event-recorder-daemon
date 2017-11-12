@@ -55,6 +55,33 @@ noinst_PROGRAMS =
 # Libraries that should be produced but not installed.
 noinst_LTLIBRARIES = 
 
+# Binaries that should be installed in libexecdir
+libexec_PROGRAMS = 
+
+substitute_libexecdir = sed \
+	-e 's|@libexecdir[@]|$(libexecdir)|g' \
+	$(NULL)
+
+# systemd service units
+#
+# Defined as systemdsystemunitdir in ../configure.ac.
+dist_systemdsystemunit_DATA = 
+
+# dbus services
+dbusservicedir = ${datadir}/dbus-1/system-services
+dist_dbusservice_DATA = 
+
+# dbus security policy
+systembussecuritypolicydir = ${sysconfdir}/dbus-1/system.d
+dist_systembussecuritypolicy_DATA = 
+
+# policykit
+policydir = ${datadir}/polkit-1/actions
+dist_policy_DATA = data/com.endlessm.Metrics.policy
+
+policyrulesdir = $(datadir)/polkit-1/rules.d
+dist_policyrules_DATA = 
+
 persistentcachedir=$(localstatedir)/cache/metrics/
 configdir=$(sysconfdir)/metrics/
 permissions_file=$(configdir)eos-metrics-permissions.conf

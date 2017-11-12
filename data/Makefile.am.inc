@@ -16,12 +16,7 @@
 ## along with eos-event-recorder-daemon.  If not, see
 ## <http://www.gnu.org/licenses/>.
 
-# Defined as systemdsystemunitdir in ../configure.ac.
-systemdsystemunit_DATA = data/eos-metrics-event-recorder.service
-
-substitute_libexecdir = sed \
-	-e 's|@libexecdir[@]|$(libexecdir)|g' \
-	$(NULL)
+systemdsystemunit_DATA += data/eos-metrics-event-recorder.service
 
 data/eos-metrics-event-recorder.service: data/eos-metrics-event-recorder.service.in
 	$(AM_V_GEN)$(MKDIR_P) data && \
@@ -29,8 +24,7 @@ data/eos-metrics-event-recorder.service: data/eos-metrics-event-recorder.service
 	$(substitute_libexecdir) $< >$@.tmp && \
 	mv $@.tmp $@
 
-dbusservicedir = ${datadir}/dbus-1/system-services
-dbusservice_DATA = data/com.endlessm.Metrics.service
+dist_dbusservice_DATA += data/com.endlessm.Metrics.service
 
 data/com.endlessm.Metrics.service: data/com.endlessm.Metrics.service.in
 	$(AM_V_GEN)$(MKDIR_P) data && \
@@ -49,11 +43,9 @@ data/eos-metrics.conf: data/eos-metrics.conf.in
 	$(substitute_metrics_files) $< >$@.tmp && \
 	mv $@.tmp $@
 
-policydir = ${datadir}/polkit-1/actions
-dist_policy_DATA = data/com.endlessm.Metrics.policy
+dist_policy_DATA += data/com.endlessm.Metrics.policy
 
-systembussecuritypolicydir = ${sysconfdir}/dbus-1/system.d
-dist_systembussecuritypolicy_DATA = data/com.endlessm.Metrics.conf
+dist_systembussecuritypolicy_DATA += data/com.endlessm.Metrics.conf
 
 dist_config_DATA = \
 	data/eos-metrics-permissions.conf \

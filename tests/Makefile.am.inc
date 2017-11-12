@@ -38,7 +38,10 @@ DAEMON_TEST_FLAGS = \
 	-DPERSISTENT_CACHE_DIR="\"$(persistentcachedir)\"" \
 	-DTEST_DIR="\"$(srcdir)/tests/\"" \
 	$(NULL)
-DAEMON_TEST_LIBS = @EOS_EVENT_RECORDER_DAEMON_LIBS@ -lm
+DAEMON_TEST_LIBS = \
+	@EOS_EVENT_RECORDER_DAEMON_LIBS@ \
+	$(top_builddir)/shared/libeos-metrics-event-recorder-shared.la \
+	-lm
 
 tests_daemon_test_boot_id_provider_SOURCES = \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
@@ -82,7 +85,6 @@ tests_daemon_test_daemon_dbusdaemon_SOURCES = \
 	tests/daemon/mock-permissions-provider.h \
 	daemon/emer-permissions-provider.h \
 	tests/daemon/mock-persistent-cache.c tests/daemon/mock-persistent-cache.h \
-	shared/metrics-util.c shared/metrics-util.h \
 	daemon/emer-types.c daemon/emer-types.h \
 	$(NULL)
 tests_daemon_test_daemon_dbusdaemon_CPPFLAGS = $(DAEMON_TEST_FLAGS)

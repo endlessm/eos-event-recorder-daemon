@@ -16,7 +16,7 @@
 ## along with eos-event-recorder-daemon.  If not, see
 ## <http://www.gnu.org/licenses/>.
 
-libexec_PROGRAMS = eos-metrics-event-recorder
+libexec_PROGRAMS += eos-metrics-event-recorder
 
 daemon_dbus_name = emer-event-recorder-server
 

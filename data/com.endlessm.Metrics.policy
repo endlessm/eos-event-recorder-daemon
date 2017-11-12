@@ -38,4 +38,14 @@
     </defaults>
   </action>
 
+  <action id="com.endlessm.Metrics.ResetTrackingId">
+    <description>Reset the tracking ID used by the metrics system</description>
+    <annotate key="org.freedesktop.policykit.owner">unix-user:metrics unix-group:metrics</annotate>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>no</allow_active>
+    </defaults>
+  </action>
+
 </policyconfig>

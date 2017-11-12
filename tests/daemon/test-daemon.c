@@ -1480,6 +1480,46 @@ test_daemon_crashes_on_non_key_file_error (Fixture      *fixture,
   g_test_trap_assert_stderr ("*oh no*");
 }
 
+static void
+test_daemon_refresh_and_reload_machine_id (Fixture       *fixture,
+                                           gconstpointer  unused)
+{
+  g_autoptr(GFileIOStream) stream = NULL;
+  g_autoptr(GError) error = NULL;
+  g_autoptr(GFile) override_machine_id_file =
+    g_file_new_tmp ("machine-id-override-XXXXXX",
+                    &stream,
+                    &error);
+  g_autofree gchar *override_machine_id_file_path =
+    g_file_get_path (override_machine_id_file);
+  uuid_t initial_machine_id;
+  uuid_t new_machine_id;
+
+  g_assert_no_error (error);
+
+  /* Get the initial machine-id for comparing against later */
+  emer_machine_id_provider_get_id (fixture->mock_machine_id_provider,
+                                   initial_machine_id);
+
+  /* Overwrite machine-id */
+  emer_daemon_reset_tracking_id (fixture->test_object, &error);
+  g_assert_no_error (error);
+
+  /* New machine id should now be different */
+  emer_machine_id_provider_get_id (fixture->mock_machine_id_provider,
+                                   new_machine_id);
+
+  g_assert (uuid_compare (initial_machine_id, new_machine_id) != 0);
+
+  /* Send some metrics using the newly created daemon. We'll assert
+   * one we receive the metrics that the received metric has the same
+   * machine-id as the one provided by the machine-id provider */
+  record_singulars (fixture->test_object);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_singulars_received);
+  wait_for_upload_to_finish (fixture);
+}
+
 gint
 main (gint                argc,
       const gchar * const argv[])
@@ -1525,6 +1565,8 @@ main (gint                argc,
                    test_daemon_flushes_to_persistent_cache_on_finalize);
   ADD_DAEMON_TEST ("/daemon/limits-network-upload-size",
                    test_daemon_limits_network_upload_size);
+  ADD_DAEMON_TEST ("/daemon/refresh-and-reload-machine-id",
+                   test_daemon_refresh_and_reload_machine_id);
 
 #undef ADD_DAEMON_TEST
 

@@ -30,8 +30,10 @@
 
 #define HYPHENS_IN_ID 4
 
-#define TESTING_FILE_PATH "/tmp/testing-machine-id"
-#define TESTING_ID        "04448f74fde24bd7a16f8da17869d5c3\n"
+#define TESTING_BASE_TEMPLATE "emer-machine-id-provider-tmp-XXXXXX"
+#define TESTING_ID                 "04448f74fde24bd7a16f8da17869d5c3\n"
+#define TESTING_OVERRIDE_ID        "d17b0fd3b28e4302bcd81ab471e06de9\n"
+#define TESTING_MALFORMED_OVERRIDE_ID        "absoluterubbish\n"
 /*
  * The expected size in bytes of the file located at
  * #EmerMachineIdProvider:path.
@@ -42,14 +44,20 @@
 #define FILE_LENGTH 33
 
 
-// Helper Functiobns
+typedef struct {
+  gchar *test_temp_path;
+  gchar *machine_id_file_path;
+  gchar *override_machine_id_file_path;
+} MachineIdTestFixture;
+
+// Helper Functions
 
 static gboolean
-write_testing_machine_id (void)
+write_testing_machine_id (const gchar *path, const gchar *id)
 {
-  GFile *file = g_file_new_for_path (TESTING_FILE_PATH);
+  GFile *file = g_file_new_for_path (path);
   gboolean success = g_file_replace_contents (file,
-                                              TESTING_ID,
+                                              id,
                                               FILE_LENGTH,
                                               NULL,
                                               FALSE,
@@ -72,25 +80,41 @@ unhyphenate_uuid (gchar *uuid_with_hyphens)
 }
 
 static void
-setup (gboolean     *unused,
-       gconstpointer dontuseme)
+setup (MachineIdTestFixture *fixture,
+       gconstpointer         dontuseme)
 {
-  g_unlink (TESTING_FILE_PATH);
-  write_testing_machine_id ();
+  g_autoptr(GError) error = NULL;
+
+  fixture->test_temp_path = g_dir_make_tmp (TESTING_BASE_TEMPLATE, &error);
+  g_assert_no_error (error);
+
+  fixture->machine_id_file_path = g_build_filename (fixture->test_temp_path,
+                                                    "machine-id",
+                                                    NULL);
+  fixture->override_machine_id_file_path = g_build_filename (fixture->test_temp_path,
+                                                             "override-machine-id",
+                                                             NULL);
+  write_testing_machine_id (fixture->machine_id_file_path, TESTING_ID);
 }
 
 static void
-teardown (gboolean     *unused,
-          gconstpointer dontuseme)
+teardown (MachineIdTestFixture *fixture,
+          gconstpointer         dontuseme)
 {
-  g_unlink (TESTING_FILE_PATH);
+  g_unlink (fixture->machine_id_file_path);
+  g_unlink (fixture->override_machine_id_file_path);
+  g_rmdir (fixture->test_temp_path);
+
+  g_free (fixture->machine_id_file_path);
+  g_free (fixture->override_machine_id_file_path);
+  g_free (fixture->test_temp_path);
 }
 
 // Testing Cases
 
 static void
-test_machine_id_provider_new_succeeds (gboolean     *unused,
-                                       gconstpointer dontuseme)
+test_machine_id_provider_new_succeeds (MachineIdTestFixture *fixture,
+                                       gconstpointer         dontuseme)
 {
   EmerMachineIdProvider *id_provider =
     emer_machine_id_provider_new ();
@@ -99,19 +123,51 @@ test_machine_id_provider_new_succeeds (gboolean     *unused,
 }
 
 static void
-test_machine_id_provider_can_get_id (gboolean     *unused,
-                                     gconstpointer dontuseme)
+test_machine_id_provider_can_get_id (MachineIdTestFixture *fixture,
+                                     gconstpointer         dontuseme)
 {
-  EmerMachineIdProvider *id_provider =
-    emer_machine_id_provider_new_full (TESTING_FILE_PATH);
+  g_autoptr(EmerMachineIdProvider) id_provider =
+    emer_machine_id_provider_new_full (fixture->machine_id_file_path,
+                                       fixture->override_machine_id_file_path);
   uuid_t id;
   g_assert (emer_machine_id_provider_get_id (id_provider, id));
   gchar unparsed_id[HYPHENS_IN_ID + FILE_LENGTH];
   uuid_unparse_lower (id, unparsed_id);
-  gchar* unhypenated_id = unhyphenate_uuid (unparsed_id);
+  g_autofree gchar* unhypenated_id = unhyphenate_uuid (unparsed_id);
   g_assert_cmpstr (TESTING_ID, ==, unhypenated_id);
-  g_free (unhypenated_id);
-  g_object_unref (id_provider);
+}
+
+static void
+test_machine_id_provider_can_get_id_override (MachineIdTestFixture *fixture,
+                                              gconstpointer         dontuseme)
+{
+  g_autoptr(EmerMachineIdProvider) id_provider =
+    emer_machine_id_provider_new_full (fixture->machine_id_file_path,
+                                       fixture->override_machine_id_file_path);
+  uuid_t id;
+  write_testing_machine_id (fixture->override_machine_id_file_path, TESTING_OVERRIDE_ID);
+  g_assert (emer_machine_id_provider_get_id (id_provider, id));
+  gchar unparsed_id[HYPHENS_IN_ID + FILE_LENGTH];
+  uuid_unparse_lower (id, unparsed_id);
+  g_autofree gchar* unhypenated_id = unhyphenate_uuid (unparsed_id);
+  g_assert_cmpstr (TESTING_OVERRIDE_ID, ==, unhypenated_id);
+}
+
+static void
+test_machine_id_provider_can_get_id_override_malformed (MachineIdTestFixture *fixture,
+                                                        gconstpointer         dontuseme)
+{
+  g_autoptr(EmerMachineIdProvider) id_provider =
+    emer_machine_id_provider_new_full (fixture->machine_id_file_path,
+                                       fixture->override_machine_id_file_path);
+  uuid_t id;
+  write_testing_machine_id (fixture->override_machine_id_file_path,
+                            TESTING_MALFORMED_OVERRIDE_ID);
+  g_assert (emer_machine_id_provider_get_id (id_provider, id));
+  gchar unparsed_id[HYPHENS_IN_ID + FILE_LENGTH];
+  uuid_unparse_lower (id, unparsed_id);
+  g_autofree gchar* unhypenated_id = unhyphenate_uuid (unparsed_id);
+  g_assert_cmpstr (TESTING_ID, ==, unhypenated_id);
 }
 
 gint
@@ -120,7 +176,7 @@ main (gint                argc,
 {
 // We are using a gboolean as a fixture type, but it will go unused.
 #define ADD_CACHE_TEST_FUNC(path, func) \
-  g_test_add((path), gboolean, NULL, setup, (func), teardown)
+  g_test_add((path), MachineIdTestFixture, NULL, setup, (func), teardown)
 
   g_test_init (&argc, (gchar ***) &argv, NULL);
 
@@ -128,6 +184,10 @@ main (gint                argc,
                        test_machine_id_provider_new_succeeds);
   ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-get-id",
                        test_machine_id_provider_can_get_id);
+  ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-get-id-override",
+                       test_machine_id_provider_can_get_id_override);
+  ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-get-id-override-malformed",
+                       test_machine_id_provider_can_get_id_override_malformed);
 
 #undef ADD_CACHE_TEST_FUNC
   return g_test_run ();

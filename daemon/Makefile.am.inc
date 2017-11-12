@@ -55,6 +55,7 @@ eos_metrics_event_recorder_CPPFLAGS = \
 	-DCONFIG_DIR="\"$(configdir)\"" \
 	-DPERMISSIONS_FILE="\"$(permissions_file)\"" \
 	-DPERSISTENT_CACHE_DIR="\"$(persistentcachedir)\"" \
+	-DSYSCONFDIR="\"$(sysconfdir)\"" \
 	$(NULL)
 
 eos_metrics_event_recorder_LDADD = \

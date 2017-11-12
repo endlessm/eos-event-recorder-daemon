@@ -36,6 +36,7 @@ DAEMON_TEST_FLAGS = \
 	-DCONFIG_DIR="\"$(configdir)\"" \
 	-DPERMISSIONS_FILE="\"$(permissions_file)\"" \
 	-DPERSISTENT_CACHE_DIR="\"$(persistentcachedir)\"" \
+	-DSYSCONFDIR="\"$(sysconfdir)\"" \
 	-DTEST_DIR="\"$(srcdir)/tests/\"" \
 	$(NULL)
 DAEMON_TEST_LIBS = \
@@ -98,6 +99,7 @@ tests_daemon_test_gzip_CPPFLAGS = $(DAEMON_TEST_FLAGS)
 tests_daemon_test_gzip_LDADD = $(DAEMON_TEST_LIBS)
 
 tests_daemon_test_machine_id_provider_SOURCES = \
+	daemon/emer-types.c daemon/emer-types.h \
 	daemon/emer-machine-id-provider.c daemon/emer-machine-id-provider.h \
 	tests/daemon/test-machine-id-provider.c \
 	$(NULL)

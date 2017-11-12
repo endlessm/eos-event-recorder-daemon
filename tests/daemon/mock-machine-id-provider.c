@@ -24,11 +24,18 @@
 
 #include <uuid/uuid.h>
 
+#include <gio/gio.h>
 #include <glib.h>
 
 #define MACHINE_ID "387c5206-24b5-4513-a34f-72689d5c0a0e"
+#define OVERRIDE_MACHINE_ID "67523704-f885-49ea-9680-450782c9dd66"
 
-G_DEFINE_TYPE (EmerMachineIdProvider, emer_machine_id_provider, G_TYPE_OBJECT)
+typedef struct EmerMachineIdProviderPrivate
+{
+  gboolean has_override;
+} EmerMachineIdProviderPrivate;
+
+G_DEFINE_TYPE_WITH_PRIVATE (EmerMachineIdProvider, emer_machine_id_provider, G_TYPE_OBJECT)
 
 static void
 emer_machine_id_provider_class_init (EmerMachineIdProviderClass *klass)
@@ -48,16 +55,30 @@ emer_machine_id_provider_new (void)
   return g_object_new (EMER_TYPE_MACHINE_ID_PROVIDER, NULL);
 }
 
-EmerMachineIdProvider *
-emer_machine_id_provider_new_full (const gchar *machine_id_file_path)
-{
-  return emer_machine_id_provider_new ();
-}
-
 gboolean
 emer_machine_id_provider_get_id (EmerMachineIdProvider *self,
                                  uuid_t                 machine_id)
 {
+  EmerMachineIdProviderPrivate *priv =
+    emer_machine_id_provider_get_instance_private (self);
+
+  /* Try to read the override file first if we have one */
+  if (priv->has_override)
+    {
+      g_assert_cmpint (uuid_parse (OVERRIDE_MACHINE_ID, machine_id), ==, 0);
+      return TRUE;
+    }
+
   g_assert_cmpint (uuid_parse (MACHINE_ID, machine_id), ==, 0);
+  return TRUE;
+}
+
+gboolean
+emer_machine_id_provider_reset_tracking_id (EmerMachineIdProvider  *self,
+                                            GError                **error)
+{
+  EmerMachineIdProviderPrivate *priv =
+    emer_machine_id_provider_get_instance_private (self);
+  priv->has_override = TRUE;
   return TRUE;
 }

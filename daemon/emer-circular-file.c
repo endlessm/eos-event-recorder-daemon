@@ -477,7 +477,7 @@ emer_circular_file_initable_init (GInitable    *initable,
   g_object_unref (data_file_output_stream);
 
   priv->metadata_key_file = g_key_file_new ();
-  GError *local_error = NULL;
+  g_autoptr(GError) local_error = NULL;
   gboolean load_succeeded =
     g_key_file_load_from_file (priv->metadata_key_file, priv->metadata_filepath,
                                G_KEY_FILE_NONE, &local_error);
@@ -486,7 +486,7 @@ emer_circular_file_initable_init (GInitable    *initable,
       if (!g_error_matches (local_error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
         goto handle_failed_read;
 
-      g_error_free (local_error);
+      g_clear_error (&local_error);
       g_key_file_set_uint64 (priv->metadata_key_file, METADATA_GROUP_NAME,
                              MAX_SIZE_KEY, priv->max_size);
       return set_metadata (self, 0, 0, error);
@@ -530,7 +530,7 @@ emer_circular_file_initable_init (GInitable    *initable,
   return resize (self, prev_max_size, error);
 
 handle_failed_read:
-  g_propagate_error (error, local_error);
+  g_propagate_error (error, g_steal_pointer (&local_error));
   return FALSE;
 }
 

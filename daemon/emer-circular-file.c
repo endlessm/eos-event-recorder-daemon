@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2015 Endless Mobile, Inc. */
+/* Copyright 2015-2017 Endless Mobile, Inc. */
 
 /*
  * This file is part of eos-event-recorder-daemon.
@@ -36,6 +36,7 @@ typedef struct _EmerCircularFilePrivate
 {
   GFile *data_file;
   GKeyFile *metadata_key_file;
+  gchar *metadata_filepath;
 
   GByteArray *write_buffer;
 
@@ -60,20 +61,6 @@ enum
 
 static GParamSpec *emer_circular_file_props[NPROPS] = { NULL, };
 
-static gchar *
-get_metadata_filepath (EmerCircularFile *self)
-{
-  EmerCircularFilePrivate *priv =
-    emer_circular_file_get_instance_private (self);
-
-  gchar *data_filepath = g_file_get_path (priv->data_file);
-  gchar *metadata_filepath =
-    g_strconcat (data_filepath, METADATA_EXTENSION, NULL);
-  g_free (data_filepath);
-
-  return metadata_filepath;
-}
-
 static gboolean
 save_metadata_file (EmerCircularFile *self,
                     GError          **error)
@@ -81,12 +68,8 @@ save_metadata_file (EmerCircularFile *self,
   EmerCircularFilePrivate *priv =
     emer_circular_file_get_instance_private (self);
 
-  gchar *metadata_filepath = get_metadata_filepath (self);
-  gboolean save_succeeded =
-    g_key_file_save_to_file (priv->metadata_key_file, metadata_filepath, error);
-  g_free (metadata_filepath);
-
-  return save_succeeded;
+  return g_key_file_save_to_file (priv->metadata_key_file,
+                                  priv->metadata_filepath, error);
 }
 
 static gboolean
@@ -386,6 +369,8 @@ set_path (EmerCircularFile *self,
     emer_circular_file_get_instance_private (self);
 
   priv->data_file = g_file_new_for_path (data_filepath);
+  priv->metadata_filepath =
+    g_strconcat (data_filepath, METADATA_EXTENSION, NULL);
 }
 
 static void
@@ -430,6 +415,7 @@ emer_circular_file_finalize (GObject *object)
 
   g_clear_object (&priv->data_file);
   g_clear_pointer (&priv->metadata_key_file, g_key_file_unref);
+  g_clear_pointer (&priv->metadata_filepath, g_free);
   g_clear_pointer (&priv->write_buffer, g_byte_array_unref);
 
   G_OBJECT_CLASS (emer_circular_file_parent_class)->finalize (object);
@@ -490,13 +476,11 @@ emer_circular_file_initable_init (GInitable    *initable,
 
   g_object_unref (data_file_output_stream);
 
-  gchar *metadata_filepath = get_metadata_filepath (self);
   priv->metadata_key_file = g_key_file_new ();
   GError *local_error = NULL;
   gboolean load_succeeded =
-    g_key_file_load_from_file (priv->metadata_key_file, metadata_filepath,
+    g_key_file_load_from_file (priv->metadata_key_file, priv->metadata_filepath,
                                G_KEY_FILE_NONE, &local_error);
-  g_free (metadata_filepath);
   if (!load_succeeded)
     {
       if (!g_error_matches (local_error, G_FILE_ERROR, G_FILE_ERROR_NOENT))

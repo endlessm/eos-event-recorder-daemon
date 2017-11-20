@@ -30,6 +30,7 @@
 #include "emer-boot-id-provider.h"
 #include "emer-cache-size-provider.h"
 #include "emer-cache-version-provider.h"
+#include "mock-circular-file.h"
 #include "shared/metrics-util.h"
 
 #define TEST_DIRECTORY "/tmp/metrics_testing/"
@@ -133,25 +134,32 @@ setup (gboolean     *unused,
 }
 
 static EmerPersistentCache *
-make_testing_cache (void)
+make_testing_cache_full (gboolean reinitialize_cache,
+                         GError **error)
 {
-  EmerCacheSizeProvider *cache_size_provider =
+  g_autoptr(EmerCacheSizeProvider) cache_size_provider =
     emer_cache_size_provider_new_full (TEST_DIRECTORY TEST_CACHE_SIZE_FILE);
-  EmerBootIdProvider *boot_id_provider =
+  g_autoptr(EmerBootIdProvider) boot_id_provider =
     emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
-  EmerCacheVersionProvider *cache_version_provider =
+  g_autoptr(EmerCacheVersionProvider) cache_version_provider =
     emer_cache_version_provider_new (NULL);
-  GError *error = NULL;
+
   EmerPersistentCache *cache =
     emer_persistent_cache_new_full (TEST_DIRECTORY, cache_size_provider,
                                     boot_id_provider, cache_version_provider,
-                                    TEST_UPDATE_OFFSET_INTERVAL, &error);
+                                    TEST_UPDATE_OFFSET_INTERVAL,
+                                    reinitialize_cache, error);
+  return cache;
+}
+
+static EmerPersistentCache *
+make_testing_cache (void)
+{
+  g_autoptr(GError) error = NULL;
+  EmerPersistentCache *cache = make_testing_cache_full (FALSE, &error);
+
   g_assert_no_error (error);
   g_assert_nonnull (cache);
-
-  g_object_unref (cache_size_provider);
-  g_object_unref (boot_id_provider);
-  g_object_unref (cache_version_provider);
 
   return cache;
 }
@@ -594,7 +602,8 @@ test_persistent_cache_store_when_full (gboolean     *unused,
   EmerPersistentCache *cache =
     emer_persistent_cache_new_full (TEST_DIRECTORY, cache_size_provider,
                                     boot_id_provider, cache_version_provider,
-                                    TEST_UPDATE_OFFSET_INTERVAL, &error);
+                                    TEST_UPDATE_OFFSET_INTERVAL, FALSE,
+                                    &error);
   g_assert_no_error (error);
   g_assert_nonnull (cache);
 
@@ -809,7 +818,8 @@ test_persistent_cache_purges_when_out_of_date (gboolean     *unused,
   EmerPersistentCache *cache =
     emer_persistent_cache_new_full (TEST_DIRECTORY, cache_size_provider,
                                     boot_id_provider, cache_version_provider,
-                                    TEST_UPDATE_OFFSET_INTERVAL, &error);
+                                    TEST_UPDATE_OFFSET_INTERVAL, FALSE,
+                                    &error);
   g_assert_no_error (error);
   g_assert_nonnull (cache);
 
@@ -1079,6 +1089,42 @@ test_persistent_cache_can_build_boot_metadata_file (gboolean     *unused,
   g_object_unref (cache);
 }
 
+/* Ensures that errors from emer_circular_file_new() are propagated. */
+static void
+test_persistent_cache_propagates_circular_file_error (gboolean     *unused,
+                                                      gconstpointer dontuseme)
+{
+  g_autoptr(GError) construct_error =
+    g_error_new (G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_PARSE, "oh no");
+  g_autoptr(GError) error = NULL;
+  EmerPersistentCache *cache = NULL;
+
+  mock_circular_file_set_construct_error (construct_error);
+
+  cache = make_testing_cache_full (FALSE, &error);
+  g_assert_null (cache);
+  g_assert_error (error, construct_error->domain, construct_error->code);
+
+  mock_circular_file_set_construct_error (NULL);
+}
+
+/* Ensures that the 'reinitialize' flag is passed on to
+ * emer_circular_file_new().
+ */
+static void
+test_persistent_cache_propagates_reinitialize (gboolean     *unused,
+                                               gconstpointer dontuseme)
+{
+  g_autoptr(GError) error = NULL;
+  EmerPersistentCache *cache = NULL;
+
+  cache = make_testing_cache_full (TRUE, &error);
+  g_assert_no_error (error);
+  g_assert_nonnull (cache);
+
+  g_assert_true (mock_circular_file_got_reinitialize ());
+}
+
 gint
 main (gint                argc,
       const gchar * const argv[])
@@ -1133,6 +1179,10 @@ main (gint                argc,
                        test_persistent_cache_updates_timestamps_on_finalize);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/get-offset-can-build-boot-metadata-file",
                        test_persistent_cache_can_build_boot_metadata_file);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/propagates-circular-file-error",
+                       test_persistent_cache_propagates_circular_file_error);
+  ADD_CACHE_TEST_FUNC ("/persistent-cache/propagates-reinitialize",
+                       test_persistent_cache_propagates_reinitialize);
 #undef ADD_CACHE_TEST_FUNC
 
   return g_test_run ();

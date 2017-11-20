@@ -123,7 +123,8 @@ tests_daemon_test_persistent_cache_SOURCES = \
 	daemon/emer-cache-size-provider.c daemon/emer-cache-size-provider.h \
 	tests/daemon/mock-cache-version-provider.c \
 	daemon/emer-cache-version-provider.h \
-	tests/daemon/mock-circular-file.c daemon/emer-circular-file.h \
+	tests/daemon/mock-circular-file.c tests/daemon/mock-circular-file.h \
+	daemon/emer-circular-file.h \
 	shared/metrics-util.c shared/metrics-util.h \
 	$(NULL)
 tests_daemon_test_persistent_cache_CPPFLAGS = $(DAEMON_TEST_FLAGS)

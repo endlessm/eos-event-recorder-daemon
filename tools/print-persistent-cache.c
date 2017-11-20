@@ -96,7 +96,7 @@ make_persistent_cache (const gchar *directory)
 {
   GError *error = NULL;
   EmerPersistentCache *persistent_cache =
-    emer_persistent_cache_new (directory, &error);
+    emer_persistent_cache_new (directory, FALSE, &error);
 
   if (persistent_cache == NULL)
     {

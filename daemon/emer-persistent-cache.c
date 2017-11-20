@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2014 - 2016 Endless Mobile, Inc. */
+/* Copyright 2014-2017 Endless Mobile, Inc. */
 
 /*
  * This file is part of eos-event-recorder-daemon.
@@ -66,6 +66,8 @@ typedef struct _EmerPersistentCachePrivate
   gboolean boot_id_initialized;
 
   GKeyFile *boot_offset_key_file;
+
+  gboolean reinitialize_cache;
 } EmerPersistentCachePrivate;
 
 static void emer_persistent_cache_initable_iface_init (GInitableIface *iface);
@@ -111,6 +113,7 @@ enum
   PROP_BOOT_ID_PROVIDER,
   PROP_CACHE_VERSION_PROVIDER,
   PROP_BOOT_OFFSET_UPDATE_INTERVAL,
+  PROP_REINITIALIZE_CACHE,
   NPROPS
 };
 
@@ -735,6 +738,8 @@ emer_persistent_cache_set_property (GObject      *object,
                                     GParamSpec   *pspec)
 {
   EmerPersistentCache *self = EMER_PERSISTENT_CACHE (object);
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
 
   switch (property_id)
     {
@@ -756,6 +761,10 @@ emer_persistent_cache_set_property (GObject      *object,
 
     case PROP_BOOT_OFFSET_UPDATE_INTERVAL:
       set_boot_offset_update_interval (self, g_value_get_uint (value));
+      break;
+
+    case PROP_REINITIALIZE_CACHE:
+      priv->reinitialize_cache = g_value_get_boolean (value);
       break;
 
     default:
@@ -845,6 +854,16 @@ emer_persistent_cache_class_init (EmerPersistentCacheClass *klass)
                        0, G_MAXUINT, DEFAULT_BOOT_TIMESTAMPS_UPDATE,
                        G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
+  /* Blurb string is good enough default documentation for this. */
+  emer_persistent_cache_props[PROP_REINITIALIZE_CACHE] =
+    g_param_spec_boolean ("reinitialize-cache", "Reinitialize cache",
+                          "Reinitialize the underlying EmerCircularFile. See "
+                          "EmerCircularFile:reinitialize for why this might "
+                          "be necessary.",
+                          FALSE,
+                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY |
+                          G_PARAM_STATIC_STRINGS);
+
   g_object_class_install_properties (object_class, NPROPS,
                                      emer_persistent_cache_props);
 }
@@ -878,13 +897,13 @@ emer_persistent_cache_initable_init (GInitable    *initable,
       return FALSE;
     }
 
-  gchar *variant_file_path =
+  g_autofree gchar *variant_file_path =
     g_build_filename (priv->cache_directory, VARIANT_FILENAME, NULL);
   guint64 max_cache_size =
     emer_cache_size_provider_get_max_cache_size (priv->cache_size_provider);
   priv->variant_file =
-    emer_circular_file_new (variant_file_path, max_cache_size, FALSE, error);
-  g_free (variant_file_path);
+    emer_circular_file_new (variant_file_path, max_cache_size,
+                            priv->reinitialize_cache, error);
   if (priv->variant_file == NULL)
     return FALSE;
 
@@ -911,12 +930,14 @@ emer_persistent_cache_initable_iface_init (GInitableIface *iface)
  */
 EmerPersistentCache *
 emer_persistent_cache_new (const gchar *directory,
+                           gboolean     reinitialize_cache,
                            GError     **error)
 {
   return g_initable_new (EMER_TYPE_PERSISTENT_CACHE,
                          NULL /* GCancellable */,
                          error,
                          "cache-directory", directory,
+                         "reinitialize-cache", reinitialize_cache,
                          NULL);
 }
 
@@ -929,6 +950,7 @@ emer_persistent_cache_new_full (const gchar              *directory,
                                 EmerBootIdProvider       *boot_id_provider,
                                 EmerCacheVersionProvider *cache_version_provider,
                                 guint                     boot_offset_update_interval,
+                                gboolean                  reinitialize_cache,
                                 GError                  **error)
 {
   return g_initable_new (EMER_TYPE_PERSISTENT_CACHE,
@@ -939,6 +961,7 @@ emer_persistent_cache_new_full (const gchar              *directory,
                          "boot-id-provider", boot_id_provider,
                          "cache-version-provider", cache_version_provider,
                          "boot-offset-update-interval", boot_offset_update_interval,
+                         "reinitialize-cache", reinitialize_cache,
                          NULL);
 }
 

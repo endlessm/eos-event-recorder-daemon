@@ -26,6 +26,9 @@
 
 #include <glib.h>
 
+static GError *mock_circular_file_construct_error = NULL;
+static gboolean mock_circular_file_reinitialize = FALSE;
+
 typedef struct _EmerCircularFilePrivate
 {
   guint8 *buffer;
@@ -64,6 +67,8 @@ emer_circular_file_set_property (GObject      *object,
                                  GParamSpec   *pspec)
 {
   EmerCircularFile *self = EMER_CIRCULAR_FILE (object);
+  EmerCircularFilePrivate *priv =
+    emer_circular_file_get_instance_private (self);
 
   switch (property_id)
     {
@@ -119,6 +124,15 @@ emer_circular_file_new (const gchar *path,
                         gboolean     reinitialize,
                         GError     **error)
 {
+  mock_circular_file_reinitialize = reinitialize;
+
+  if (mock_circular_file_construct_error != NULL)
+    {
+      g_propagate_error (error,
+                         g_steal_pointer (&mock_circular_file_construct_error));
+      return NULL;
+    }
+
   return g_object_new (EMER_TYPE_CIRCULAR_FILE,
                        "max-size", max_size,
                        NULL);
@@ -229,4 +243,21 @@ emer_circular_file_purge (EmerCircularFile *self,
 
   priv->saved_size = 0;
   return TRUE;
+}
+
+/* Sets an error to raise from the next call to emer_circular_file_new().
+ */
+void
+mock_circular_file_set_construct_error (const GError *error)
+{
+  g_clear_error (&mock_circular_file_construct_error);
+
+  if (error != NULL)
+    mock_circular_file_construct_error = g_error_copy (error);
+}
+
+gboolean
+mock_circular_file_got_reinitialize ()
+{
+  return mock_circular_file_reinitialize;
 }

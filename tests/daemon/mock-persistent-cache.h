@@ -33,6 +33,8 @@ G_BEGIN_DECLS
 #define MAX_NUM_VARIANTS 10
 
 gboolean             mock_persistent_cache_is_empty             (EmerPersistentCache      *self);
+void                 mock_persistent_cache_set_construct_error  (const GError             *error);
+gboolean             mock_persistent_cache_get_reinitialize     (EmerPersistentCache      *self);
 
 G_END_DECLS
 

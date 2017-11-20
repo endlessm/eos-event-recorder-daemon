@@ -27,8 +27,11 @@
 
 #include "shared/metrics-util.h"
 
+static GError *mock_persistent_cache_construct_error = NULL;
+
 typedef struct _EmerPersistentCachePrivate
 {
+  gboolean reinitialize_cache;
   GPtrArray *variant_array;
 } EmerPersistentCachePrivate;
 
@@ -66,9 +69,22 @@ emer_persistent_cache_class_init (EmerPersistentCacheClass *klass)
 
 EmerPersistentCache *
 emer_persistent_cache_new (const gchar *directory,
+                           gboolean     reinitialize_cache,
                            GError     **error)
 {
-  return g_object_new (EMER_TYPE_PERSISTENT_CACHE, NULL);
+  if (mock_persistent_cache_construct_error != NULL)
+    {
+      g_propagate_error (error,
+                         g_steal_pointer (&mock_persistent_cache_construct_error));
+      return NULL;
+    }
+
+  EmerPersistentCache *self = g_object_new (EMER_TYPE_PERSISTENT_CACHE, NULL);
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  priv->reinitialize_cache = reinitialize_cache;
+  return self;
 }
 
 EmerPersistentCache *
@@ -77,6 +93,7 @@ emer_persistent_cache_new_full (const gchar              *directory,
                                 EmerBootIdProvider       *boot_id_provider,
                                 EmerCacheVersionProvider *version_provider,
                                 guint                     boot_offset_update_interval,
+                                gboolean                  reinitialize_cache,
                                 GError                  **error)
 {
   g_assert_not_reached ();
@@ -199,4 +216,24 @@ mock_persistent_cache_is_empty (EmerPersistentCache *self)
     emer_persistent_cache_get_instance_private (self);
 
   return priv->variant_array->len == 0;
+}
+
+/* Sets an error to raise from the next call to emer_persistent_cache_new().
+ */
+void
+mock_persistent_cache_set_construct_error (const GError *error)
+{
+  g_clear_error (&mock_persistent_cache_construct_error);
+
+  if (error != NULL)
+    mock_persistent_cache_construct_error = g_error_copy (error);
+}
+
+gboolean
+mock_persistent_cache_get_reinitialize (EmerPersistentCache *self)
+{
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
+
+  return priv->reinitialize_cache;
 }

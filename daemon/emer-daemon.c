@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2014 - 2016 Endless Mobile, Inc. */
+/* Copyright 2014-2017 Endless Mobile, Inc. */
 
 /*
  * This file is part of eos-event-recorder-daemon.
@@ -120,6 +120,11 @@
  * the number of valid elements found and the number of bytes read.
  */
 #define CACHE_HAS_INVALID_ELEMENTS_EVENT_ID "cbfbcbdb-6af2-f1db-9e11-6cc25846e296"
+
+/* The persistent cache metadata was corrupt, so the cache was re-initialized
+ * (discarding all events). The event has no (meaningful) payload.
+ */
+#define CACHE_METADATA_IS_CORRUPT_EVENT_ID "f0e8a206-3bc2-405e-90d0-ef6fe6dd7edc"
 
 typedef struct _NetworkCallbackData
 {
@@ -1254,9 +1259,29 @@ emer_daemon_constructed (GObject *object)
 
   if (priv->persistent_cache == NULL)
     {
-      GError *error = NULL;
+      g_autoptr(GError) error = NULL;
+
       priv->persistent_cache =
-        emer_persistent_cache_new (priv->persistent_cache_directory, &error);
+        emer_persistent_cache_new (priv->persistent_cache_directory, FALSE,
+                                   &error);
+
+      if (priv->persistent_cache == NULL &&
+          error != NULL && error->domain == G_KEY_FILE_ERROR)
+        {
+          g_warning ("Persistent cache metadata in %s was corrupt: %s",
+                     priv->persistent_cache_directory,
+                     error->message);
+          report_invalid_data_in_cache (self,
+                                        CACHE_METADATA_IS_CORRUPT_EVENT_ID,
+                                        NULL);
+          g_clear_error (&error);
+
+          g_message ("Attempting to reinitialize the persistent cache");
+          priv->persistent_cache =
+            emer_persistent_cache_new (priv->persistent_cache_directory, TRUE,
+                                       &error);
+        }
+
       if (priv->persistent_cache == NULL)
         g_error ("Could not create persistent cache in %s: %s.",
                  priv->persistent_cache_directory, error->message);

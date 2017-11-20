@@ -117,7 +117,7 @@ terminate_subprocess_and_wait (GSubprocess *subprocess)
    * Make sure it was the SIGTERM that finished the process, and not something
    * else.
    */
-  GError *error = NULL;
+  g_autoptr(GError) error = NULL;
   g_assert_false (g_subprocess_wait_check (subprocess, NULL, &error));
   g_assert_error (error, G_SPAWN_ERROR, G_SPAWN_ERROR_FAILED);
   g_assert_cmpstr (error->message, ==, "Child process killed by signal 15");
@@ -977,12 +977,12 @@ teardown (Fixture      *fixture,
           gconstpointer unused)
 {
   g_clear_object (&fixture->test_object);
-  g_object_unref (fixture->mock_machine_id_provider);
-  g_object_unref (fixture->mock_network_send_provider);
-  g_object_unref (fixture->mock_permissions_provider);
-  g_object_unref (fixture->mock_persistent_cache);
-  terminate_subprocess_and_wait (fixture->mock_server);
-  g_free (fixture->server_uri);
+  g_clear_object (&fixture->mock_machine_id_provider);
+  g_clear_object (&fixture->mock_network_send_provider);
+  g_clear_object (&fixture->mock_permissions_provider);
+  g_clear_object (&fixture->mock_persistent_cache);
+  g_clear_pointer (&fixture->mock_server, terminate_subprocess_and_wait);
+  g_clear_pointer (&fixture->server_uri, g_free);
 }
 
 // Unit Tests next:

@@ -34,22 +34,6 @@
 #define CACHE_SIZE_GROUP "persistent_cache_size"
 #define MAX_CACHE_SIZE_KEY "maximum"
 
-static void
-write_cache_size (GKeyFile              *key_file,
-                  const gchar           *path,
-                  guint64                max_cache_size)
-{
-  g_key_file_set_uint64 (key_file, CACHE_SIZE_GROUP,
-                         MAX_CACHE_SIZE_KEY, max_cache_size);
-
-  g_autoptr(GError) error = NULL;
-  if (!g_key_file_save_to_file (key_file, path, &error));
-    {
-      g_warning ("Failed to write default cache size file to %s. Error: %s.",
-                 path, error->message);
-    }
-}
-
 /*
  * emer_cache_size_provider_get_max_cache_size:
  * @path: (allow-none): the path to the file where the maximum persistent
@@ -57,8 +41,8 @@ write_cache_size (GKeyFile              *key_file,
  *
  * Returns the maximum persistent cache size in bytes. If @path is %NULL, it
  * defaults to DEFAULT_CACHE_SIZE_FILE_PATH. If the underlying configuration
- * file doesn't exist yet, it is created with a default value of
- * DEFAULT_MAX_CACHE_SIZE.
+ * file doesn't exist yet, or is corrupt, it is recreated with a default value
+ * of DEFAULT_MAX_CACHE_SIZE.
  */
 guint64
 emer_cache_size_provider_get_max_cache_size (const gchar *path)
@@ -71,24 +55,38 @@ emer_cache_size_provider_get_max_cache_size (const gchar *path)
   if (path == NULL)
     path = DEFAULT_CACHE_SIZE_FILE_PATH;
 
-  if (!g_key_file_load_from_file (key_file, path, G_KEY_FILE_NONE,
+  if (g_key_file_load_from_file (key_file, path, G_KEY_FILE_NONE,
                                   &error))
     {
-      if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
-        goto handle_failed_read;
-
-      g_clear_error (&error);
-      write_cache_size (key_file, path, DEFAULT_MAX_CACHE_SIZE);
+      cache_size = g_key_file_get_uint64 (key_file, CACHE_SIZE_GROUP,
+                                          MAX_CACHE_SIZE_KEY, &error);
     }
 
-  cache_size = g_key_file_get_uint64 (key_file, CACHE_SIZE_GROUP,
-                                      MAX_CACHE_SIZE_KEY, &error);
   if (error != NULL)
-    goto handle_failed_read;
+    {
+      /* If the file doesn't exist, silently create it. If the key is missing,
+       * silently add it. Otherwise, something was badly wrong with the file:
+       */
+      if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT) &&
+          !g_error_matches (error, G_KEY_FILE_ERROR,
+                            G_KEY_FILE_ERROR_GROUP_NOT_FOUND) &&
+          !g_error_matches (error, G_KEY_FILE_ERROR,
+                            G_KEY_FILE_ERROR_KEY_NOT_FOUND))
+        {
+          g_warning ("Error reading cache size from %s: %s", path,
+                     error->message);
+        }
+      g_clear_error (&error);
+
+      cache_size = DEFAULT_MAX_CACHE_SIZE;
+      g_key_file_set_uint64 (key_file, CACHE_SIZE_GROUP,
+                             MAX_CACHE_SIZE_KEY, cache_size);
+      if (!g_key_file_save_to_file (key_file, path, &error))
+        {
+          g_warning ("Failed to write default cache size file to %s. Error: %s.",
+                     path, error->message);
+        }
+    }
 
   return cache_size;
-
-handle_failed_read:
-  g_warning ("Failed to read from cache size file. Error: %s.", error->message);
-  return 0;
 }

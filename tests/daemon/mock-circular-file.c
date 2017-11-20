@@ -116,6 +116,7 @@ emer_circular_file_class_init (EmerCircularFileClass *klass)
 EmerCircularFile *
 emer_circular_file_new (const gchar *path,
                         guint64      max_size,
+                        gboolean     reinitialize,
                         GError     **error)
 {
   return g_object_new (EMER_TYPE_CIRCULAR_FILE,

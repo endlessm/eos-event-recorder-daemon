@@ -104,7 +104,9 @@ make_circular_file (Fixture *fixture,
 {
   GError *error = NULL;
   EmerCircularFile *circular_file =
-    emer_circular_file_new (fixture->data_file_path, max_size, &error);
+    emer_circular_file_new (fixture->data_file_path, max_size,
+                            FALSE /* reinitialize */,
+                            &error);
 
   g_assert_no_error (error);
   g_assert_nonnull (circular_file);
@@ -609,11 +611,235 @@ test_circular_file_shrink (Fixture      *fixture,
   g_object_unref (circular_file_2);
 }
 
+static void
+assert_circular_file_works_after_recovery (Fixture          *fixture,
+                                           EmerCircularFile *circular_file,
+                                           const gsize       max_size)
+{
+  /* Verify that the file is logically empty, even though it's physically full
+   * of asterisks.
+   */
+  const gchar * const NO_STRINGS[0];
+  guint64 token = assert_strings_read (circular_file, NO_STRINGS, 0);
+  g_assert_false (emer_circular_file_has_more (circular_file, token));
+
+  /* Adding new entries to the file and reading them back should work. */
+  const gchar * const STRINGS[] = { "Kendal Mint Cake" };
+  gsize NUM_STRINGS = G_N_ELEMENTS (STRINGS);
+  assert_strings_saved (circular_file, STRINGS, NUM_STRINGS);
+  assert_strings_read (circular_file, STRINGS, NUM_STRINGS);
+
+  /* Reloading the file should work, and the entry we just added should be
+   * readable.
+   */
+  g_autoptr(GError) error = NULL;
+  g_autoptr(EmerCircularFile) reloaded =
+    emer_circular_file_new (fixture->data_file_path, max_size,
+                            FALSE /* reinitialize */,
+                            &error);
+  g_assert_no_error (error);
+  g_assert_nonnull (circular_file);
+
+  assert_strings_read (circular_file, STRINGS, NUM_STRINGS);
+}
+
+/* Helper for test cases where the metadata file exists but has empty contents,
+ * morally equivalent to not existing at all.
+ */
+static void
+test_circular_file_emptyish_metadata_file (Fixture      *fixture,
+                                           const gchar  *metadata_file_contents,
+                                           gssize        metadata_file_length)
+{
+  const gsize max_size = 1024;
+  g_autofree gchar *data_file_contents = g_malloc (max_size);
+  g_autofree gchar *metadata_file_path =
+    g_strconcat (fixture->data_file_path, METADATA_EXTENSION, NULL);
+  g_autoptr(GError) error = NULL;
+  gboolean ret;
+
+  /* Fill the data file with junk. */
+  memset (data_file_contents, '*', max_size);
+  ret = g_file_set_contents (fixture->data_file_path, data_file_contents,
+                             max_size, &error);
+  g_assert_no_error (error);
+  g_assert_true (ret);
+
+  /* Initialize the metadata file to the desired incorrect contents */
+  ret = g_file_set_contents (metadata_file_path, metadata_file_contents,
+                             metadata_file_length, &error);
+  g_assert_no_error (error);
+  g_assert_true (ret);
+
+  /* The file should load successfully */
+  g_autoptr(EmerCircularFile) circular_file =
+    emer_circular_file_new (fixture->data_file_path, max_size,
+                            FALSE /* reinitialize */,
+                            &error);
+  g_assert_no_error (error);
+  g_assert_nonnull (circular_file);
+
+  assert_circular_file_works_after_recovery (fixture, circular_file, max_size);
+}
+
+static void
+test_circular_file_metadata_file_nul_bytes (Fixture      *fixture,
+                                            gconstpointer unused)
+{
+  gssize length = 43;
+  g_autofree gchar *contents = g_malloc0 (length);
+
+  /* To summarize this bug: we observed a metadata file containing 43 NUL
+   * bytes. The initial metadata keyfile, if properly written, is 43 bytes
+   * long. This happens because g_file_set_contents() followed by a system
+   * crash can leave the target file in a state where the file has been
+   * allocated but its contents not committed, if and only if the file didn't
+   * previously exist or was empty.
+   *
+   * https://bugzilla.gnome.org/show_bug.cgi?id=790638
+   *
+   * A reasonable recovery path is to re-initialize the metadata, assuming no
+   * events had previously been stored. This is a safe assumption because if
+   * events *had* been written to the file, g_file_set_contents() would have
+   * been called a second time; this time, the target file would have already
+   * been non-empty, so g_file_set_contents() would have fsynced() the
+   * temporary file before rename(), which provides the expected "old or new"
+   * guarantee after a crash.
+   */
+  g_test_bug ("T19953");
+
+  test_circular_file_emptyish_metadata_file (fixture, contents, length);
+}
+
+static void
+test_circular_file_metadata_file_empty (Fixture      *fixture,
+                                        gconstpointer unused)
+{
+  /* If the metadata file exists but is empty, we should initialize it and
+   * consider the circular file itself to be empty. In particular, if glib is
+   * compiled without fallocate() or the call within g_file_set_contents()
+   * fails, this is what we'd observe in the crash-after-first-write case.
+   */
+  test_circular_file_emptyish_metadata_file (fixture, "", 0);
+}
+
+/* Helper for tests where the metadata file is actively malformed, not just
+ * morally empty. In these cases it is not safe to assume that there was no
+ * previous data in the circular file. While the surrounding daemon will want
+ * to recover by reinitializing the circular file, it needs to be able to
+ * detect this case so we can report a "circular file corrupt" event.
+ */
+static void
+test_circular_file_broken_metadata_file (Fixture      *fixture,
+                                         const gchar  *metadata_file_contents,
+                                         gssize        metadata_file_length,
+                                         GKeyFileError expected_error_code)
+{
+  const gsize max_size = 1024;
+  g_autofree gchar *data_file_contents = g_malloc (max_size);
+  g_autofree gchar *metadata_file_path =
+    g_strconcat (fixture->data_file_path, METADATA_EXTENSION, NULL);
+  g_autoptr(GError) error = NULL;
+  gboolean ret;
+
+  /* Fill the data file with junk. */
+  memset (data_file_contents, '*', max_size);
+  ret = g_file_set_contents (fixture->data_file_path, data_file_contents,
+                             max_size, &error);
+  g_assert_no_error (error);
+  g_assert_true (ret);
+
+  /* Initialize the metadata file to the desired incorrect contents */
+  ret = g_file_set_contents (metadata_file_path, metadata_file_contents,
+                             metadata_file_length, &error);
+  g_assert_no_error (error);
+  g_assert_true (ret);
+
+  g_autoptr(EmerCircularFile) circular_file = NULL;
+
+  /* Attempting to load the file with reinitialize=FALSE should fail, with the
+   * given error code.
+   */
+  circular_file = emer_circular_file_new (fixture->data_file_path, max_size,
+                                          FALSE /* reinitialize */,
+                                          &error);
+  g_assert_null (circular_file);
+  g_assert_error (error, G_KEY_FILE_ERROR, expected_error_code);
+  g_clear_error (&error);
+
+  /* Re-initializing the file should work, though. */
+  circular_file = emer_circular_file_new (fixture->data_file_path, max_size,
+                                          TRUE /* reinitialize */,
+                                          &error);
+  g_assert_no_error (error);
+  g_assert_nonnull (circular_file);
+
+  assert_circular_file_works_after_recovery (fixture, circular_file, max_size);
+}
+
+static void
+test_circular_file_metadata_file_junk (Fixture      *fixture,
+                                       gconstpointer unused)
+{
+  gssize length = 43;
+  gchar contents[length];
+
+  /* Totally broken! */
+  memset (contents, '!', length);
+
+  test_circular_file_broken_metadata_file (fixture, contents, length,
+                                           G_KEY_FILE_ERROR_PARSE);
+}
+
+static void
+test_circular_file_metadata_file_missing_max_size (Fixture      *fixture,
+                                                   gconstpointer unused)
+{
+  const gchar contents[] = "[metadata]\nsize=1024\nhead=0\n";
+  const gssize length = sizeof contents;
+
+  /* max_size is missing; just assume the file is empty, since this will never
+   * happen in practice without other keys also being missing unless someone
+   * edits the file by hand and then you get to keep both pieces.
+   */
+  test_circular_file_broken_metadata_file (fixture, contents, length,
+                                           G_KEY_FILE_ERROR_KEY_NOT_FOUND);
+}
+
+static void
+test_circular_file_metadata_file_missing_size (Fixture      *fixture,
+                                               gconstpointer unused)
+{
+  const gchar contents[] = "[metadata]\nmax_size=1024\nhead=27\n";
+  const gssize length = sizeof contents;
+
+  /* size is missing; we should recover by treating the file as empty because
+   * we do not know at what byte we should loop around.
+   */
+  test_circular_file_broken_metadata_file (fixture, contents, length,
+                                           G_KEY_FILE_ERROR_KEY_NOT_FOUND);
+}
+
+static void
+test_circular_file_metadata_file_missing_head (Fixture      *fixture,
+                                               gconstpointer unused)
+{
+  const gchar contents[] = "[metadata]\nmax_size=1024\nsize=1024\n";
+  const gssize length = sizeof contents;
+
+  /* size is missing; we should recover by treating the file as empty, because
+   * we don't know where the head was supposed to be.
+   */
+  test_circular_file_broken_metadata_file (fixture, contents, length,
+                                           G_KEY_FILE_ERROR_KEY_NOT_FOUND);
+}
+
 gint
 main (gint                argc,
       const gchar * const argv[])
 {
   g_test_init (&argc, (gchar ***) &argv, NULL);
+  g_test_bug_base ("https://phabricator.endlessm.com/");
 
 #define ADD_CIRCULAR_FILE_TEST_FUNC(path, func) \
   g_test_add((path), Fixture, NULL, setup, (func), teardown)
@@ -660,6 +886,18 @@ main (gint                argc,
   ADD_CIRCULAR_FILE_TEST_FUNC ("/circular-file/grow", test_circular_file_grow);
   ADD_CIRCULAR_FILE_TEST_FUNC ("/circular-file/shrink",
                                test_circular_file_shrink);
+  ADD_CIRCULAR_FILE_TEST_FUNC ("/circular-file/metadata-file-nul-bytes",
+                               test_circular_file_metadata_file_nul_bytes);
+  ADD_CIRCULAR_FILE_TEST_FUNC ("/circular-file/metadata-file-empty",
+                               test_circular_file_metadata_file_empty);
+  ADD_CIRCULAR_FILE_TEST_FUNC ("/circular-file/metadata-file-junk",
+                               test_circular_file_metadata_file_junk);
+  ADD_CIRCULAR_FILE_TEST_FUNC ("/circular-file/metadata-file-missing-max_size",
+                               test_circular_file_metadata_file_missing_max_size);
+  ADD_CIRCULAR_FILE_TEST_FUNC ("/circular-file/metadata-file-missing-size",
+                               test_circular_file_metadata_file_missing_size);
+  ADD_CIRCULAR_FILE_TEST_FUNC ("/circular-file/metadata-file-missing-head",
+                               test_circular_file_metadata_file_missing_head);
 #undef ADD_CIRCULAR_FILE_TEST_FUNC
 
   return g_test_run ();

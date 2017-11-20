@@ -71,6 +71,7 @@ GType             emer_circular_file_get_type (void) G_GNUC_CONST;
 
 EmerCircularFile *emer_circular_file_new      (const gchar      *path,
                                                guint64           max_size,
+                                               gboolean          reinitialize,
                                                GError          **error);
 
 gboolean          emer_circular_file_append   (EmerCircularFile *self,

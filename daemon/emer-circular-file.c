@@ -43,6 +43,8 @@ typedef struct _EmerCircularFilePrivate
   guint64 max_size;
   guint64 size;
   goffset head;
+
+  gboolean reinitialize;
 } EmerCircularFilePrivate;
 
 static void emer_circular_file_initable_iface_init (GInitableIface *iface);
@@ -56,6 +58,7 @@ enum
   PROP_0,
   PROP_PATH,
   PROP_MAX_SIZE,
+  PROP_REINITIALIZE,
   NPROPS
 };
 
@@ -390,6 +393,8 @@ emer_circular_file_set_property (GObject      *object,
                                  GParamSpec   *pspec)
 {
   EmerCircularFile *self = EMER_CIRCULAR_FILE (object);
+  EmerCircularFilePrivate *priv =
+    emer_circular_file_get_instance_private (self);
 
   switch (property_id)
     {
@@ -399,6 +404,10 @@ emer_circular_file_set_property (GObject      *object,
 
     case PROP_MAX_SIZE:
       set_max_size (self, g_value_get_uint64 (value));
+      break;
+
+    case PROP_REINITIALIZE:
+      priv->reinitialize = g_value_get_boolean (value);
       break;
 
     default:
@@ -445,6 +454,16 @@ emer_circular_file_class_init (EmerCircularFileClass *klass)
                          G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                          G_PARAM_STATIC_STRINGS);
 
+  emer_circular_file_props[PROP_REINITIALIZE] =
+    g_param_spec_boolean ("reinitialize", "Reinitialize",
+                          "Reinitialize the underlying data and metadata "
+                          "files, if they already exist. This is intended as a "
+                          "recovery mechanism if an existing file is corrupt "
+                          "and can't be opened.",
+                          FALSE,
+                          G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
+                          G_PARAM_STATIC_STRINGS);
+
   g_object_class_install_properties (object_class, NPROPS,
                                      emer_circular_file_props);
 }
@@ -478,15 +497,45 @@ emer_circular_file_initable_init (GInitable    *initable,
 
   priv->metadata_key_file = g_key_file_new ();
   g_autoptr(GError) local_error = NULL;
-  gboolean load_succeeded =
-    g_key_file_load_from_file (priv->metadata_key_file, priv->metadata_filepath,
-                               G_KEY_FILE_NONE, &local_error);
-  if (!load_succeeded)
-    {
-      if (!g_error_matches (local_error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
-        goto handle_failed_read;
 
-      g_clear_error (&local_error);
+  if (!priv->reinitialize)
+    {
+      if (!g_key_file_load_from_file (priv->metadata_key_file,
+                                      priv->metadata_filepath, G_KEY_FILE_NONE,
+                                      &local_error))
+        {
+          /* If the metadata file just doesn't exist, this is fine: we just
+           * need to initialize it.
+           */
+          if (!g_error_matches (local_error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
+            goto handle_failed_read;
+
+          g_clear_error (&local_error);
+          priv->reinitialize = TRUE;
+        }
+      else
+        {
+          /* If the metadata file exists but is empty, treat this as if it
+           * didn't exist yet. This can occur if the system crashed after the
+           * file was first initialized, but before any events were logged to
+           * the file.
+           */
+          gsize n_groups;
+          g_autofree GStrv groups =
+            g_key_file_get_groups (priv->metadata_key_file, &n_groups);
+
+          if (n_groups == 0)
+            priv->reinitialize = TRUE;
+        }
+    }
+
+  /* Either the :reinitialize construct-time property was set to TRUE, or one
+   * of the cases above told us that we need to initialize the metadata file.
+   * We don't need to modify the data file: we ensured it existed above, which
+   * is enough.
+   */
+  if (priv->reinitialize)
+    {
       g_key_file_set_uint64 (priv->metadata_key_file, METADATA_GROUP_NAME,
                              MAX_SIZE_KEY, priv->max_size);
       return set_metadata (self, 0, 0, error);
@@ -549,6 +598,7 @@ emer_circular_file_initable_iface_init (GInitableIface *iface)
 EmerCircularFile *
 emer_circular_file_new (const gchar *path,
                         guint64      max_size,
+                        gboolean     reinitialize,
                         GError     **error)
 {
   return g_initable_new (EMER_TYPE_CIRCULAR_FILE,
@@ -556,6 +606,7 @@ emer_circular_file_new (const gchar *path,
                          error,
                          "path", path,
                          "max-size", max_size,
+                         "reinitialize", reinitialize,
                          NULL);
 }
 

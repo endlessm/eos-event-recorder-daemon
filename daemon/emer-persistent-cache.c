@@ -883,7 +883,7 @@ emer_persistent_cache_initable_init (GInitable    *initable,
   guint64 max_cache_size =
     emer_cache_size_provider_get_max_cache_size (priv->cache_size_provider);
   priv->variant_file =
-    emer_circular_file_new (variant_file_path, max_cache_size, error);
+    emer_circular_file_new (variant_file_path, max_cache_size, FALSE, error);
   g_free (variant_file_path);
   if (priv->variant_file == NULL)
     return FALSE;

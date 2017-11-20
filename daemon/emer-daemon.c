@@ -1281,6 +1281,26 @@ emer_daemon_constructed (GObject *object)
 }
 
 static void
+emer_daemon_get_property (GObject      *object,
+                          guint         property_id,
+                          GValue       *value,
+                          GParamSpec   *pspec)
+{
+  EmerDaemon *self = EMER_DAEMON (object);
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  switch (property_id)
+    {
+    case PROP_PERSISTENT_CACHE:
+      g_value_set_object (value, priv->persistent_cache);
+      break;
+
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+    }
+}
+
+static void
 emer_daemon_set_property (GObject      *object,
                           guint         property_id,
                           const GValue *value,
@@ -1371,6 +1391,7 @@ emer_daemon_class_init (EmerDaemonClass *klass)
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
   object_class->constructed = emer_daemon_constructed;
+  object_class->get_property = emer_daemon_get_property;
   object_class->set_property = emer_daemon_set_property;
   object_class->finalize = emer_daemon_finalize;
 
@@ -1491,7 +1512,7 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                          "Object managing persistent storage of events until "
                          "they are uploaded to the metrics servers",
                          EMER_TYPE_PERSISTENT_CACHE,
-                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
+                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE |
                          G_PARAM_STATIC_STRINGS);
 
   /* Blurb string is good enough default documentation for this */

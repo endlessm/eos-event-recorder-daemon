@@ -63,6 +63,7 @@ typedef struct _EmerCacheVersionProvider EmerCacheVersionProvider;
  */
 typedef struct _EmerCacheVersionProviderClass EmerCacheVersionProviderClass;
 
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (EmerCacheVersionProvider, g_object_unref)
 
 struct _EmerCacheVersionProvider
 {

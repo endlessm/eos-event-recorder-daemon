@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2015 Endless Mobile, Inc. */
+/* Copyright 2015-2017 Endless Mobile, Inc. */
 
 /*
  * This file is part of eos-event-recorder-daemon.
@@ -54,6 +54,8 @@ G_BEGIN_DECLS
 
 typedef struct _EmerCircularFile EmerCircularFile;
 typedef struct _EmerCircularFileClass EmerCircularFileClass;
+
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (EmerCircularFile, g_object_unref)
 
 struct _EmerCircularFile
 {

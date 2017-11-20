@@ -63,6 +63,8 @@ typedef struct _EmerCacheSizeProvider EmerCacheSizeProvider;
  */
 typedef struct _EmerCacheSizeProviderClass EmerCacheSizeProviderClass;
 
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (EmerCacheSizeProvider, g_object_unref)
+
 struct _EmerCacheSizeProvider
 {
   /*< private >*/

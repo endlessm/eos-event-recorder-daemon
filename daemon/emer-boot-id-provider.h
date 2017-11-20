@@ -63,6 +63,8 @@ typedef struct _EmerBootIdProvider EmerBootIdProvider;
  */
 typedef struct _EmerBootIdProviderClass EmerBootIdProviderClass;
 
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (EmerBootIdProvider, g_object_unref)
+
 struct _EmerBootIdProvider
 {
   /*< private >*/

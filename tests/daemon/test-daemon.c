@@ -983,8 +983,10 @@ setup (Fixture      *fixture,
   g_autoptr(GError) error = NULL;
   setup_most (fixture, unused);
 
+  /* directory and max_cache_size are ignored by mock object. */
   fixture->mock_persistent_cache =
     emer_persistent_cache_new (NULL /* directory */,
+                               10000000, /* max_cache_size */
                                FALSE /* reinitialize_cache */,
                                &error);
   g_assert_no_error (error);

@@ -69,6 +69,7 @@ emer_persistent_cache_class_init (EmerPersistentCacheClass *klass)
 
 EmerPersistentCache *
 emer_persistent_cache_new (const gchar *directory,
+                           guint64      cache_size,
                            gboolean     reinitialize_cache,
                            GError     **error)
 {
@@ -89,7 +90,7 @@ emer_persistent_cache_new (const gchar *directory,
 
 EmerPersistentCache *
 emer_persistent_cache_new_full (const gchar              *directory,
-                                EmerCacheSizeProvider    *cache_size_provider,
+                                guint64                   cache_size,
                                 EmerBootIdProvider       *boot_id_provider,
                                 EmerCacheVersionProvider *version_provider,
                                 guint                     boot_offset_update_interval,

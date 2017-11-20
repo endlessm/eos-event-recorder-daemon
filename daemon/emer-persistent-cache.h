@@ -87,6 +87,7 @@ struct _EmerPersistentCacheClass
 GType                emer_persistent_cache_get_type             (void) G_GNUC_CONST;
 
 EmerPersistentCache *emer_persistent_cache_new                  (const gchar              *directory,
+                                                                 guint64                   cache_size,
                                                                  gboolean                  reinitialize_cache,
                                                                  GError                  **error);
 
@@ -121,7 +122,7 @@ gboolean             emer_persistent_cache_remove_all           (EmerPersistentC
                                                                  GError                  **error);
 
 EmerPersistentCache *emer_persistent_cache_new_full             (const gchar              *directory,
-                                                                 EmerCacheSizeProvider    *cache_size_provider,
+                                                                 guint64                   cache_size,
                                                                  EmerBootIdProvider       *boot_id_provider,
                                                                  EmerCacheVersionProvider *version_provider,
                                                                  guint                     boot_offset_update_interval,

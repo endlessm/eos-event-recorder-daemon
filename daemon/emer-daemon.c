@@ -1259,10 +1259,14 @@ emer_daemon_constructed (GObject *object)
 
   if (priv->persistent_cache == NULL)
     {
+      guint64 max_cache_size =
+        emer_cache_size_provider_get_max_cache_size (NULL);
       g_autoptr(GError) error = NULL;
 
       priv->persistent_cache =
-        emer_persistent_cache_new (priv->persistent_cache_directory, FALSE,
+        emer_persistent_cache_new (priv->persistent_cache_directory,
+                                   max_cache_size,
+                                   FALSE,
                                    &error);
 
       if (priv->persistent_cache == NULL &&
@@ -1278,7 +1282,9 @@ emer_daemon_constructed (GObject *object)
 
           g_message ("Attempting to reinitialize the persistent cache");
           priv->persistent_cache =
-            emer_persistent_cache_new (priv->persistent_cache_directory, TRUE,
+            emer_persistent_cache_new (priv->persistent_cache_directory,
+                                       max_cache_size,
+                                       TRUE,
                                        &error);
         }
 

@@ -35,7 +35,6 @@
 
 #define TEST_DIRECTORY "/tmp/metrics_testing/"
 
-#define TEST_CACHE_SIZE_FILE "cache_size_file"
 #define TEST_SYSTEM_BOOT_ID_FILE "system_boot_id_file"
 #define TEST_CACHE_VERSION_FILE "local_version_file"
 
@@ -58,31 +57,13 @@
 
 #define ACCEPTABLE_OFFSET_VARIANCE 500000000 // 500 milliseconds
 
-#define CACHE_SIZE_KEY_FILE_DATA \
-  "[persistent_cache_size]\n" \
-  "maximum=10000000\n"
+#define MAX_CACHE_SIZE 10000000
 
 #define DEFAULT_CACHE_VERSION_KEY_FILE_DATA \
   "[cache_version_info]\n" \
   "version=4\n"
 
 // ---- Helper functions come first ----
-
-static void
-write_cache_size_file (void)
-{
-  GKeyFile *key_file = g_key_file_new ();
-  GError *error = NULL;
-  g_key_file_load_from_data (key_file, CACHE_SIZE_KEY_FILE_DATA, -1,
-                             G_KEY_FILE_NONE, &error);
-  g_assert_no_error (error);
-
-  g_key_file_save_to_file (key_file, TEST_DIRECTORY TEST_CACHE_SIZE_FILE,
-                           &error);
-  g_assert_no_error (error);
-
-  g_key_file_unref (key_file);
-}
 
 static void
 write_mock_system_boot_id_file (void)
@@ -116,7 +97,6 @@ teardown (gboolean     *unused,
           gconstpointer dontuseme)
 {
   g_unlink (TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE);
-  g_unlink (TEST_DIRECTORY TEST_CACHE_SIZE_FILE);
   g_unlink (TEST_DIRECTORY TEST_CACHE_VERSION_FILE);
   g_unlink (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
   g_rmdir (TEST_DIRECTORY);
@@ -128,7 +108,6 @@ setup (gboolean     *unused,
 {
   teardown (unused, dontuseme);
   g_mkdir (TEST_DIRECTORY, 0777); // All permissions are granted by 0777.
-  write_cache_size_file ();
   write_mock_system_boot_id_file ();
   write_default_cache_version_key_file ();
 }
@@ -137,15 +116,13 @@ static EmerPersistentCache *
 make_testing_cache_full (gboolean reinitialize_cache,
                          GError **error)
 {
-  g_autoptr(EmerCacheSizeProvider) cache_size_provider =
-    emer_cache_size_provider_new_full (TEST_DIRECTORY TEST_CACHE_SIZE_FILE);
   g_autoptr(EmerBootIdProvider) boot_id_provider =
     emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
   g_autoptr(EmerCacheVersionProvider) cache_version_provider =
     emer_cache_version_provider_new (NULL);
 
   EmerPersistentCache *cache =
-    emer_persistent_cache_new_full (TEST_DIRECTORY, cache_size_provider,
+    emer_persistent_cache_new_full (TEST_DIRECTORY, MAX_CACHE_SIZE,
                                     boot_id_provider, cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL,
                                     reinitialize_cache, error);
@@ -592,15 +569,13 @@ static void
 test_persistent_cache_store_when_full (gboolean     *unused,
                                        gconstpointer dontuseme)
 {
-  EmerCacheSizeProvider *cache_size_provider =
-    emer_cache_size_provider_new_full (TEST_DIRECTORY TEST_CACHE_SIZE_FILE);
   EmerBootIdProvider *boot_id_provider =
     emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
   EmerCacheVersionProvider *cache_version_provider =
     emer_cache_version_provider_new (NULL);
   GError *error = NULL;
   EmerPersistentCache *cache =
-    emer_persistent_cache_new_full (TEST_DIRECTORY, cache_size_provider,
+    emer_persistent_cache_new_full (TEST_DIRECTORY, MAX_CACHE_SIZE,
                                     boot_id_provider, cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL, FALSE,
                                     &error);
@@ -610,13 +585,9 @@ test_persistent_cache_store_when_full (gboolean     *unused,
   g_object_unref (boot_id_provider);
   g_object_unref (cache_version_provider);
 
-  guint64 max_cache_size =
-    emer_cache_size_provider_get_max_cache_size (cache_size_provider);
-  g_object_unref (cache_size_provider);
-
   GVariant *variant = make_variant (0);
   g_variant_ref_sink (variant);
-  gsize num_variants = max_cache_size / get_size_when_stored (variant);
+  gsize num_variants = MAX_CACHE_SIZE / get_size_when_stored (variant);
   GVariant *variants[num_variants];
   for (gsize i = 0; i < num_variants; i++)
     variants[i] = variant;
@@ -808,22 +779,19 @@ static void
 test_persistent_cache_purges_when_out_of_date (gboolean     *unused,
                                                gconstpointer dontuseme)
 {
-  EmerCacheSizeProvider *cache_size_provider =
-    emer_cache_size_provider_new_full (TEST_DIRECTORY TEST_CACHE_SIZE_FILE);
   EmerBootIdProvider *boot_id_provider =
     emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
   EmerCacheVersionProvider *cache_version_provider =
     emer_cache_version_provider_new (NULL);
   GError *error = NULL;
   EmerPersistentCache *cache =
-    emer_persistent_cache_new_full (TEST_DIRECTORY, cache_size_provider,
+    emer_persistent_cache_new_full (TEST_DIRECTORY, MAX_CACHE_SIZE,
                                     boot_id_provider, cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL, FALSE,
                                     &error);
   g_assert_no_error (error);
   g_assert_nonnull (cache);
 
-  g_object_unref (cache_size_provider);
   g_object_unref (boot_id_provider);
 
   GPtrArray *variants = make_many_variants ();

@@ -32,92 +32,55 @@
  "[persistent_cache_size]\n" \
  "maximum=40\n"
 
-#define SECOND_CACHE_SIZE_FILE_CONTENTS \
- "[persistent_cache_size]\n" \
- "maximum=3\n"
-
 // Helper Functions
 
 typedef struct Fixture
 {
-  EmerCacheSizeProvider *cache_size_provider;
   GFile *tmp_file;
   gchar *tmp_path;
-  GKeyFile *key_file;
 } Fixture;
 
 static void
 write_cache_size_file (Fixture *fixture,
                        gchar   *key_file_data)
 {
-  GError *error = NULL;
-  g_key_file_load_from_data (fixture->key_file, key_file_data, -1,
-                             G_KEY_FILE_NONE, &error);
-  g_assert_no_error (error);
+  gboolean ret;
+  g_autoptr(GError) error = NULL;
 
-  g_key_file_save_to_file (fixture->key_file, fixture->tmp_path, &error);
+  ret = g_file_set_contents (fixture->tmp_path, key_file_data,
+                             -1, &error);
   g_assert_no_error (error);
+  g_assert_true (ret);
 }
 
 static void
 setup (Fixture      *fixture,
        gconstpointer unused)
 {
-  GFileIOStream *stream;
+  g_autoptr(GFileIOStream) stream = NULL;
+
   fixture->tmp_file = g_file_new_tmp (CACHE_SIZE_FILE_PATH, &stream, NULL);
-  g_object_unref (stream);
   fixture->tmp_path = g_file_get_path (fixture->tmp_file);
-
-  fixture->key_file = g_key_file_new ();
-  write_cache_size_file (fixture, FIRST_CACHE_SIZE_FILE_CONTENTS);
-
-  fixture->cache_size_provider =
-    emer_cache_size_provider_new_full (fixture->tmp_path);
 }
 
 static void
 teardown (Fixture      *fixture,
           gconstpointer unused)
 {
-  g_key_file_unref (fixture->key_file);
-  g_object_unref (fixture->tmp_file);
+  g_clear_object (&fixture->tmp_file);
   g_unlink (fixture->tmp_path);
   g_free (fixture->tmp_path);
-  g_object_unref (fixture->cache_size_provider);
-}
-
-static void
-test_cache_size_provider_new_succeeds (Fixture      *fixture,
-                                       gconstpointer unused)
-{
-  g_assert_nonnull (fixture->cache_size_provider);
 }
 
 static void
 test_cache_size_provider_can_get_max_cache_size (Fixture      *fixture,
                                                  gconstpointer unused)
 {
+  write_cache_size_file (fixture, FIRST_CACHE_SIZE_FILE_CONTENTS);
+
   guint64 max_cache_size =
-    emer_cache_size_provider_get_max_cache_size (fixture->cache_size_provider);
+    emer_cache_size_provider_get_max_cache_size (fixture->tmp_path);
   g_assert_cmpint (max_cache_size, ==, FIRST_MAX_CACHE_SIZE);
-}
-
-static void
-test_cache_size_provider_caches_max_cache_size (Fixture      *fixture,
-                                                gconstpointer unused)
-{
-  // The first read should cache the max cache size.
-  guint64 first_max_cache_size =
-    emer_cache_size_provider_get_max_cache_size (fixture->cache_size_provider);
-  g_assert_cmpint (first_max_cache_size, ==, FIRST_MAX_CACHE_SIZE);
-
-  // This file should be ignored by the cache size provider.
-  write_cache_size_file (fixture, SECOND_CACHE_SIZE_FILE_CONTENTS);
-
-  // The second read should read from memory, not disk.
-  guint64 second_max_cache_size =
-    emer_cache_size_provider_get_max_cache_size (fixture->cache_size_provider);
-  g_assert_cmpint (second_max_cache_size, ==, FIRST_MAX_CACHE_SIZE);
 }
 
 gint
@@ -128,12 +91,8 @@ main (gint                argc,
 #define ADD_CACHE_SIZE_TEST_FUNC(path, func) \
   g_test_add ((path), Fixture, NULL, setup, (func), teardown)
 
-  ADD_CACHE_SIZE_TEST_FUNC ("/cache-size-provider/new-succeeds",
-                            test_cache_size_provider_new_succeeds);
   ADD_CACHE_SIZE_TEST_FUNC ("/cache-size-provider/can-get-max-cache-size",
                             test_cache_size_provider_can_get_max_cache_size);
-  ADD_CACHE_SIZE_TEST_FUNC ("/cache-size-provider/caches-max-cache-size",
-                            test_cache_size_provider_caches_max_cache_size);
 
 #undef ADD_CACHE_SIZE_TEST_FUNC
 

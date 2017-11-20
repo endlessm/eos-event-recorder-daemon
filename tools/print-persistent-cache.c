@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "emer-cache-size-provider.h"
 #include "emer-persistent-cache.h"
 #include "shared/metrics-util.h"
 
@@ -95,8 +96,10 @@ static EmerPersistentCache *
 make_persistent_cache (const gchar *directory)
 {
   GError *error = NULL;
+  guint64 max_cache_size =
+    emer_cache_size_provider_get_max_cache_size (NULL);
   EmerPersistentCache *persistent_cache =
-    emer_persistent_cache_new (directory, FALSE, &error);
+    emer_persistent_cache_new (directory, max_cache_size, FALSE, &error);
 
   if (persistent_cache == NULL)
     {

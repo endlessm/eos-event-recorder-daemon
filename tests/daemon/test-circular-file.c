@@ -124,9 +124,9 @@ make_minimal_circular_file (Fixture             *fixture,
 }
 
 static void
-assert_strings_saved (EmerCircularFile    *circular_file,
-                      const gchar * const *strings,
-                      gsize                num_strings)
+append_strings_and_check (EmerCircularFile    *circular_file,
+                          const gchar * const *strings,
+                          gsize                num_strings)
 {
   for (gsize i = 0; i < num_strings; i++)
     {
@@ -142,9 +142,9 @@ assert_strings_saved (EmerCircularFile    *circular_file,
 }
 
 static guint64
-assert_strings_read (EmerCircularFile    *circular_file,
-                     const gchar * const *strings,
-                     gsize                num_strings)
+read_strings_and_check (EmerCircularFile    *circular_file,
+                        const gchar * const *strings,
+                        gsize                num_strings)
 {
   GBytes **elems;
 
@@ -208,11 +208,11 @@ assert_circular_file_is_empty (EmerCircularFile *circular_file)
 }
 
 static void
-assert_strings_removed (EmerCircularFile    *circular_file,
-                        const gchar * const *strings,
-                        gsize                num_strings)
+remove_strings_and_check (EmerCircularFile    *circular_file,
+                          const gchar * const *strings,
+                          gsize                num_strings)
 {
-  guint64 token = assert_strings_read (circular_file, strings, num_strings);
+  guint64 token = read_strings_and_check (circular_file, strings, num_strings);
   GError *error = NULL;
   gboolean remove_succeeded =
     emer_circular_file_remove (circular_file, token, &error);
@@ -222,7 +222,7 @@ assert_strings_removed (EmerCircularFile    *circular_file,
 }
 
 static void
-assert_circular_file_purged (EmerCircularFile *circular_file)
+purge_and_check_empty (EmerCircularFile *circular_file)
 {
   GError *error = NULL;
   gboolean purge_succeeded = emer_circular_file_purge (circular_file, &error);
@@ -267,7 +267,7 @@ test_circular_file_append_when_full (Fixture      *fixture,
   EmerCircularFile *circular_file =
     make_minimal_circular_file (fixture, STRINGS, NUM_STRINGS);
 
-  assert_strings_saved (circular_file, STRINGS, NUM_STRINGS);
+  append_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
 
   const gchar * const STRINGS_2[] = { "Marx" };
   gsize NUM_STRINGS_2 = G_N_ELEMENTS (STRINGS_2);
@@ -284,7 +284,7 @@ test_circular_file_save_none (Fixture      *fixture,
 {
   EmerCircularFile *circular_file = make_circular_file (fixture, 7823);
 
-  assert_strings_saved (circular_file, NULL /* strings */, 0);
+  append_strings_and_check (circular_file, NULL /* strings */, 0);
 
   g_object_unref (circular_file);
 }
@@ -298,7 +298,7 @@ test_circular_file_save_one (Fixture      *fixture,
   EmerCircularFile *circular_file =
     make_minimal_circular_file (fixture, STRINGS, NUM_STRINGS);
 
-  assert_strings_saved (circular_file, STRINGS, NUM_STRINGS);
+  append_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
 
   g_object_unref (circular_file);
 }
@@ -316,7 +316,7 @@ test_circular_file_save_many (Fixture      *fixture,
   EmerCircularFile *circular_file =
     make_minimal_circular_file (fixture, STRINGS, NUM_STRINGS);
 
-  assert_strings_saved (circular_file, STRINGS, NUM_STRINGS);
+  append_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
 
   g_object_unref (circular_file);
 }
@@ -327,8 +327,8 @@ test_circular_file_read_none (Fixture      *fixture,
 {
   EmerCircularFile *circular_file = make_circular_file (fixture, 0);
 
-  assert_strings_saved (circular_file, NULL /* strings */, 0);
-  assert_strings_read (circular_file, NULL /* strings */, 0);
+  append_strings_and_check (circular_file, NULL /* strings */, 0);
+  read_strings_and_check (circular_file, NULL /* strings */, 0);
 
   g_object_unref (circular_file);
 }
@@ -342,8 +342,8 @@ test_circular_file_read_one (Fixture      *fixture,
   EmerCircularFile *circular_file =
     make_minimal_circular_file (fixture, STRINGS, NUM_STRINGS);
 
-  assert_strings_saved (circular_file, STRINGS, NUM_STRINGS);
-  assert_strings_read (circular_file, STRINGS, NUM_STRINGS);
+  append_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
+  read_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
 
   g_object_unref (circular_file);
 }
@@ -361,8 +361,8 @@ test_circular_file_read_many (Fixture      *fixture,
   EmerCircularFile *circular_file =
     make_minimal_circular_file (fixture, STRINGS, NUM_STRINGS);
 
-  assert_strings_saved (circular_file, STRINGS, NUM_STRINGS);
-  assert_strings_read (circular_file, STRINGS, NUM_STRINGS);
+  append_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
+  read_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
 
   g_object_unref (circular_file);
 }
@@ -399,28 +399,28 @@ test_circular_file_has_more (Fixture      *fixture,
 
   assert_circular_file_is_empty (circular_file);
 
-  assert_strings_saved (circular_file, STRINGS, NUM_STRINGS);
+  append_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
   g_assert_true (emer_circular_file_has_more (circular_file, 0));
 
-  guint64 token = assert_strings_read (circular_file, STRINGS, NUM_STRINGS - 1);
+  guint64 token = read_strings_and_check (circular_file, STRINGS, NUM_STRINGS - 1);
   g_assert_true (emer_circular_file_has_more (circular_file, token));
 
-  token = assert_strings_read (circular_file, STRINGS, NUM_STRINGS);
+  token = read_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
   g_assert_false (emer_circular_file_has_more (circular_file, token));
 
-  assert_strings_removed (circular_file, STRINGS, 1);
+  remove_strings_and_check (circular_file, STRINGS, 1);
   g_assert_true (emer_circular_file_has_more (circular_file, 0));
 
-  assert_strings_saved (circular_file, STRINGS, NUM_STRINGS);
+  append_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
   g_assert_true (emer_circular_file_has_more (circular_file, 0));
 
-  token = assert_strings_read (circular_file, STRINGS_2, NUM_STRINGS_2 - 1);
+  token = read_strings_and_check (circular_file, STRINGS_2, NUM_STRINGS_2 - 1);
   g_assert_true (emer_circular_file_has_more (circular_file, token));
 
-  token = assert_strings_read (circular_file, STRINGS_2, NUM_STRINGS_2);
+  token = read_strings_and_check (circular_file, STRINGS_2, NUM_STRINGS_2);
   g_assert_false (emer_circular_file_has_more (circular_file, token));
 
-  assert_strings_removed (circular_file, STRINGS_2, NUM_STRINGS_2);
+  remove_strings_and_check (circular_file, STRINGS_2, NUM_STRINGS_2);
   assert_circular_file_is_empty (circular_file);
 
   g_object_unref (circular_file);
@@ -432,8 +432,8 @@ test_circular_file_remove_none (Fixture      *fixture,
 {
   EmerCircularFile *circular_file = make_circular_file (fixture, 50);
 
-  assert_strings_saved (circular_file, NULL /* strings */, 0);
-  assert_strings_removed (circular_file, NULL /* strings */, 0);
+  append_strings_and_check (circular_file, NULL /* strings */, 0);
+  remove_strings_and_check (circular_file, NULL /* strings */, 0);
   assert_circular_file_is_empty (circular_file);
 
   g_object_unref (circular_file);
@@ -448,8 +448,8 @@ test_circular_file_remove_one (Fixture      *fixture,
   EmerCircularFile *circular_file =
     make_minimal_circular_file (fixture, STRINGS, NUM_STRINGS);
 
-  assert_strings_saved (circular_file, STRINGS, NUM_STRINGS);
-  assert_strings_removed (circular_file, STRINGS, NUM_STRINGS);
+  append_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
+  remove_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
 
   g_object_unref (circular_file);
 }
@@ -467,8 +467,8 @@ test_circular_file_remove_many (Fixture      *fixture,
   EmerCircularFile *circular_file =
     make_minimal_circular_file (fixture, STRINGS, NUM_STRINGS);
 
-  assert_strings_saved (circular_file, STRINGS, NUM_STRINGS);
-  assert_strings_removed (circular_file, STRINGS, NUM_STRINGS);
+  append_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
+  remove_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
 
   g_object_unref (circular_file);
 }
@@ -479,7 +479,7 @@ test_circular_file_remove_when_empty (Fixture      *fixture,
 {
   EmerCircularFile *circular_file = make_circular_file (fixture, 0);
 
-  assert_strings_removed (circular_file, NULL /* strings */, 0);
+  remove_strings_and_check (circular_file, NULL /* strings */, 0);
   assert_circular_file_is_empty (circular_file);
 
   g_object_unref (circular_file);
@@ -491,8 +491,8 @@ test_circular_file_purge_none (Fixture      *fixture,
 {
   EmerCircularFile *circular_file = make_circular_file (fixture, 33);
 
-  assert_strings_saved (circular_file, NULL /* strings */, 0);
-  assert_circular_file_purged (circular_file);
+  append_strings_and_check (circular_file, NULL /* strings */, 0);
+  purge_and_check_empty (circular_file);
 
   g_object_unref (circular_file);
 }
@@ -506,8 +506,8 @@ test_circular_file_purge_one (Fixture      *fixture,
   EmerCircularFile *circular_file =
     make_minimal_circular_file (fixture, STRINGS, NUM_STRINGS);
 
-  assert_strings_saved (circular_file, STRINGS, NUM_STRINGS);
-  assert_circular_file_purged (circular_file);
+  append_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
+  purge_and_check_empty (circular_file);
 
   g_object_unref (circular_file);
 }
@@ -525,8 +525,8 @@ test_circular_file_purge_many (Fixture      *fixture,
   EmerCircularFile *circular_file =
     make_minimal_circular_file (fixture, STRINGS, NUM_STRINGS);
 
-  assert_strings_saved (circular_file, STRINGS, NUM_STRINGS);
-  assert_circular_file_purged (circular_file);
+  append_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
+  purge_and_check_empty (circular_file);
 
   g_object_unref (circular_file);
 }
@@ -537,7 +537,7 @@ test_circular_file_purge_when_empty (Fixture      *fixture,
 {
   EmerCircularFile *circular_file = make_circular_file (fixture, 33);
 
-  assert_circular_file_purged (circular_file);
+  purge_and_check_empty (circular_file);
 
   g_object_unref (circular_file);
 }
@@ -567,18 +567,18 @@ test_circular_file_grow (Fixture      *fixture,
   gsize max_size = get_total_disk_size (STRINGS, NUM_STRINGS);
   EmerCircularFile *circular_file = make_circular_file (fixture, max_size);
 
-  assert_strings_saved (circular_file, STRINGS, NUM_STRINGS);
-  assert_strings_removed (circular_file, STRINGS, NUM_STRINGS);
-  assert_strings_saved (circular_file, STRINGS, NUM_STRINGS);
+  append_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
+  remove_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
+  append_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
 
   g_object_unref (circular_file);
 
   gsize max_size_2 = 2 * max_size;
   EmerCircularFile *circular_file_2 = make_circular_file (fixture, max_size_2);
 
-  assert_strings_saved (circular_file_2, STRINGS, NUM_STRINGS);
-  assert_strings_removed (circular_file_2, STRINGS, NUM_STRINGS);
-  assert_strings_removed (circular_file_2, STRINGS, NUM_STRINGS);
+  append_strings_and_check (circular_file_2, STRINGS, NUM_STRINGS);
+  remove_strings_and_check (circular_file_2, STRINGS, NUM_STRINGS);
+  remove_strings_and_check (circular_file_2, STRINGS, NUM_STRINGS);
   assert_circular_file_is_empty (circular_file_2);
 
   g_object_unref (circular_file_2);
@@ -597,16 +597,16 @@ test_circular_file_shrink (Fixture      *fixture,
   gsize max_size = get_total_disk_size (STRINGS, NUM_STRINGS);
   EmerCircularFile *circular_file = make_circular_file (fixture, max_size);
 
-  assert_strings_saved (circular_file, STRINGS, NUM_STRINGS);
-  assert_strings_removed (circular_file, STRINGS, NUM_STRINGS);
-  assert_strings_saved (circular_file, STRINGS, NUM_STRINGS);
+  append_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
+  remove_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
+  append_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
 
   g_object_unref (circular_file);
 
   gsize max_size_2 = max_size - 1;
   EmerCircularFile *circular_file_2 = make_circular_file (fixture, max_size_2);
 
-  assert_strings_removed (circular_file_2, STRINGS, NUM_STRINGS - 1);
+  remove_strings_and_check (circular_file_2, STRINGS, NUM_STRINGS - 1);
 
   g_object_unref (circular_file_2);
 }
@@ -620,14 +620,14 @@ assert_circular_file_works_after_recovery (Fixture          *fixture,
    * of asterisks.
    */
   const gchar * const NO_STRINGS[0];
-  guint64 token = assert_strings_read (circular_file, NO_STRINGS, 0);
+  guint64 token = read_strings_and_check (circular_file, NO_STRINGS, 0);
   g_assert_false (emer_circular_file_has_more (circular_file, token));
 
   /* Adding new entries to the file and reading them back should work. */
   const gchar * const STRINGS[] = { "Kendal Mint Cake" };
   gsize NUM_STRINGS = G_N_ELEMENTS (STRINGS);
-  assert_strings_saved (circular_file, STRINGS, NUM_STRINGS);
-  assert_strings_read (circular_file, STRINGS, NUM_STRINGS);
+  append_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
+  read_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
 
   /* Reloading the file should work, and the entry we just added should be
    * readable.
@@ -640,7 +640,7 @@ assert_circular_file_works_after_recovery (Fixture          *fixture,
   g_assert_no_error (error);
   g_assert_nonnull (circular_file);
 
-  assert_strings_read (circular_file, STRINGS, NUM_STRINGS);
+  read_strings_and_check (circular_file, STRINGS, NUM_STRINGS);
 }
 
 /* Helper for test cases where the metadata file exists but has empty contents,

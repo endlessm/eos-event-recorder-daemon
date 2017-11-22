@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2015 Endless Mobile, Inc. */
+/* Copyright 2015-2017 Endless Mobile, Inc. */
 
 /*
  * This file is part of eos-event-recorder-daemon.
@@ -23,65 +23,11 @@
 #ifndef EMER_CACHE_SIZE_PROVIDER_H
 #define EMER_CACHE_SIZE_PROVIDER_H
 
-#include <glib-object.h>
+#include <glib.h>
 
 G_BEGIN_DECLS
 
-#define EMER_TYPE_CACHE_SIZE_PROVIDER emer_cache_size_provider_get_type()
-
-#define EMER_CACHE_SIZE_PROVIDER(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST ((obj), \
-  EMER_TYPE_CACHE_SIZE_PROVIDER, EmerCacheSizeProvider))
-
-#define EMER_CACHE_SIZE_PROVIDER_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST ((klass), \
-  EMER_TYPE_CACHE_SIZE_PROVIDER, EmerCacheSizeProviderClass))
-
-#define EMER_IS_CACHE_SIZE_PROVIDER(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE ((obj), \
-  EMER_TYPE_CACHE_SIZE_PROVIDER))
-
-#define EMER_IS_CACHE_SIZE_PROVIDER_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE ((klass), \
-  EMER_TYPE_CACHE_SIZE_PROVIDER))
-
-#define EMER_CACHE_SIZE_PROVIDER_GET_CLASS(obj) \
-  (G_TYPE_INSTANCE_GET_CLASS ((obj), \
-  EMER_TYPE_CACHE_SIZE_PROVIDER, EmerCacheSizeProviderClass))
-
-/*
- * EmerCacheSizeProvider:
- *
- * This instance structure contains no public members.
- */
-typedef struct _EmerCacheSizeProvider EmerCacheSizeProvider;
-
-/*
- * EmerCacheSizeProvider:
- *
- * This class structure contains no public members.
- */
-typedef struct _EmerCacheSizeProviderClass EmerCacheSizeProviderClass;
-
-struct _EmerCacheSizeProvider
-{
-  /*< private >*/
-  GObject parent;
-};
-
-struct _EmerCacheSizeProviderClass
-{
-  /*< private >*/
-  GObjectClass parent_class;
-};
-
-GType                  emer_cache_size_provider_get_type              (void) G_GNUC_CONST;
-
-EmerCacheSizeProvider *emer_cache_size_provider_new                   (void);
-
-EmerCacheSizeProvider *emer_cache_size_provider_new_full              (const gchar           *path);
-
-guint64                emer_cache_size_provider_get_max_cache_size    (EmerCacheSizeProvider *self);
+guint64                emer_cache_size_provider_get_max_cache_size    (const gchar           *path);
 
 G_END_DECLS
 

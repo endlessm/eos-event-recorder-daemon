@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2015 Endless Mobile, Inc. */
+/* Copyright 2015-2017 Endless Mobile, Inc. */
 
 /*
  * This file is part of eos-event-recorder-daemon.
@@ -36,12 +36,15 @@ typedef struct _EmerCircularFilePrivate
 {
   GFile *data_file;
   GKeyFile *metadata_key_file;
+  gchar *metadata_filepath;
 
   GByteArray *write_buffer;
 
   guint64 max_size;
   guint64 size;
   goffset head;
+
+  gboolean reinitialize;
 } EmerCircularFilePrivate;
 
 static void emer_circular_file_initable_iface_init (GInitableIface *iface);
@@ -55,24 +58,11 @@ enum
   PROP_0,
   PROP_PATH,
   PROP_MAX_SIZE,
+  PROP_REINITIALIZE,
   NPROPS
 };
 
 static GParamSpec *emer_circular_file_props[NPROPS] = { NULL, };
-
-static gchar *
-get_metadata_filepath (EmerCircularFile *self)
-{
-  EmerCircularFilePrivate *priv =
-    emer_circular_file_get_instance_private (self);
-
-  gchar *data_filepath = g_file_get_path (priv->data_file);
-  gchar *metadata_filepath =
-    g_strconcat (data_filepath, METADATA_EXTENSION, NULL);
-  g_free (data_filepath);
-
-  return metadata_filepath;
-}
 
 static gboolean
 save_metadata_file (EmerCircularFile *self,
@@ -81,12 +71,8 @@ save_metadata_file (EmerCircularFile *self,
   EmerCircularFilePrivate *priv =
     emer_circular_file_get_instance_private (self);
 
-  gchar *metadata_filepath = get_metadata_filepath (self);
-  gboolean save_succeeded =
-    g_key_file_save_to_file (priv->metadata_key_file, metadata_filepath, error);
-  g_free (metadata_filepath);
-
-  return save_succeeded;
+  return g_key_file_save_to_file (priv->metadata_key_file,
+                                  priv->metadata_filepath, error);
 }
 
 static gboolean
@@ -386,6 +372,8 @@ set_path (EmerCircularFile *self,
     emer_circular_file_get_instance_private (self);
 
   priv->data_file = g_file_new_for_path (data_filepath);
+  priv->metadata_filepath =
+    g_strconcat (data_filepath, METADATA_EXTENSION, NULL);
 }
 
 static void
@@ -405,6 +393,8 @@ emer_circular_file_set_property (GObject      *object,
                                  GParamSpec   *pspec)
 {
   EmerCircularFile *self = EMER_CIRCULAR_FILE (object);
+  EmerCircularFilePrivate *priv =
+    emer_circular_file_get_instance_private (self);
 
   switch (property_id)
     {
@@ -414,6 +404,10 @@ emer_circular_file_set_property (GObject      *object,
 
     case PROP_MAX_SIZE:
       set_max_size (self, g_value_get_uint64 (value));
+      break;
+
+    case PROP_REINITIALIZE:
+      priv->reinitialize = g_value_get_boolean (value);
       break;
 
     default:
@@ -430,6 +424,7 @@ emer_circular_file_finalize (GObject *object)
 
   g_clear_object (&priv->data_file);
   g_clear_pointer (&priv->metadata_key_file, g_key_file_unref);
+  g_clear_pointer (&priv->metadata_filepath, g_free);
   g_clear_pointer (&priv->write_buffer, g_byte_array_unref);
 
   G_OBJECT_CLASS (emer_circular_file_parent_class)->finalize (object);
@@ -458,6 +453,16 @@ emer_circular_file_class_init (EmerCircularFileClass *klass)
                          0, G_MAXUINT64, 0,
                          G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                          G_PARAM_STATIC_STRINGS);
+
+  emer_circular_file_props[PROP_REINITIALIZE] =
+    g_param_spec_boolean ("reinitialize", "Reinitialize",
+                          "Reinitialize the underlying data and metadata "
+                          "files, if they already exist. This is intended as a "
+                          "recovery mechanism if an existing file is corrupt "
+                          "and can't be opened.",
+                          FALSE,
+                          G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
+                          G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, NPROPS,
                                      emer_circular_file_props);
@@ -490,19 +495,47 @@ emer_circular_file_initable_init (GInitable    *initable,
 
   g_object_unref (data_file_output_stream);
 
-  gchar *metadata_filepath = get_metadata_filepath (self);
   priv->metadata_key_file = g_key_file_new ();
-  GError *local_error = NULL;
-  gboolean load_succeeded =
-    g_key_file_load_from_file (priv->metadata_key_file, metadata_filepath,
-                               G_KEY_FILE_NONE, &local_error);
-  g_free (metadata_filepath);
-  if (!load_succeeded)
-    {
-      if (!g_error_matches (local_error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
-        goto handle_failed_read;
+  g_autoptr(GError) local_error = NULL;
 
-      g_error_free (local_error);
+  if (!priv->reinitialize)
+    {
+      if (!g_key_file_load_from_file (priv->metadata_key_file,
+                                      priv->metadata_filepath, G_KEY_FILE_NONE,
+                                      &local_error))
+        {
+          /* If the metadata file just doesn't exist, this is fine: we just
+           * need to initialize it.
+           */
+          if (!g_error_matches (local_error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
+            goto handle_failed_read;
+
+          g_clear_error (&local_error);
+          priv->reinitialize = TRUE;
+        }
+      else
+        {
+          /* If the metadata file exists but is empty, treat this as if it
+           * didn't exist yet. This can occur if the system crashed after the
+           * file was first initialized, but before any events were logged to
+           * the file.
+           */
+          gsize n_groups;
+          g_autofree GStrv groups =
+            g_key_file_get_groups (priv->metadata_key_file, &n_groups);
+
+          if (n_groups == 0)
+            priv->reinitialize = TRUE;
+        }
+    }
+
+  /* Either the :reinitialize construct-time property was set to TRUE, or one
+   * of the cases above told us that we need to initialize the metadata file.
+   * We don't need to modify the data file: we ensured it existed above, which
+   * is enough.
+   */
+  if (priv->reinitialize)
+    {
       g_key_file_set_uint64 (priv->metadata_key_file, METADATA_GROUP_NAME,
                              MAX_SIZE_KEY, priv->max_size);
       return set_metadata (self, 0, 0, error);
@@ -546,7 +579,7 @@ emer_circular_file_initable_init (GInitable    *initable,
   return resize (self, prev_max_size, error);
 
 handle_failed_read:
-  g_propagate_error (error, local_error);
+  g_propagate_error (error, g_steal_pointer (&local_error));
   return FALSE;
 }
 
@@ -565,6 +598,7 @@ emer_circular_file_initable_iface_init (GInitableIface *iface)
 EmerCircularFile *
 emer_circular_file_new (const gchar *path,
                         guint64      max_size,
+                        gboolean     reinitialize,
                         GError     **error)
 {
   return g_initable_new (EMER_TYPE_CIRCULAR_FILE,
@@ -572,6 +606,7 @@ emer_circular_file_new (const gchar *path,
                          error,
                          "path", path,
                          "max-size", max_size,
+                         "reinitialize", reinitialize,
                          NULL);
 }
 

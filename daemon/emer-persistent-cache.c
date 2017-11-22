@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2014 - 2016 Endless Mobile, Inc. */
+/* Copyright 2014-2017 Endless Mobile, Inc. */
 
 /*
  * This file is part of eos-event-recorder-daemon.
@@ -49,7 +49,7 @@
 
 typedef struct _EmerPersistentCachePrivate
 {
-  EmerCacheSizeProvider *cache_size_provider;
+  guint64 cache_size;
   EmerBootIdProvider *boot_id_provider;
   EmerCacheVersionProvider *cache_version_provider;
   EmerCircularFile *variant_file;
@@ -66,6 +66,8 @@ typedef struct _EmerPersistentCachePrivate
   gboolean boot_id_initialized;
 
   GKeyFile *boot_offset_key_file;
+
+  gboolean reinitialize_cache;
 } EmerPersistentCachePrivate;
 
 static void emer_persistent_cache_initable_iface_init (GInitableIface *iface);
@@ -107,10 +109,11 @@ enum
 {
   PROP_0,
   PROP_CACHE_DIRECTORY,
-  PROP_CACHE_SIZE_PROVIDER,
+  PROP_CACHE_SIZE,
   PROP_BOOT_ID_PROVIDER,
   PROP_CACHE_VERSION_PROVIDER,
   PROP_BOOT_OFFSET_UPDATE_INTERVAL,
+  PROP_REINITIALIZE_CACHE,
   NPROPS
 };
 
@@ -656,16 +659,13 @@ set_cache_directory (EmerPersistentCache *self,
 }
 
 static void
-set_cache_size_provider (EmerPersistentCache   *self,
-                         EmerCacheSizeProvider *cache_size_provider)
+set_cache_size (EmerPersistentCache   *self,
+                guint64                cache_size)
 {
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  if (cache_size_provider == NULL)
-    priv->cache_size_provider = emer_cache_size_provider_new ();
-  else
-    priv->cache_size_provider = g_object_ref_sink (cache_size_provider);
+  priv->cache_size = cache_size;
 }
 
 static void
@@ -735,6 +735,8 @@ emer_persistent_cache_set_property (GObject      *object,
                                     GParamSpec   *pspec)
 {
   EmerPersistentCache *self = EMER_PERSISTENT_CACHE (object);
+  EmerPersistentCachePrivate *priv =
+    emer_persistent_cache_get_instance_private (self);
 
   switch (property_id)
     {
@@ -742,8 +744,8 @@ emer_persistent_cache_set_property (GObject      *object,
       set_cache_directory (self, g_value_get_string (value));
       break;
 
-    case PROP_CACHE_SIZE_PROVIDER:
-      set_cache_size_provider (self, g_value_get_object (value));
+    case PROP_CACHE_SIZE:
+      set_cache_size (self, g_value_get_uint64 (value));
       break;
 
     case PROP_BOOT_ID_PROVIDER:
@@ -756,6 +758,10 @@ emer_persistent_cache_set_property (GObject      *object,
 
     case PROP_BOOT_OFFSET_UPDATE_INTERVAL:
       set_boot_offset_update_interval (self, g_value_get_uint (value));
+      break;
+
+    case PROP_REINITIALIZE_CACHE:
+      priv->reinitialize_cache = g_value_get_boolean (value);
       break;
 
     default:
@@ -784,7 +790,6 @@ emer_persistent_cache_finalize (GObject *object)
       priv->boot_offset_update_timeout_source_id = 0;
     }
 
-  g_clear_object (&priv->cache_size_provider);
   g_clear_object (&priv->boot_id_provider);
   g_clear_object (&priv->cache_version_provider);
   g_clear_object (&priv->variant_file);
@@ -812,11 +817,11 @@ emer_persistent_cache_class_init (EmerPersistentCacheClass *klass)
                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   /* Blurb string is good enough default documentation for this. */
-  emer_persistent_cache_props[PROP_CACHE_SIZE_PROVIDER] =
-    g_param_spec_object ("cache-size-provider", "Cache size provider",
-                         "The provider for the maximum number of bytes that "
+  emer_persistent_cache_props[PROP_CACHE_SIZE] =
+    g_param_spec_uint64 ("cache-size", "Cache size",
+                         "The maximum number of bytes that "
                          "may be stored in the persistent cache.",
-                         EMER_TYPE_CACHE_SIZE_PROVIDER,
+                         0, G_MAXUINT64, 0,
                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   /* Blurb string is good enough default documentation for this. */
@@ -844,6 +849,16 @@ emer_persistent_cache_class_init (EmerPersistentCacheClass *klass)
                        " of the boot offset metadata file.",
                        0, G_MAXUINT, DEFAULT_BOOT_TIMESTAMPS_UPDATE,
                        G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
+
+  /* Blurb string is good enough default documentation for this. */
+  emer_persistent_cache_props[PROP_REINITIALIZE_CACHE] =
+    g_param_spec_boolean ("reinitialize-cache", "Reinitialize cache",
+                          "Reinitialize the underlying EmerCircularFile. See "
+                          "EmerCircularFile:reinitialize for why this might "
+                          "be necessary.",
+                          FALSE,
+                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY |
+                          G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, NPROPS,
                                      emer_persistent_cache_props);
@@ -878,13 +893,11 @@ emer_persistent_cache_initable_init (GInitable    *initable,
       return FALSE;
     }
 
-  gchar *variant_file_path =
+  g_autofree gchar *variant_file_path =
     g_build_filename (priv->cache_directory, VARIANT_FILENAME, NULL);
-  guint64 max_cache_size =
-    emer_cache_size_provider_get_max_cache_size (priv->cache_size_provider);
   priv->variant_file =
-    emer_circular_file_new (variant_file_path, max_cache_size, error);
-  g_free (variant_file_path);
+    emer_circular_file_new (variant_file_path, priv->cache_size,
+                            priv->reinitialize_cache, error);
   if (priv->variant_file == NULL)
     return FALSE;
 
@@ -911,12 +924,16 @@ emer_persistent_cache_initable_iface_init (GInitableIface *iface)
  */
 EmerPersistentCache *
 emer_persistent_cache_new (const gchar *directory,
+                           guint64      cache_size,
+                           gboolean     reinitialize_cache,
                            GError     **error)
 {
   return g_initable_new (EMER_TYPE_PERSISTENT_CACHE,
                          NULL /* GCancellable */,
                          error,
                          "cache-directory", directory,
+                         "cache-size", cache_size,
+                         "reinitialize-cache", reinitialize_cache,
                          NULL);
 }
 
@@ -925,20 +942,22 @@ emer_persistent_cache_new (const gchar *directory,
  */
 EmerPersistentCache *
 emer_persistent_cache_new_full (const gchar              *directory,
-                                EmerCacheSizeProvider    *cache_size_provider,
+                                guint64                   cache_size,
                                 EmerBootIdProvider       *boot_id_provider,
                                 EmerCacheVersionProvider *cache_version_provider,
                                 guint                     boot_offset_update_interval,
+                                gboolean                  reinitialize_cache,
                                 GError                  **error)
 {
   return g_initable_new (EMER_TYPE_PERSISTENT_CACHE,
                          NULL /* GCancellable */,
                          error,
                          "cache-directory", directory,
-                         "cache-size-provider", cache_size_provider,
+                         "cache-size", cache_size,
                          "boot-id-provider", boot_id_provider,
                          "cache-version-provider", cache_version_provider,
                          "boot-offset-update-interval", boot_offset_update_interval,
+                         "reinitialize-cache", reinitialize_cache,
                          NULL);
 }
 

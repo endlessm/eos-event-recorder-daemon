@@ -49,6 +49,7 @@
 #define MOCK_SERVER_PATH TEST_DIR "daemon/mock-server.py"
 
 #define MEANINGLESS_EVENT "350ac4ff-3026-4c25-9e7e-e8103b4fd5d8"
+#define CACHE_METADATA_IS_CORRUPT_EVENT_ID "f0e8a206-3bc2-405e-90d0-ef6fe6dd7edc"
 
 #define USER_ID 4200u
 #define NUM_EVENTS G_GINT64_CONSTANT (101)
@@ -117,7 +118,7 @@ terminate_subprocess_and_wait (GSubprocess *subprocess)
    * Make sure it was the SIGTERM that finished the process, and not something
    * else.
    */
-  GError *error = NULL;
+  g_autoptr(GError) error = NULL;
   g_assert_false (g_subprocess_wait_check (subprocess, NULL, &error));
   g_assert_error (error, G_SPAWN_ERROR, G_SPAWN_ERROR_FAILED);
   g_assert_cmpstr (error->message, ==, "Child process killed by signal 15");
@@ -376,13 +377,19 @@ read_bytes_from_stdout (GSubprocess           *subprocess,
 }
 
 static GVariant *
-make_event_id_variant (void)
+make_variant_for_event_id (const gchar *event_id)
 {
   uuid_t uuid;
-  g_assert_cmpint (uuid_parse (MEANINGLESS_EVENT, uuid), ==, 0);
+  g_assert_cmpint (uuid_parse (event_id, uuid), ==, 0);
   GVariantBuilder event_id_builder;
   get_uuid_builder (uuid, &event_id_builder);
   return g_variant_builder_end (&event_id_builder);
+}
+
+static GVariant *
+make_event_id_variant (void)
+{
+  return make_variant_for_event_id (MEANINGLESS_EVENT);
 }
 
 static GVariant *
@@ -485,7 +492,22 @@ assert_variants_equal (GVariant *actual_variant,
                        GVariant *expected_variant)
 {
   g_assert_nonnull (actual_variant);
-  g_assert_true (g_variant_equal (actual_variant, expected_variant));
+
+  if (!g_variant_equal (actual_variant, expected_variant))
+    {
+      /* Assertion failures of the form
+       *   ERROR:../tests/daemon/test-daemon.c:495:assert_variants_equal:
+       *   'g_variant_equal (actual_variant, expected_variant)' should be TRUE
+       * are not very helpful -- you want to see the actual variants!
+       */
+      g_autofree gchar *actual_str = g_variant_print (actual_variant, TRUE);
+      g_autofree gchar *expected_str = g_variant_print (expected_variant, TRUE);
+      g_assert_cmpstr (actual_str, ==, expected_str);
+
+      /* Should not be reached: */
+      g_error ("variants compared non-equal, but their type-annotated "
+               "stringified representations compared equal!");
+    }
 
   g_variant_unref (actual_variant);
   g_variant_unref (expected_variant);
@@ -928,8 +950,8 @@ create_test_object (Fixture *fixture)
 }
 
 static void
-setup (Fixture      *fixture,
-       gconstpointer unused)
+setup_most (Fixture      *fixture,
+            gconstpointer unused)
 {
   // The mock server should be sent SIGTERM when this process exits.
   GSubprocessLauncher *subprocess_launcher =
@@ -951,8 +973,23 @@ setup (Fixture      *fixture,
   fixture->mock_network_send_provider =
     emer_network_send_provider_new (NULL /* path */);
   fixture->mock_permissions_provider = emer_permissions_provider_new ();
+  fixture->mock_persistent_cache = NULL;
+}
+
+static void
+setup (Fixture      *fixture,
+       gconstpointer unused)
+{
+  g_autoptr(GError) error = NULL;
+  setup_most (fixture, unused);
+
+  /* directory and max_cache_size are ignored by mock object. */
   fixture->mock_persistent_cache =
-    emer_persistent_cache_new (NULL /* directory */, NULL /* GError */);
+    emer_persistent_cache_new (NULL /* directory */,
+                               10000000, /* max_cache_size */
+                               FALSE /* reinitialize_cache */,
+                               &error);
+  g_assert_no_error (error);
 
   create_test_object (fixture);
 }
@@ -962,12 +999,12 @@ teardown (Fixture      *fixture,
           gconstpointer unused)
 {
   g_clear_object (&fixture->test_object);
-  g_object_unref (fixture->mock_machine_id_provider);
-  g_object_unref (fixture->mock_network_send_provider);
-  g_object_unref (fixture->mock_permissions_provider);
-  g_object_unref (fixture->mock_persistent_cache);
-  terminate_subprocess_and_wait (fixture->mock_server);
-  g_free (fixture->server_uri);
+  g_clear_object (&fixture->mock_machine_id_provider);
+  g_clear_object (&fixture->mock_network_send_provider);
+  g_clear_object (&fixture->mock_permissions_provider);
+  g_clear_object (&fixture->mock_persistent_cache);
+  g_clear_pointer (&fixture->mock_server, terminate_subprocess_and_wait);
+  g_clear_pointer (&fixture->server_uri, g_free);
 }
 
 // Unit Tests next:
@@ -1353,6 +1390,96 @@ test_daemon_limits_network_upload_size (Fixture      *fixture,
   wait_for_upload_to_finish (fixture);
 }
 
+/* Asserts that the mock server received a single
+ * CACHE_METADATA_IS_CORRUPT_EVENT_ID event.
+ */
+static void
+assert_corrupt_metadata_event_received (GByteArray *request,
+                                        Fixture    *fixture)
+{
+  GVariantIter *singular_iterator, *aggregate_iterator, *sequence_iterator;
+  get_events_from_request (request, fixture, &singular_iterator,
+                           &aggregate_iterator, &sequence_iterator);
+
+  g_assert_cmpuint (g_variant_iter_n_children (singular_iterator), ==, 1u);
+
+  GVariant *singular = g_variant_iter_next_value (singular_iterator);
+  GVariant *event_id;
+  GVariant *payload;
+
+  /* Can't make any meaningful assertions about the user ID (it's the user
+   * running the test) or the timestamp.
+   */
+  g_variant_get (singular, "(u@ayxmv)",
+                 NULL, &event_id, NULL, &payload);
+
+  GVariant *expected_event_id =
+    make_variant_for_event_id (CACHE_METADATA_IS_CORRUPT_EVENT_ID);
+  assert_variants_equal (event_id, expected_event_id);
+
+  g_assert_null (payload);
+
+  g_variant_iter_free (singular_iterator);
+
+  g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 0u);
+  g_variant_iter_free (aggregate_iterator);
+
+  g_assert_cmpuint (g_variant_iter_n_children (sequence_iterator), ==, 0u);
+  g_variant_iter_free (sequence_iterator);
+}
+
+/* If the first attempt to create the EmerPersistentCache fails with a
+ * G_KEY_FILE_ERROR, the daemon should attempt to reset the cache, and log an
+ * event indicating that the cache metadata was corrupt.
+ */
+static void
+test_daemon_reinitializes_cache_on_key_file_error (Fixture      *fixture,
+                                                   gconstpointer unused)
+{
+  g_autoptr(GError) persistent_cache_error =
+    g_error_new (G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_PARSE, "oh no");
+  mock_persistent_cache_set_construct_error (persistent_cache_error);
+
+  g_test_expect_message (NULL, G_LOG_LEVEL_WARNING, "*oh no*");
+  create_test_object (fixture);
+
+  g_object_get (fixture->test_object,
+                "persistent-cache", &fixture->mock_persistent_cache,
+                NULL);
+
+  g_assert_true (mock_persistent_cache_get_reinitialize (fixture->mock_persistent_cache));
+
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_corrupt_metadata_event_received);
+  wait_for_upload_to_finish (fixture);
+
+  g_test_assert_expected_messages ();
+}
+
+/* If creating the EmerPersistentCache with an error other than
+ * G_KEY_FILE_ERROR, we expect a crash.
+ */
+static void
+test_daemon_crashes_on_non_key_file_error (Fixture      *fixture,
+                                           gconstpointer unused)
+{
+  if (g_test_subprocess ())
+    {
+      g_autoptr(GError) persistent_cache_error =
+        g_error_new (G_IO_ERROR, G_IO_ERROR_FAILED, "oh no");
+
+      mock_persistent_cache_set_construct_error (persistent_cache_error);
+
+      /* should abort */
+      create_test_object (fixture);
+      return;
+    }
+
+  g_test_trap_subprocess (NULL, 0, 0);
+  g_test_trap_assert_failed ();
+  g_test_trap_assert_stderr ("*oh no*");
+}
+
 gint
 main (gint                argc,
       const gchar * const argv[])
@@ -1400,6 +1527,16 @@ main (gint                argc,
                    test_daemon_limits_network_upload_size);
 
 #undef ADD_DAEMON_TEST
+
+  /* These tests need slightly different set-up */
+  g_test_add ("/daemon/reinitializes-cache-on-key-file-error",
+              Fixture, NULL, setup_most,
+              test_daemon_reinitializes_cache_on_key_file_error,
+              teardown);
+  g_test_add ("/daemon/crashes-on-non-key-file-error",
+              Fixture, NULL, setup_most,
+              test_daemon_crashes_on_non_key_file_error,
+              teardown);
 
   return g_test_run ();
 }

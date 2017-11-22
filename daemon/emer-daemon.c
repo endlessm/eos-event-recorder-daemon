@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 
-/* Copyright 2014 - 2016 Endless Mobile, Inc. */
+/* Copyright 2014-2017 Endless Mobile, Inc. */
 
 /*
  * This file is part of eos-event-recorder-daemon.
@@ -120,6 +120,11 @@
  * the number of valid elements found and the number of bytes read.
  */
 #define CACHE_HAS_INVALID_ELEMENTS_EVENT_ID "cbfbcbdb-6af2-f1db-9e11-6cc25846e296"
+
+/* The persistent cache metadata was corrupt, so the cache was re-initialized
+ * (discarding all events). The event has no (meaningful) payload.
+ */
+#define CACHE_METADATA_IS_CORRUPT_EVENT_ID "f0e8a206-3bc2-405e-90d0-ef6fe6dd7edc"
 
 typedef struct _NetworkCallbackData
 {
@@ -1254,9 +1259,35 @@ emer_daemon_constructed (GObject *object)
 
   if (priv->persistent_cache == NULL)
     {
-      GError *error = NULL;
+      guint64 max_cache_size =
+        emer_cache_size_provider_get_max_cache_size (NULL);
+      g_autoptr(GError) error = NULL;
+
       priv->persistent_cache =
-        emer_persistent_cache_new (priv->persistent_cache_directory, &error);
+        emer_persistent_cache_new (priv->persistent_cache_directory,
+                                   max_cache_size,
+                                   FALSE,
+                                   &error);
+
+      if (priv->persistent_cache == NULL &&
+          error != NULL && error->domain == G_KEY_FILE_ERROR)
+        {
+          g_warning ("Persistent cache metadata in %s was corrupt: %s",
+                     priv->persistent_cache_directory,
+                     error->message);
+          report_invalid_data_in_cache (self,
+                                        CACHE_METADATA_IS_CORRUPT_EVENT_ID,
+                                        NULL);
+          g_clear_error (&error);
+
+          g_message ("Attempting to reinitialize the persistent cache");
+          priv->persistent_cache =
+            emer_persistent_cache_new (priv->persistent_cache_directory,
+                                       max_cache_size,
+                                       TRUE,
+                                       &error);
+        }
+
       if (priv->persistent_cache == NULL)
         g_error ("Could not create persistent cache in %s: %s.",
                  priv->persistent_cache_directory, error->message);
@@ -1278,6 +1309,26 @@ emer_daemon_constructed (GObject *object)
   g_free (environment);
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->constructed (object);
+}
+
+static void
+emer_daemon_get_property (GObject      *object,
+                          guint         property_id,
+                          GValue       *value,
+                          GParamSpec   *pspec)
+{
+  EmerDaemon *self = EMER_DAEMON (object);
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  switch (property_id)
+    {
+    case PROP_PERSISTENT_CACHE:
+      g_value_set_object (value, priv->persistent_cache);
+      break;
+
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+    }
 }
 
 static void
@@ -1371,6 +1422,7 @@ emer_daemon_class_init (EmerDaemonClass *klass)
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
   object_class->constructed = emer_daemon_constructed;
+  object_class->get_property = emer_daemon_get_property;
   object_class->set_property = emer_daemon_set_property;
   object_class->finalize = emer_daemon_finalize;
 
@@ -1491,7 +1543,7 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                          "Object managing persistent storage of events until "
                          "they are uploaded to the metrics servers",
                          EMER_TYPE_PERSISTENT_CACHE,
-                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
+                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE |
                          G_PARAM_STATIC_STRINGS);
 
   /* Blurb string is good enough default documentation for this */

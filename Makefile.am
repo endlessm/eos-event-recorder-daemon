@@ -36,7 +36,7 @@ AM_CFLAGS = @STRICT_CFLAGS@
 # directory when doing 'make distcheck'.
 AM_DISTCHECK_CONFIGURE_FLAGS = \
 	--enable-strict-flags \
-	--with-systemdsystemunitdir=$(libdir)/systemd \
+	--with-systemdsystemunitdir='$${prefix}/lib/systemd/system' \
 	$(NULL)
 if EOS_ENABLE_COVERAGE
 AM_DISTCHECK_CONFIGURE_FLAGS += --enable-coverage --with-coverage-dir=@EOS_COVERAGE_DIR@

@@ -291,7 +291,7 @@ remove_events (EmerDaemon *self,
   if (num_events == 0)
     return;
 
-  for (gint i = 0; i < num_events; i++)
+  for (gsize i = 0; i < num_events; i++)
     {
       GVariant *curr_variant = g_ptr_array_index (priv->variant_array, i);
       priv->num_bytes_buffered -= emer_persistent_cache_cost (curr_variant);

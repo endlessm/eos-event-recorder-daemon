@@ -764,7 +764,7 @@ test_circular_file_broken_metadata_file (Fixture      *fixture,
                                           FALSE /* reinitialize */,
                                           &error);
   g_assert_null (circular_file);
-  g_assert_error (error, G_KEY_FILE_ERROR, expected_error_code);
+  g_assert_error (error, G_KEY_FILE_ERROR, (gint) expected_error_code);
   g_clear_error (&error);
 
   /* Re-initializing the file should work, though. */

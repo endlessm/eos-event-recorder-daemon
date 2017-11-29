@@ -46,8 +46,8 @@ typedef struct Fixture
 } Fixture;
 
 static void
-write_testing_cache_keyfile (Fixture *fixture,
-                             gchar   *key_file_data)
+write_testing_cache_keyfile (Fixture     *fixture,
+                             const gchar *key_file_data)
 {
   GError *error = NULL;
   g_key_file_load_from_data (fixture->key_file, key_file_data, -1,

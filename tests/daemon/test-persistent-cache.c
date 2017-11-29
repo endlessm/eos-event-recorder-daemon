@@ -180,7 +180,7 @@ set_boot_offset_in_metadata_file (gint64 new_offset)
  * Overwrites the metadata file's boot id with the given boot id.
  */
 static void
-set_boot_id_in_metadata_file (gchar *boot_id)
+set_boot_id_in_metadata_file (const gchar *boot_id)
 {
   GKeyFile *boot_offset_key_file = load_boot_offset_key_file ();
 

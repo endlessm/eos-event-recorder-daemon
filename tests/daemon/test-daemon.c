@@ -441,7 +441,7 @@ assert_no_data_uploaded (EmerDaemon               *daemon,
 {
   GError *error = NULL;
   g_assert_false (emer_daemon_upload_events_finish (daemon, result, &error));
-  g_assert_error (error, EMER_ERROR, callback_data->error_code);
+  g_assert_error (error, EMER_ERROR, (gint) callback_data->error_code);
   g_error_free (error);
 
   GPollableInputStream *pollable_input_stream =

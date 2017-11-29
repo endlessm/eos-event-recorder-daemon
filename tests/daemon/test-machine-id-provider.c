@@ -45,7 +45,7 @@
 // Helper Functiobns
 
 static gboolean
-write_testing_machine_id ()
+write_testing_machine_id (void)
 {
   GFile *file = g_file_new_for_path (TESTING_FILE_PATH);
   gboolean success = g_file_replace_contents (file,

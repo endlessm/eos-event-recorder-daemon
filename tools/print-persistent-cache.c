@@ -63,7 +63,7 @@ print_variants_to_file (GVariant   **variants,
     }
 
   GByteArray *byte_array = g_byte_array_new ();
-  for (gint i = 0; i < num_variants; i++)
+  for (gsize i = 0; i < num_variants; i++)
     {
       gchar *variant_str = g_variant_print (variants[i], TRUE);
       gsize variant_str_length = strlen (variant_str);

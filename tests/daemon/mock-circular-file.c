@@ -20,7 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#include "emer-circular-file.h"
+#include "mock-circular-file.h"
 
 #include <string.h>
 

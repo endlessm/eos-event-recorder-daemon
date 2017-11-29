@@ -120,7 +120,6 @@ tests_daemon_test_persistent_cache_SOURCES = \
 	tests/daemon/test-persistent-cache.c \
 	daemon/emer-persistent-cache.c daemon/emer-persistent-cache.h \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
-	daemon/emer-cache-size-provider.c daemon/emer-cache-size-provider.h \
 	tests/daemon/mock-cache-version-provider.c \
 	daemon/emer-cache-version-provider.h \
 	tests/daemon/mock-circular-file.c tests/daemon/mock-circular-file.h \

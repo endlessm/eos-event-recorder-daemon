@@ -28,7 +28,6 @@
 #include <eosmetrics/eosmetrics.h>
 
 #include "emer-boot-id-provider.h"
-#include "emer-cache-size-provider.h"
 #include "emer-cache-version-provider.h"
 #include "mock-circular-file.h"
 #include "shared/metrics-util.h"

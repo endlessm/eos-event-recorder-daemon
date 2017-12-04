@@ -1,7 +1,8 @@
 Source: eos-event-recorder-daemon
 Priority: standard
 Maintainer: Kurt von Laven <kurt@endlessm.com>
-Build-Depends: autotools-dev,
+Build-Depends: autoconf-archive,
+               autotools-dev,
                ca-certificates,
                debhelper (>= 8.0.0),
                dh-systemd,

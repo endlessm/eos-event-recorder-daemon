@@ -48,8 +48,7 @@ guint64
 emer_cache_size_provider_get_max_cache_size (const gchar *path)
 {
   g_autoptr(GKeyFile) key_file = g_key_file_new ();
-  guint64 cache_size;
-  gboolean load_succeeded;
+  guint64 cache_size = 0;
   g_autoptr(GError) error = NULL;
 
   if (path == NULL)

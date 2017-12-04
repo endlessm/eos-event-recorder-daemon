@@ -73,7 +73,7 @@ tests_daemon_test_daemon_dbusdaemon_SOURCES = \
 	daemon/emer-daemon.c daemon/emer-daemon.h \
 	tests/daemon/test-daemon.c \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
-	daemon/emer-cache-size-provider.c daemon/emer-cache-size-provider.h \
+	tests/daemon/mock-cache-size-provider.c daemon/emer-cache-size-provider.h \
 	daemon/emer-gzip.c daemon/emer-gzip.h \
 	tests/daemon/mock-machine-id-provider.c daemon/emer-machine-id-provider.h \
 	tests/daemon/mock-network-send-provider.c \
@@ -120,7 +120,6 @@ tests_daemon_test_persistent_cache_SOURCES = \
 	tests/daemon/test-persistent-cache.c \
 	daemon/emer-persistent-cache.c daemon/emer-persistent-cache.h \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
-	daemon/emer-cache-size-provider.c daemon/emer-cache-size-provider.h \
 	tests/daemon/mock-cache-version-provider.c \
 	daemon/emer-cache-version-provider.h \
 	tests/daemon/mock-circular-file.c tests/daemon/mock-circular-file.h \

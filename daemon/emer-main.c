@@ -206,8 +206,6 @@ sync_recorder_server_enabled_for_upload (GBinding     *binding,
                                          GValue       *to_value,
                                          gpointer      user_data)
 {
-  EmerEventRecorderServer *server =
-    EMER_EVENT_RECORDER_SERVER (g_binding_get_target (binding));
   EmerPermissionsProvider *permissions =
     EMER_PERMISSIONS_PROVIDER (g_binding_get_source (binding));
 
@@ -226,8 +224,6 @@ sync_recorder_server_enabled_for_daemon (GBinding     *binding,
                                          GValue       *to_value,
                                          gpointer      user_data)
 {
-  EmerEventRecorderServer *server =
-    EMER_EVENT_RECORDER_SERVER (g_binding_get_target (binding));
   EmerPermissionsProvider *permissions =
     EMER_PERMISSIONS_PROVIDER (g_binding_get_source (binding));
 

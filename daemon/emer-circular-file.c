@@ -272,7 +272,7 @@ continue_reading_from_start (EmerCircularFile *self,
 
   GSeekable *seekable = G_SEEKABLE (input_stream);
   goffset curr_position = g_seekable_tell (seekable);
-  if (curr_position != priv->max_size)
+  if (curr_position < 0 || (guint64) curr_position != priv->max_size)
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
                    "Circular file has a physical size of %" G_GOFFSET_FORMAT
@@ -567,7 +567,7 @@ emer_circular_file_initable_init (GInitable    *initable,
   if (local_error != NULL)
     goto handle_failed_read;
 
-  if (priv->head < 0 || priv->head >= prev_max_size)
+  if (priv->head < 0 || (guint64) priv->head >= prev_max_size)
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Pointer to "
                    "head of circular file must lie in range [0, %"

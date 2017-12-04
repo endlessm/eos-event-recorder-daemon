@@ -20,7 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#include "emer-circular-file.h"
+#include "mock-circular-file.h"
 
 #include <string.h>
 
@@ -67,8 +67,6 @@ emer_circular_file_set_property (GObject      *object,
                                  GParamSpec   *pspec)
 {
   EmerCircularFile *self = EMER_CIRCULAR_FILE (object);
-  EmerCircularFilePrivate *priv =
-    emer_circular_file_get_instance_private (self);
 
   switch (property_id)
     {
@@ -257,7 +255,7 @@ mock_circular_file_set_construct_error (const GError *error)
 }
 
 gboolean
-mock_circular_file_got_reinitialize ()
+mock_circular_file_got_reinitialize (void)
 {
   return mock_circular_file_reinitialize;
 }

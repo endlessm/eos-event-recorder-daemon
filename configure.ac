@@ -49,6 +49,8 @@ AM_SILENT_RULES([yes])
 # Keep Autotools macros local to this source tree
 AC_CONFIG_MACRO_DIR([m4])
 
+AX_IS_RELEASE([git-directory])
+
 AC_CACHE_SAVE
 
 # Variables to define
@@ -93,43 +95,17 @@ AC_ARG_VAR([GDBUS_CODEGEN], [Path to gdbus-codegen])
 
 AC_CACHE_SAVE
 
+
 # Configure options
 # -----------------
-# --enable-strict-flags: Compile with strict compiler flags. Done automatically
-# during 'make distcheck'.
-AC_ARG_ENABLE([strict-flags],
-    [AS_HELP_STRING([--enable-strict-flags=@<:@no/yes/error@:>@],
-        [Use strict compiler flags @<:@default=no@:>@])],
-    [],
-    [enable_strict_flags=no])
-# Emmanuele's list of flags
-STRICT_COMPILER_FLAGS="$STRICT_COMPILER_FLAGS
-    -Wall
-    -Wcast-align
-    -Wuninitialized
-    -Wno-strict-aliasing
-    -Werror=pointer-arith
-    -Werror=missing-declarations
-    -Werror=redundant-decls
-    -Werror=empty-body
-    -Werror=format
-    -Werror=format-security
-    -Werror=format-nonliteral
-    -Werror=init-self"
-AS_CASE([$enable_strict_flags],
-    [yes],
-        [AS_COMPILER_FLAGS([STRICT_CFLAGS], [$STRICT_COMPILER_FLAGS])],
-    [no],
-        [],
-        [error],
-        [
-            STRICT_COMPILER_FLAGS="$STRICT_COMPILER_FLAGS -Werror"
-            AS_COMPILER_FLAGS([STRICT_CFLAGS], [$STRICT_COMPILER_FLAGS])
-        ],
-    [AC_MSG_ERROR([Invalid option for --enable-strict-flags])])
-dnl Strip leading spaces
-STRICT_CFLAGS=${STRICT_CFLAGS#*  }
-AC_SUBST(STRICT_CFLAGS)
+# --enable-compile-warnings. By default, warnings are enabled for all builds,
+# and fatal for builds from Git checkouts. Documentation:
+# https://www.gnu.org/software/autoconf-archive/ax_compiler_flags.html
+#
+# -Wno-declaration-after-statement:
+#   Mixed decls are used a lot and are harmless.
+AX_COMPILER_FLAGS([WARN_CFLAGS], [WARN_LDFLAGS], [], [],
+                  [-Wno-declaration-after-statement])
 
 systemdsystemunitdir="$($PKG_CONFIG systemd --variable=systemdsystemunitdir)"
 dnl Allow overriding systemdsystemunitdir during distcheck in order to trick

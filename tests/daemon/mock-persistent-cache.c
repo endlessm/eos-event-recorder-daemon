@@ -97,7 +97,7 @@ emer_persistent_cache_new_full (const gchar              *directory,
                                 gboolean                  reinitialize_cache,
                                 GError                  **error)
 {
-  g_assert_not_reached ();
+  g_return_val_if_reached (NULL);
 }
 
 gsize

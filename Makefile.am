@@ -30,13 +30,14 @@ ACLOCAL_AMFLAGS = -I m4
 EXTRA_DIST = README.md
 
 # Compiler flags
-AM_CFLAGS = @STRICT_CFLAGS@
+AM_CFLAGS = @WARN_CFLAGS@
+AM_LDFLAGS = @WARN_LDFLAGS@
 
 # Enable strict compiler flags and install systemd unit files to the specified
 # directory when doing 'make distcheck'.
 AM_DISTCHECK_CONFIGURE_FLAGS = \
-	--enable-strict-flags \
-	--with-systemdsystemunitdir=$(libdir)/systemd \
+	--enable-compile-warnings=error \
+	--with-systemdsystemunitdir='$${prefix}/lib/systemd/system' \
 	$(NULL)
 if EOS_ENABLE_COVERAGE
 AM_DISTCHECK_CONFIGURE_FLAGS += --enable-coverage --with-coverage-dir=@EOS_COVERAGE_DIR@
@@ -95,7 +96,7 @@ EOS_COVERAGE_BLACKLIST_PATTERNS =	\
 @EOS_COVERAGE_RULES@
 
 AM_CFLAGS += @EOS_C_COVERAGE_CFLAGS@
-AM_LDFLAGS = @EOS_C_COVERAGE_LDFLAGS@
+AM_LDFLAGS += @EOS_C_COVERAGE_LDFLAGS@
 
 # # # DBUS DAEMON ("EVENT RECORDER SERVER") # # #
 

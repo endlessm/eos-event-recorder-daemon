@@ -102,6 +102,23 @@ on_set_enabled (EmerEventRecorderServer *server,
   return TRUE;
 }
 
+static gboolean
+on_reset_tracking_id (EmerEventRecorderServer *server,
+                      GDBusMethodInvocation   *invocation,
+                      EmerDaemon              *daemon)
+{
+  g_autoptr(GError) error = NULL;
+
+  if (!emer_daemon_reset_tracking_id (daemon, &error))
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return TRUE;
+    }
+
+  emer_event_recorder_server_complete_reset_tracking_id (server, invocation);
+  return TRUE;
+}
+
 static void
 handle_upload_finished (EmerDaemon       *daemon,
                         GAsyncResult     *result,
@@ -134,6 +151,40 @@ on_upload_events (EmerEventRecorderServer *server,
   return TRUE;
 }
 
+typedef struct {
+    const gchar *method_name;
+    const gchar *method_full_name;
+    const gchar *error_message;
+} AuthorizedMethod;
+
+static const AuthorizedMethod authorized_methods[] = {
+   {
+     "SetEnabled",
+     "com.endlessm.Metrics.SetEnabled",
+     "Disabling metrics is only allowed from system settings"
+   },
+   {
+     "ResetTrackingId",
+     "com.endlessm.Metrics.ResetTrackingId",
+     "Only privileged users can reset the tracking ID"
+   },
+   { NULL }
+};
+
+static const AuthorizedMethod *
+lookup_authorized_method (const gchar *method_name)
+{
+  gsize i;
+
+  for (i = 0; i < G_N_ELEMENTS (authorized_methods); ++i)
+    {
+      if (g_strcmp0 (authorized_methods[i].method_name, method_name) == 0)
+        return &authorized_methods[i];
+    }
+
+  return NULL;
+}
+
 /*
  * This handler is run in a separate thread, so all operations can be
  * synchronous.
@@ -145,7 +196,9 @@ on_authorize_method_check (GDBusInterfaceSkeleton *interface,
 {
   const gchar *method_name =
     g_dbus_method_invocation_get_method_name (invocation);
-  if (strcmp (method_name, "SetEnabled") != 0)
+  const AuthorizedMethod *authorized_method = lookup_authorized_method (method_name);
+
+  if (authorized_method == NULL)
     return TRUE;
 
   GError *error = NULL;
@@ -165,7 +218,7 @@ on_authorize_method_check (GDBusInterfaceSkeleton *interface,
   PolkitAuthorizationResult *result =
     polkit_authority_check_authorization_sync (authority,
                                                subject,
-                                               "com.endlessm.Metrics.SetEnabled",
+                                               authorized_method->method_full_name,
                                                NULL /*PolkitDetails*/,
                                                POLKIT_CHECK_AUTHORIZATION_FLAGS_NONE,
                                                NULL /*GCancellable*/,
@@ -183,11 +236,10 @@ on_authorize_method_check (GDBusInterfaceSkeleton *interface,
 
   gboolean authorized = polkit_authorization_result_get_is_authorized (result);
   if (!authorized)
-    g_dbus_method_invocation_return_error (invocation,
-                                           G_DBUS_ERROR,
-                                           G_DBUS_ERROR_AUTH_FAILED,
-                                           "Disabling metrics is only "
-                                           "allowed from system settings");
+    g_dbus_method_invocation_return_error_literal (invocation,
+                                                   G_DBUS_ERROR,
+                                                   G_DBUS_ERROR_AUTH_FAILED,
+                                                   authorized_method->error_message);
 
   g_object_unref (result);
   return authorized;
@@ -258,6 +310,8 @@ on_bus_acquired (GDBusConnection *system_bus,
                     G_CALLBACK (on_set_enabled), daemon);
   g_signal_connect (server, "handle-upload-events",
                     G_CALLBACK (on_upload_events), daemon);
+  g_signal_connect (server, "handle-reset-tracking-id",
+                    G_CALLBACK (on_reset_tracking_id), daemon);
   g_signal_connect (server, "g-authorize-method",
                     G_CALLBACK (on_authorize_method_check), daemon);
 

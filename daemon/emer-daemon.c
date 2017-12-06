@@ -1599,6 +1599,15 @@ emer_daemon_new (const gchar             *persistent_cache_directory,
                        NULL);
 }
 
+gboolean
+emer_daemon_reset_tracking_id (EmerDaemon  *self,
+                               GError     **error)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+
+  return emer_machine_id_provider_reset_tracking_id (priv->machine_id_provider, error);
+}
+
 /*
  * emer_daemon_new_full:
  * @rand: (allow-none): random number generator to use for randomized

@@ -16,7 +16,7 @@
 ## along with eos-event-recorder-daemon.  If not, see
 ## <http://www.gnu.org/licenses/>.
 
-libexec_PROGRAMS = eos-metrics-event-recorder
+libexec_PROGRAMS += eos-metrics-event-recorder
 
 daemon_dbus_name = emer-event-recorder-server
 
@@ -48,7 +48,6 @@ eos_metrics_event_recorder_SOURCES = \
 	daemon/emer-persistent-cache.c daemon/emer-persistent-cache.h \
 	daemon/emer-types.c daemon/emer-types.h \
 	emer-event-recorder-server.c emer-event-recorder-server.h \
-	shared/metrics-util.c shared/metrics-util.h \
 	$(NULL)
 
 eos_metrics_event_recorder_CPPFLAGS = \
@@ -56,6 +55,10 @@ eos_metrics_event_recorder_CPPFLAGS = \
 	-DCONFIG_DIR="\"$(configdir)\"" \
 	-DPERMISSIONS_FILE="\"$(permissions_file)\"" \
 	-DPERSISTENT_CACHE_DIR="\"$(persistentcachedir)\"" \
+	-DSYSCONFDIR="\"$(sysconfdir)\"" \
 	$(NULL)
 
-eos_metrics_event_recorder_LDADD = $(EOS_EVENT_RECORDER_DAEMON_LIBS) -lm
+eos_metrics_event_recorder_LDADD = \
+	$(EOS_EVENT_RECORDER_DAEMON_LIBS) \
+	$(top_builddir)/shared/libeos-metrics-event-recorder-shared.la \
+	-lm

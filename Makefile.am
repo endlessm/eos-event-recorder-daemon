@@ -53,9 +53,37 @@ BUILT_SOURCES =
 # Binaries that should be produced but not installed.
 noinst_PROGRAMS =
 
+# Libraries that should be produced but not installed.
+noinst_LTLIBRARIES = 
+
+# Binaries that should be installed in libexecdir
+libexec_PROGRAMS = 
+
+substitute_libexecdir = sed \
+	-e 's|@libexecdir[@]|$(libexecdir)|g' \
+	$(NULL)
+
+# dbus services
+dbusservicedir = ${datadir}/dbus-1/system-services
+dist_dbusservice_DATA = 
+
+# dbus security policy
+systembussecuritypolicydir = ${sysconfdir}/dbus-1/system.d
+dist_systembussecuritypolicy_DATA = 
+
+# policykit
+policydir = ${datadir}/polkit-1/actions
+dist_policy_DATA = 
+
+policyrulesdir = $(datadir)/polkit-1/rules.d
+dist_policyrules_DATA = 
+
 persistentcachedir=$(localstatedir)/cache/metrics/
 configdir=$(sysconfdir)/metrics/
 permissions_file=$(configdir)eos-metrics-permissions.conf
+
+# systemd
+systemdsystemunit_DATA = 
 
 # chown and chgrp are not allowed unless you are root or under some specific
 # other conditions that may not be met every time you run 'make'.
@@ -97,6 +125,9 @@ EOS_COVERAGE_BLACKLIST_PATTERNS =	\
 
 AM_CFLAGS += @EOS_C_COVERAGE_CFLAGS@
 AM_LDFLAGS += @EOS_C_COVERAGE_LDFLAGS@
+
+# # # COMMON LIBRARY # # #
+include $(top_srcdir)/shared/Makefile.am.inc
 
 # # # DBUS DAEMON ("EVENT RECORDER SERVER") # # #
 

@@ -253,6 +253,22 @@ hyphenate_uuid (gchar *uuid_sans_hyphens)
                           uuid_sans_hyphens + 16, uuid_sans_hyphens + 20);
 }
 
+/*
+ * Returns a newly-allocated copy of uuid_with_hyphens with hyphens removed at
+ * the appropriate positions as defined by uuid_unparse(3).
+ * uuid_with_hyphens is expected to be exactly 36 bytes, excluding the terminal
+ * null byte.
+ * Any extra bytes are ignored.
+ * The returned string is guaranteed to be have a newline and be nul-terminated.
+ */
+static gchar *
+dehyphenate_uuid (gchar *uuid_with_hyphens)
+{
+  return g_strdup_printf ("%.8s%.4s%.4s%.4s%.12s\n", uuid_with_hyphens,
+                          uuid_with_hyphens + 9, uuid_with_hyphens + 14,
+                          uuid_with_hyphens + 19, uuid_with_hyphens + 24);
+}
+
 static gboolean
 read_one_machine_id (const gchar  *machine_id_path,
                      uuid_t        id,
@@ -400,10 +416,13 @@ write_tracking_id_file (const gchar  *path,
   g_autoptr(GFile) file = g_file_new_for_path (path);
   g_autoptr(GFile) directory = g_file_get_parent (file);
   g_autoptr(GError) local_error = NULL;
+  g_autofree gchar *dehyphenated_serialized_machine_id = NULL;
 
   uuid_clear (override_machine_id);
   uuid_generate (override_machine_id);
   uuid_unparse (override_machine_id, serialized_override_machine_id);
+
+  dehyphenated_serialized_machine_id = dehyphenate_uuid (serialized_override_machine_id);
 
   if (!g_file_make_directory_with_parents (directory, NULL, &local_error))
     {
@@ -414,7 +433,7 @@ write_tracking_id_file (const gchar  *path,
         }
     }
 
-  if (!g_file_set_contents (path, serialized_override_machine_id, -1, error))
+  if (!g_file_set_contents (path, dehyphenated_serialized_machine_id, -1, error))
     return FALSE;
 
   return TRUE;

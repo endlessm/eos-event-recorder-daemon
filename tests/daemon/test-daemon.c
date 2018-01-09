@@ -1484,14 +1484,7 @@ static void
 test_daemon_refresh_and_reload_machine_id (Fixture       *fixture,
                                            gconstpointer  unused)
 {
-  g_autoptr(GFileIOStream) stream = NULL;
   g_autoptr(GError) error = NULL;
-  g_autoptr(GFile) override_machine_id_file =
-    g_file_new_tmp ("machine-id-override-XXXXXX",
-                    &stream,
-                    &error);
-  g_autofree gchar *override_machine_id_file_path =
-    g_file_get_path (override_machine_id_file);
   uuid_t initial_machine_id;
   uuid_t new_machine_id;
 

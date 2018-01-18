@@ -22,6 +22,8 @@
 
 #include "emer-machine-id-provider.h"
 
+#include <string.h>
+
 #include <uuid/uuid.h>
 
 #include <gio/gio.h>
@@ -154,6 +156,28 @@ test_machine_id_provider_can_get_id_override (MachineIdTestFixture *fixture,
 }
 
 static void
+test_machine_id_provider_writes_correctly_formed_override_id (MachineIdTestFixture *fixture,
+                                                              gconstpointer         dontuseme)
+{
+  g_autoptr(EmerMachineIdProvider) id_provider =
+    emer_machine_id_provider_new_full (fixture->machine_id_file_path,
+                                       fixture->override_machine_id_file_path);
+  g_autoptr(GError) error = NULL;
+  g_autofree gchar *contents = NULL;
+
+  emer_machine_id_provider_reset_tracking_id (id_provider, &error);
+  g_assert_no_error (error);
+
+  /* Read the override_machine_id_file_path using g_file_get_contents
+   * and check that its size matches what we would normally write to the
+   * file */
+  g_file_get_contents (fixture->override_machine_id_file_path, &contents, NULL, &error);
+  g_assert_no_error (error);
+
+  g_assert_cmpint (strlen (contents), ==, strlen (TESTING_OVERRIDE_ID));
+}
+
+static void
 test_machine_id_provider_can_get_id_override_malformed (MachineIdTestFixture *fixture,
                                                         gconstpointer         dontuseme)
 {
@@ -186,6 +210,8 @@ main (gint                argc,
                        test_machine_id_provider_can_get_id);
   ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-get-id-override",
                        test_machine_id_provider_can_get_id_override);
+  ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-write-correctly-formed-override-id",
+                       test_machine_id_provider_writes_correctly_formed_override_id);
   ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-get-id-override-malformed",
                        test_machine_id_provider_can_get_id_override_malformed);
 

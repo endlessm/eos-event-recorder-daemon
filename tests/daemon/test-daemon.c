@@ -1484,14 +1484,7 @@ static void
 test_daemon_refresh_and_reload_machine_id (Fixture       *fixture,
                                            gconstpointer  unused)
 {
-  g_autoptr(GFileIOStream) stream = NULL;
   g_autoptr(GError) error = NULL;
-  g_autoptr(GFile) override_machine_id_file =
-    g_file_new_tmp ("machine-id-override-XXXXXX",
-                    &stream,
-                    &error);
-  g_autofree gchar *override_machine_id_file_path =
-    g_file_get_path (override_machine_id_file);
   uuid_t initial_machine_id;
   uuid_t new_machine_id;
 
@@ -1517,6 +1510,28 @@ test_daemon_refresh_and_reload_machine_id (Fixture       *fixture,
   record_singulars (fixture->test_object);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_singulars_received);
+  wait_for_upload_to_finish (fixture);
+}
+
+static void
+test_daemon_reload_machine_id_reset_events (Fixture       *fixture,
+                                            gconstpointer  unused)
+{
+  g_autoptr(GError) error = NULL;
+
+  g_assert_no_error (error);
+
+  /* Record a sequence. We will assert later that this did not get received. */
+  record_singulars (fixture->test_object);
+
+  /* Overwrite machine-id */
+  emer_daemon_reset_tracking_id (fixture->test_object, &error);
+  g_assert_no_error (error);
+
+  /* Read network requests, but assert that no events were received, since
+   * the persistent caches and memory buffers should have been emptied. */
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_no_events_received);
   wait_for_upload_to_finish (fixture);
 }
 
@@ -1567,6 +1582,8 @@ main (gint                argc,
                    test_daemon_limits_network_upload_size);
   ADD_DAEMON_TEST ("/daemon/refresh-and-reload-machine-id",
                    test_daemon_refresh_and_reload_machine_id);
+  ADD_DAEMON_TEST ("/daemon/clear-events-on-reload-machine-id",
+                   test_daemon_reload_machine_id_reset_events);
 
 #undef ADD_DAEMON_TEST
 

@@ -67,7 +67,7 @@
  * For QA, the "dev" environment delay is much shorter.
  */
 #define DEV_NETWORK_SEND_INTERVAL (60u * 15u) // Fifteen minutes
-#define PRODUCTION_NETWORK_SEND_INTERVAL (60u * 60u) // One hour
+#define PRODUCTION_NETWORK_SEND_INTERVAL (60u * 30u) // Thirty minutes
 
 #define DEFAULT_NETWORK_SEND_FILENAME "network_send_file"
 

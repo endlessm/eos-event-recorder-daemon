@@ -23,11 +23,18 @@
 ## -----------
 ## Please keep this file well-commented.
 
+include $(top_srcdir)/glib-tap.mk
+
 # Our Autoconf macros are kept in the m4/ directory
 ACLOCAL_AMFLAGS = -I m4
 
 # Extra files to distribute in the tarball
-EXTRA_DIST = README.md
+EXTRA_DIST += \
+	glib-tap.mk \
+	README.md \
+	tap-driver.sh \
+	tap-test \
+	$(NULL)
 
 # Compiler flags
 AM_CFLAGS = @WARN_CFLAGS@
@@ -44,17 +51,17 @@ AM_DISTCHECK_CONFIGURE_FLAGS += --enable-coverage --with-coverage-dir=@EOS_COVER
 endif EOS_ENABLE_COVERAGE
 
 # Generated files that 'make clean' should erase
-CLEANFILES =
-DISTCLEANFILES =
+CLEANFILES +=
+DISTCLEANFILES +=
 
 # Generated sources that should be built before other sources
-BUILT_SOURCES =
+BUILT_SOURCES +=
 
 # Binaries that should be produced but not installed.
-noinst_PROGRAMS =
+noinst_PROGRAMS +=
 
 # Libraries that should be produced but not installed.
-noinst_LTLIBRARIES = 
+noinst_LTLIBRARIES +=
 
 # Binaries that should be installed in libexecdir
 libexec_PROGRAMS = 

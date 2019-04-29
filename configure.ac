@@ -139,6 +139,26 @@ AX_PYTHON_MODULE_VERSION([dbusmock], 0.10)
 # The Python dbus module is required for unit testing.
 AX_PYTHON_MODULE([dbus])
 
+# Installed tests
+# ---------------
+
+AC_ARG_ENABLE([always_build_tests],
+              AS_HELP_STRING([--enable-always-build-tests],
+                             [Enable always building tests (default: yes)]),,
+              [enable_always_build_tests=yes])
+AC_ARG_ENABLE([installed_tests],
+              AS_HELP_STRING([--enable-installed-tests],
+                             [Install test programs (default: no)]),,
+              [enable_installed_tests=no])
+
+AM_CONDITIONAL([ENABLE_ALWAYS_BUILD_TESTS],
+               [test "$enable_always_build_tests" = "yes"])
+AC_SUBST([ENABLE_ALWAYS_BUILD_TESTS],[$enable_always_build_tests])
+
+AM_CONDITIONAL([ENABLE_INSTALLED_TESTS],
+               [test "$enable_installed_tests" = "yes"])
+AC_SUBST([ENABLE_INSTALLED_TESTS],[$enable_installed_tests])
+
 # Code coverage
 # -------------
 EOS_COVERAGE_REPORT([c])

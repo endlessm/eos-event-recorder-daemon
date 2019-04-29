@@ -14,4 +14,4 @@ export DBUS_SESSION_BUS_PID
 # fail the tests; think of a bash trap as a "finally" clause.
 trap finally EXIT
 
-gtester "$@"
+"$@" -k --tap

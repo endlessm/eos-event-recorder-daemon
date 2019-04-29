@@ -16,18 +16,11 @@
 ## along with eos-event-recorder-daemon.  If not, see
 ## <http://www.gnu.org/licenses/>.
 
-noinst_PROGRAMS += \
-	tests/daemon/test-boot-id-provider \
-	tests/daemon/test-cache-size-provider \
-	tests/daemon/test-cache-version-provider \
-	tests/daemon/test-circular-file \
-	tests/daemon/test-daemon.dbusdaemon \
-	tests/daemon/test-gzip \
-	tests/daemon/test-machine-id-provider \
-	tests/daemon/test-network-send-provider \
-	tests/daemon/test-permissions-provider \
-	tests/daemon/test-persistent-cache \
-	$(NULL)
+# Actually included at the top of $(top_srcdir)/Makefile.am:
+# include $(top_srcdir)/glib-tap.mk
+
+installed_testdir = $(libexecdir)/installed-tests/$(PACKAGE_TARNAME)
+installed_test_metadir = $(datadir)/installed-tests/$(PACKAGE_TARNAME)
 
 DAEMON_TEST_FLAGS = \
 	@EOS_EVENT_RECORDER_DAEMON_CFLAGS@ \
@@ -133,14 +126,14 @@ tests_daemon_test_persistent_cache_SOURCES = \
 tests_daemon_test_persistent_cache_CPPFLAGS = $(DAEMON_TEST_FLAGS)
 tests_daemon_test_persistent_cache_LDADD = $(DAEMON_TEST_LIBS)
 
-dist_noinst_SCRIPTS = \
+dist_test_data = \
 	tests/daemon/mock-server.py \
 	tests/launch-mock-dbus-tests.sh \
+	tests/taptestrunner.py \
 	$(NULL)
 
 # Run tests when running 'make check'
-TESTS = \
-	tests/test-opt-out-integration.py \
+test_programs = \
 	tests/daemon/test-boot-id-provider \
 	tests/daemon/test-cache-size-provider \
 	tests/daemon/test-cache-version-provider \
@@ -151,16 +144,11 @@ TESTS = \
 	tests/daemon/test-network-send-provider \
 	tests/daemon/test-persistent-cache \
 	tests/daemon/test-permissions-provider \
-	run_coverage.coverage \
 	$(NULL)
-
-TEST_EXTENSIONS = .dbusdaemon .py .coverage
-DBUSDAEMON_LOG_COMPILER = $(top_srcdir)/tests/launch-mock-dbus-tests.sh
-AM_DBUSDAEMON_LOG_FLAGS = -k --verbose
-LOG_COMPILER = gtester
-AM_LOG_FLAGS = -k --verbose
-PY_LOG_COMPILER = python3
-
-EXTRA_DIST += \
+dist_test_scripts = \
 	tests/test-opt-out-integration.py \
 	$(NULL)
+
+TEST_EXTENSIONS = .dbusdaemon .py
+DBUSDAEMON_LOG_COMPILER = $(top_srcdir)/tests/launch-mock-dbus-tests.sh
+PY_LOG_COMPILER = python3

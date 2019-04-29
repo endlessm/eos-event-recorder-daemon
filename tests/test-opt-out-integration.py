@@ -23,6 +23,7 @@ import dbus
 import os
 import shlex
 import subprocess
+import taptestrunner
 import tempfile
 import time
 import unittest
@@ -170,4 +171,4 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(testRunner=taptestrunner.TAPTestRunner())

@@ -319,7 +319,7 @@ read_lines_from_stdout (GSubprocess          *subprocess,
       user_data,
     };
 
-  g_source_set_callback (stdout_source, (GSourceFunc) collect_lines,
+  g_source_set_callback (stdout_source, G_SOURCE_FUNC (collect_lines),
                          &line_collector, NULL /* GDestroyNotify */);
   g_source_attach (stdout_source, NULL /* GMainContext */);
   g_source_unref (stdout_source);
@@ -361,7 +361,7 @@ read_bytes_from_stdout (GSubprocess           *subprocess,
       user_data,
     };
 
-  g_source_set_callback (stdout_source, (GSourceFunc) collect_bytes,
+  g_source_set_callback (stdout_source, G_SOURCE_FUNC (collect_bytes),
                          &byte_collector, NULL /* GDestroyNotify */);
   g_source_attach (stdout_source, NULL /* GMainContext */);
   g_source_unref (stdout_source);

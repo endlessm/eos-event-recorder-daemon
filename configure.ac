@@ -63,7 +63,7 @@ AC_CACHE_SAVE
 # Keep these lists sorted alphabetically.
 EOS_METRICS_REQUIREMENT="eosmetrics-0 >= 0.2"
 GIO_REQUIREMENT="gio-unix-2.0 >= 2.46"
-GOBJECT_REQUIREMENT="gobject-2.0 >= 2.44"
+GOBJECT_REQUIREMENT="gobject-2.0 >= 2.58"
 OSTREE_REQUIREMENT="ostree-1 >= 2013.7"
 POLKIT_REQUIREMENT="polkit-gobject-1"
 SOUP_REQUIREMENT="libsoup-2.4 >= 2.42"

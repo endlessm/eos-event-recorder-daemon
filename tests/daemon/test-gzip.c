@@ -43,7 +43,11 @@ gzip_decompress (gconstpointer input_data,
     {
       gsize bytes_left_in_buffer = allocated_space - total_bytes_written;
       if (bytes_left_in_buffer == 0)
-        goto expand_byte_array;
+        {
+          allocated_space *= 2;
+          g_byte_array_set_size (byte_array, allocated_space);
+          continue;
+        }
 
       gsize bytes_left_in_input = input_length - total_bytes_read;
       GConverterFlags conversion_flags = bytes_left_in_input > 0 ?
@@ -67,7 +71,10 @@ gzip_decompress (gconstpointer input_data,
         {
           g_assert_error (error, G_IO_ERROR, G_IO_ERROR_NO_SPACE);
           g_error_free (error);
-          goto expand_byte_array;
+
+          allocated_space *= 2;
+          g_byte_array_set_size (byte_array, allocated_space);
+          continue;
         }
 
       total_bytes_read += curr_bytes_read;
@@ -76,7 +83,7 @@ gzip_decompress (gconstpointer input_data,
       if (conversion_result == G_CONVERTER_FINISHED)
         break;
 
-expand_byte_array:
+      /* Expand the byte array. */
       allocated_space *= 2;
       g_byte_array_set_size (byte_array, allocated_space);
     }

@@ -167,6 +167,10 @@ read_disk_bytes (EmerCircularFile *self,
  * element. Assumes each element in the buffer is preceded by its length in
  * bytes encoded as a little-endian guint64. Also assumes that each length,
  * element pair is concatenated to the next.
+ *
+ * Since the encoded length of each buffer might contain an arbitrary value,
+ * we need to be careful about doing unaligned accesses to avoid SIGBUS on ARM.
+ * Use memcpy() to do this.
  */
 static guint64
 get_trimmed_size (const guint8 *buffer,
@@ -175,10 +179,11 @@ get_trimmed_size (const guint8 *buffer,
   guint64 curr_pos = 0;
   while ((curr_pos + sizeof (curr_pos)) < num_bytes)
     {
-      guint64 little_endian_elem_size = *(const guint64 *) (buffer + curr_pos);
-      guint64 elem_size =
-        swap_bytes_64_if_big_endian (little_endian_elem_size);
-      guint64 next_pos = curr_pos + sizeof (curr_pos) + elem_size;
+      guint64 little_endian_elem_size, elem_size, next_pos;
+
+      memcpy (&little_endian_elem_size, buffer + curr_pos, sizeof (little_endian_elem_size));
+      elem_size = swap_bytes_64_if_big_endian (little_endian_elem_size);
+      next_pos = curr_pos + sizeof (curr_pos) + elem_size;
       if (next_pos > num_bytes)
         break;
       curr_pos = next_pos;

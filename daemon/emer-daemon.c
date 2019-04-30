@@ -666,14 +666,20 @@ report_invalid_data_in_cache_on_idle (CacheMetricEventData *callback_data)
   if (!emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time))
     {
       g_critical ("Getting relative timestamp failed.");
-      goto free;
+      g_free (callback_data);
+
+      priv->report_invalid_cache_data_source_id = 0;
+      return G_SOURCE_REMOVE;
     }
 
   uuid_t parsed_event_id;
   if (!parse_event_id (event_id, parsed_event_id))
     {
       g_critical ("Could not parse event ID");
-      goto free;
+      g_free (callback_data);
+
+      priv->report_invalid_cache_data_source_id = 0;
+      return G_SOURCE_REMOVE;
     }
 
   GVariantBuilder uuid_builder;
@@ -696,7 +702,7 @@ report_invalid_data_in_cache_on_idle (CacheMetricEventData *callback_data)
                                      relative_time,
                                      payload != NULL,
                                      actual_payload);
- free:
+
   g_free (callback_data);
 
   priv->report_invalid_cache_data_source_id = 0;
@@ -925,7 +931,8 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
     {
       flush_to_persistent_cache (self);
       g_task_return_error (upload_task, error);
-      goto handle_upload_failed;
+      g_signal_emit (self, emer_daemon_signals[SIGNAL_UPLOAD_FINISHED], 0u);
+      return;
     }
 
   NetworkCallbackData *callback_data = g_task_get_task_data (upload_task);
@@ -938,7 +945,8 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
   if (request_body == NULL)
     {
       g_task_return_error (upload_task, error);
-      goto handle_upload_failed;
+      g_signal_emit (self, emer_daemon_signals[SIGNAL_UPLOAD_FINISHED], 0u);
+      return;
     }
 
   priv->current_upload_cancellable = g_object_ref (
@@ -951,10 +959,6 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
   callback_data->attempt_num = 0;
 
   queue_http_request (upload_task);
-  return;
-
-handle_upload_failed:
-  g_signal_emit (self, emer_daemon_signals[SIGNAL_UPLOAD_FINISHED], 0u);
 }
 
 static GSocketConnectable *

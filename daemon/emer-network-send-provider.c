@@ -181,30 +181,33 @@ read_network_send_data (EmerNetworkSendProvider *self)
 {
   EmerNetworkSendProviderPrivate *priv =
     emer_network_send_provider_get_instance_private (self);
+  g_autoptr(GError) local_error = NULL;
 
   if (priv->data_cached)
     return;
 
-  GError *error = NULL;
   if (!g_key_file_load_from_file (priv->key_file, priv->path, G_KEY_FILE_NONE,
-                                  &error))
-    goto handle_failed_read;
+                                  &local_error))
+    {
+      g_warning ("Failed to load network send file. Resetting data. "
+                 "Error: %s.", local_error->message);
+      reset_network_send_data (self);
+      return;
+    }
 
   priv->send_number = g_key_file_get_integer (priv->key_file,
                                               NETWORK_SEND_GROUP,
                                               NETWORK_SEND_KEY,
-                                              &error);
-  if (error != NULL)
-    goto handle_failed_read;
+                                              &local_error);
+  if (local_error != NULL)
+    {
+      g_warning ("Failed to read from network send file. Resetting data. "
+                 "Error: %s.", local_error->message);
+      reset_network_send_data (self);
+      return;
+    }
 
   priv->data_cached = TRUE;
-  return;
-
-handle_failed_read:
-  g_warning ("Failed to read from network send file. Resetting data. "
-             "Error: %s.", error->message);
-  g_error_free (error);
-  reset_network_send_data (self);
 }
 
 /*

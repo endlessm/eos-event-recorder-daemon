@@ -122,14 +122,14 @@ read_disk_bytes (EmerCircularFile *self,
                  gsize             max_size,
                  GError          **error)
 {
+  g_autoptr(GFileInputStream) file_input_stream = NULL;
   EmerCircularFilePrivate *priv =
     emer_circular_file_get_instance_private (self);
 
   if (num_bytes == 0)
     return TRUE;
 
-  GFileInputStream *file_input_stream =
-    g_file_read (priv->data_file, NULL /* GCancellable */, error);
+  file_input_stream = g_file_read (priv->data_file, NULL /* GCancellable */, error);
   if (file_input_stream == NULL)
     return FALSE;
 
@@ -145,7 +145,7 @@ read_disk_bytes (EmerCircularFile *self,
                                  NULL /* bytes read */, NULL /* GCancellable */,
                                  error);
       if (!read_succeeded)
-        goto handle_failed_read;
+        return FALSE;
     }
 
   GSeekable *seekable = G_SEEKABLE (file_input_stream);
@@ -153,18 +153,14 @@ read_disk_bytes (EmerCircularFile *self,
     g_seekable_seek (seekable, priv->head, G_SEEK_SET, NULL /* GCancellable */,
                      error);
   if (!seek_succeeded)
-    goto handle_failed_read;
+    return FALSE;
 
   gboolean read_succeeded =
     g_input_stream_read_all (input_stream, buffer, bytes_head,
                              NULL /* bytes read */, NULL /* GCancellable */,
                              error);
-  g_object_unref (file_input_stream);
-  return read_succeeded;
 
-handle_failed_read:
-  g_object_unref (file_input_stream);
-  return FALSE;
+  return read_succeeded;
 }
 
 /* Returns the size of a length-encoded buffer excluding any truncated trailing
@@ -508,7 +504,10 @@ emer_circular_file_initable_init (GInitable    *initable,
            * need to initialize it.
            */
           if (!g_error_matches (local_error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
-            goto handle_failed_read;
+            {
+              g_propagate_error (error, g_steal_pointer (&local_error));
+              return FALSE;
+            }
 
           g_clear_error (&local_error);
           priv->reinitialize = TRUE;
@@ -545,13 +544,19 @@ emer_circular_file_initable_init (GInitable    *initable,
     g_key_file_get_uint64 (priv->metadata_key_file, METADATA_GROUP_NAME,
                            MAX_SIZE_KEY, &local_error);
   if (local_error != NULL)
-    goto handle_failed_read;
+    {
+      g_propagate_error (error, g_steal_pointer (&local_error));
+      return FALSE;
+    }
 
   priv->size =
     g_key_file_get_uint64 (priv->metadata_key_file, METADATA_GROUP_NAME,
                            SIZE_KEY, &local_error);
   if (local_error != NULL)
-    goto handle_failed_read;
+    {
+      g_propagate_error (error, g_steal_pointer (&local_error));
+      return FALSE;
+    }
 
   if (priv->size > prev_max_size)
     {
@@ -565,7 +570,10 @@ emer_circular_file_initable_init (GInitable    *initable,
     g_key_file_get_int64 (priv->metadata_key_file, METADATA_GROUP_NAME,
                           HEAD_KEY, &local_error);
   if (local_error != NULL)
-    goto handle_failed_read;
+    {
+      g_propagate_error (error, g_steal_pointer (&local_error));
+      return FALSE;
+    }
 
   if (priv->head < 0 || (guint64) priv->head >= prev_max_size)
     {
@@ -577,10 +585,6 @@ emer_circular_file_initable_init (GInitable    *initable,
     }
 
   return resize (self, prev_max_size, error);
-
-handle_failed_read:
-  g_propagate_error (error, g_steal_pointer (&local_error));
-  return FALSE;
 }
 
 static void
@@ -646,14 +650,14 @@ gboolean
 emer_circular_file_save (EmerCircularFile *self,
                          GError          **error)
 {
+  g_autoptr(GFileIOStream) file_io_stream = NULL;
   EmerCircularFilePrivate *priv =
     emer_circular_file_get_instance_private (self);
 
   if (priv->write_buffer->len == 0)
     return TRUE;
 
-  GFileIOStream *file_io_stream =
-    g_file_open_readwrite (priv->data_file, NULL /* GCancellable */, error);
+  file_io_stream = g_file_open_readwrite (priv->data_file, NULL /* GCancellable */, error);
   if (file_io_stream == NULL)
     return FALSE;
 
@@ -671,7 +675,7 @@ emer_circular_file_save (EmerCircularFile *self,
         g_seekable_seek (seekable, 0, G_SEEK_SET, NULL /* GCancellable */,
                          error);
       if (!seek_succeeded)
-        goto handle_failed_write;
+        return FALSE;
 
       const guint8 *copy_from = priv->write_buffer->data + bytes_tail;
       gboolean write_succeeded =
@@ -682,7 +686,7 @@ emer_circular_file_save (EmerCircularFile *self,
                                    NULL /* GCancellable */,
                                    error);
       if (!write_succeeded)
-        goto handle_failed_write;
+        return FALSE;
     }
 
   gboolean seek_succeeded =
@@ -690,7 +694,7 @@ emer_circular_file_save (EmerCircularFile *self,
                      error);
 
   if (!seek_succeeded)
-    goto handle_failed_write;
+    return FALSE;
 
   gboolean write_succeeded =
     g_output_stream_write_all (output_stream,
@@ -699,7 +703,6 @@ emer_circular_file_save (EmerCircularFile *self,
                                NULL /* bytes written */,
                                NULL /* GCancellable */,
                                error);
-  g_object_unref (file_io_stream);
   if (!write_succeeded)
     return FALSE;
 
@@ -709,10 +712,6 @@ emer_circular_file_save (EmerCircularFile *self,
   g_byte_array_unref (priv->write_buffer);
   priv->write_buffer = g_byte_array_new ();
   return TRUE;
-
-handle_failed_write:
-  g_object_unref (file_io_stream);
-  return FALSE;
 }
 
 /* Populates elems with a C array of elements that consume no more than the
@@ -736,6 +735,8 @@ emer_circular_file_read (EmerCircularFile *self,
                          gboolean         *has_invalid,
                          GError          **error)
 {
+  g_autoptr(GFileInputStream) file_input_stream = NULL;
+  g_autoptr(GPtrArray) elem_array = NULL;
   EmerCircularFilePrivate *priv =
     emer_circular_file_get_instance_private (self);
 
@@ -749,19 +750,17 @@ emer_circular_file_read (EmerCircularFile *self,
       return TRUE;
     }
 
-  GFileInputStream *file_input_stream =
-    g_file_read (priv->data_file, NULL /* GCancellable */, error);
+  file_input_stream = g_file_read (priv->data_file, NULL /* GCancellable */, error);
   if (file_input_stream == NULL)
     return FALSE;
 
-  GPtrArray *elem_array =
-    g_ptr_array_new_with_free_func ((GDestroyNotify) g_bytes_unref);
+  elem_array = g_ptr_array_new_with_free_func ((GDestroyNotify) g_bytes_unref);
 
   gboolean seek_succeeded =
     g_seekable_seek (G_SEEKABLE (file_input_stream), priv->head, G_SEEK_SET,
                      NULL /* GCancellable */, error);
   if (!seek_succeeded)
-    goto handle_failed_read;
+    return FALSE;
 
   guint64 curr_data_bytes = 0;
   guint64 curr_disk_bytes = 0;
@@ -771,7 +770,7 @@ emer_circular_file_read (EmerCircularFile *self,
     {
       guint64 elem_size;
       if (!read_elem_size (self, input_stream, &elem_size, error))
-        goto handle_failed_read;
+        return FALSE;
 
       /* Reading a zero-sized element here means that we have invalid
        * data ahead, in which case we need to update the priv->size
@@ -794,7 +793,7 @@ emer_circular_file_read (EmerCircularFile *self,
       gboolean append_succeeded =
         append_elem_to_array (self, input_stream, elem_array, elem_size, error);
       if (!append_succeeded)
-        goto handle_failed_read;
+        return FALSE;
 
       curr_data_bytes = next_data_bytes;
 
@@ -804,17 +803,10 @@ emer_circular_file_read (EmerCircularFile *self,
       curr_disk_bytes += sizeof (elem_size) + elem_size;
     }
 
-  g_object_unref (file_input_stream);
-
   *num_elems = elem_array->len;
-  *elems = (GBytes **) g_ptr_array_free (elem_array, FALSE);
+  *elems = (GBytes **) g_ptr_array_free (g_steal_pointer (&elem_array), FALSE);
   *token = curr_disk_bytes;
   return TRUE;
-
-handle_failed_read:
-  g_object_unref (file_input_stream);
-  g_ptr_array_unref (elem_array);
-  return FALSE;
 }
 
 /* Returns TRUE if there would still be at least one element remaining after a

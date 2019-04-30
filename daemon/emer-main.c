@@ -296,8 +296,9 @@ sync_recorder_server_enabled_for_daemon (GBinding     *binding,
 static void
 on_bus_acquired (GDBusConnection *system_bus,
                  const gchar     *name,
-                 EmerDaemon      *daemon)
+                 gpointer         user_data)
 {
+  EmerDaemon *daemon = EMER_DAEMON (user_data);
   EmerEventRecorderServer *server = emer_event_recorder_server_skeleton_new ();
 
   g_signal_connect (server, "handle-record-singular-event",
@@ -342,7 +343,8 @@ on_bus_acquired (GDBusConnection *system_bus,
  */
 static void
 on_name_lost (GDBusConnection *system_bus,
-              const gchar     *name)
+              const gchar     *name,
+              gpointer         user_data)
 {
   /*
    * This handler is called with a NULL connection if the bus could not be
@@ -420,9 +422,9 @@ main (gint                argc,
 
   guint name_id = g_bus_own_name (G_BUS_TYPE_SYSTEM, "com.endlessm.Metrics",
                                   G_BUS_NAME_OWNER_FLAGS_NONE,
-                                  (GBusAcquiredCallback) on_bus_acquired,
+                                  on_bus_acquired,
                                   NULL /* name_acquired_callback */,
-                                  (GBusNameLostCallback) on_name_lost,
+                                  on_name_lost,
                                   daemon, NULL /* user data free func */);
 
   g_main_loop_run (main_loop);

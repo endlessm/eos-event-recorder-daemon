@@ -896,22 +896,19 @@ emer_persistent_cache_initable_init (GInitable    *initable,
   g_autofree gchar *variant_file_path =
     g_build_filename (priv->cache_directory, VARIANT_FILENAME, NULL);
   priv->variant_file =
-    emer_circular_file_new (variant_file_path, priv->cache_size,
-                            priv->reinitialize_cache, error);
+      emer_circular_file_new (variant_file_path, priv->cache_size,
+                              priv->reinitialize_cache, error);
   if (priv->variant_file == NULL)
     return FALSE;
 
-  if (!apply_cache_versioning (self, error))
-    goto handle_failed_init;
-
-  if (!update_boot_offset (self, FALSE, error))
-    goto handle_failed_init;
+  if (!apply_cache_versioning (self, error) ||
+      !update_boot_offset (self, FALSE, error))
+    {
+      g_clear_object (&priv->variant_file);
+      return FALSE;
+    }
 
   return TRUE;
-
-handle_failed_init:
-  g_clear_object (&priv->variant_file);
-  return FALSE;
 }
 
 static void

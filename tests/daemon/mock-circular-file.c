@@ -184,8 +184,15 @@ emer_circular_file_read (EmerCircularFile *self,
   guint64 curr_buffer_bytes = 0;
   while (curr_buffer_bytes < priv->saved_size)
     {
-      guint64 elem_size = *(guint64 *) (priv->buffer + curr_buffer_bytes);
-      gsize new_elem_bytes = curr_elem_bytes + elem_size;
+      guint64 elem_size;
+      gsize new_elem_bytes;
+
+      /* Since we end up adding @elem_size, which is read from the buffer, to
+       * @curr_buffer_bytes below, we can’t guarantee alignment here. Use
+       * memcpy() to avoid unaligned accesses (and hence SIGBUS) on ARM. */
+      memcpy (&elem_size, priv->buffer + curr_buffer_bytes, sizeof (elem_size));
+      new_elem_bytes = curr_elem_bytes + elem_size;
+
       if (new_elem_bytes > num_bytes)
         break;
 

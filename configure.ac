@@ -104,13 +104,12 @@ AC_CACHE_SAVE
 
 # Configure options
 # -----------------
-# --enable-compile-warnings. By default, warnings are enabled for all builds,
-# and fatal for builds from Git checkouts. Documentation:
+# --enable-compile-warnings. By default, warnings are always fatal. Documentation:
 # https://www.gnu.org/software/autoconf-archive/ax_compiler_flags.html
 #
 # -Wno-declaration-after-statement:
 #   Mixed decls are used a lot and are harmless.
-AX_COMPILER_FLAGS([WARN_CFLAGS], [WARN_LDFLAGS], [], [],
+AX_COMPILER_FLAGS([WARN_CFLAGS], [WARN_LDFLAGS], [no], [],
                   [-Wno-declaration-after-statement])
 
 systemdsystemunitdir="$($PKG_CONFIG systemd --variable=systemdsystemunitdir)"

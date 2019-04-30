@@ -243,7 +243,7 @@ append_bytes (GPollableInputStream *pollable_input_stream,
     g_pollable_input_stream_read_nonblocking (pollable_input_stream,
                                               destination, num_bytes_remaining,
                                               NULL /* GCancellable */, &error);
-  if (num_bytes_read == -1)
+  if (num_bytes_read < 0)
     {
       g_assert_error (error, G_IO_ERROR, G_IO_ERROR_WOULD_BLOCK);
       g_error_free (error);
@@ -252,7 +252,7 @@ append_bytes (GPollableInputStream *pollable_input_stream,
 
   guint new_length = byte_array->len + num_bytes_read;
   g_byte_array_set_size (byte_array, new_length);
-  return num_bytes_read == num_bytes_remaining;
+  return (gsize) num_bytes_read == num_bytes_remaining;
 }
 
 static gboolean

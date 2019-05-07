@@ -326,6 +326,8 @@ on_bus_acquired (GDBusConnection *system_bus,
                                G_BINDING_DEFAULT | G_BINDING_SYNC_CREATE,
                                sync_recorder_server_enabled_for_upload, NULL,
                                daemon, NULL);
+  g_object_bind_property (permissions, "environment", server, "environment",
+                          G_BINDING_DEFAULT | G_BINDING_SYNC_CREATE);
 
   GError *error = NULL;
   if (!g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (server),

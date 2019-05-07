@@ -65,6 +65,7 @@ enum
   PROP_OSTREE_CONFIG_FILE_PATH,
   PROP_DAEMON_ENABLED,
   PROP_UPLOADING_ENABLED,
+  PROP_ENVIRONMENT,
   NPROPS
 };
 
@@ -322,6 +323,10 @@ set_environment (EmerPermissionsProvider *self,
   g_key_file_set_string (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
                          DAEMON_ENVIRONMENT_KEY_NAME, environment);
 
+  GParamSpec *environment_pspec =
+    emer_permissions_provider_props[PROP_ENVIRONMENT];
+  g_object_notify_by_pspec (G_OBJECT (self), environment_pspec);
+
   schedule_config_file_update (self);
 }
 
@@ -374,6 +379,11 @@ emer_permissions_provider_get_property (GObject    *object,
     case PROP_DAEMON_ENABLED:
       g_value_set_boolean (value,
                            emer_permissions_provider_get_daemon_enabled (self));
+      break;
+
+    case PROP_ENVIRONMENT:
+      g_value_set_string (value,
+                          emer_permissions_provider_get_environment (self));
       break;
 
     case PROP_UPLOADING_ENABLED:
@@ -458,6 +468,11 @@ emer_permissions_provider_class_init (EmerPermissionsProviderClass *klass)
                           "Whether to enable the metrics daemon system-wide",
                           FALSE,
                           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+  emer_permissions_provider_props[PROP_ENVIRONMENT] =
+    g_param_spec_string ("environment", "Environment",
+                         "The metrics environment",
+                         NULL,
+                         G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
   emer_permissions_provider_props[PROP_UPLOADING_ENABLED] =
     g_param_spec_boolean ("uploading-enabled", "Uploading enabled",
                           "Whether to upload events via the network",

@@ -48,4 +48,15 @@
     </defaults>
   </action>
 
+  <action id="com.endlessm.Metrics.WriteLocation">
+    <description>Write file describing Solutions deployment location</description>
+    <message>Authentication is required to set up metrics</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/gnome-initial-setup/eos-write-location</annotate>
+  </action>
+
 </policyconfig>

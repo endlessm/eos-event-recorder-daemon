@@ -33,9 +33,8 @@
 #define HYPHENS_IN_ID 4
 
 #define TESTING_BASE_TEMPLATE "emer-machine-id-provider-tmp-XXXXXX"
-#define TESTING_ID                 "04448f74fde24bd7a16f8da17869d5c3\n"
-#define TESTING_OVERRIDE_ID        "d17b0fd3b28e4302bcd81ab471e06de9\n"
-#define TESTING_MALFORMED_OVERRIDE_ID        "absoluterubbish\n"
+#define TESTING_TRACKING_ID        "d17b0fd3b28e4302bcd81ab471e06de9\n"
+#define TESTING_MALFORMED_TRACKING_ID        "absoluterubbish\n"
 /*
  * The expected size in bytes of the file located at
  * #EmerMachineIdProvider:path.
@@ -48,8 +47,7 @@
 
 typedef struct {
   gchar *test_temp_path;
-  gchar *machine_id_file_path;
-  gchar *override_machine_id_file_path;
+  gchar *tracking_id_file_path;
 } MachineIdTestFixture;
 
 // Helper Functions
@@ -90,25 +88,20 @@ setup (MachineIdTestFixture *fixture,
   fixture->test_temp_path = g_dir_make_tmp (TESTING_BASE_TEMPLATE, &error);
   g_assert_no_error (error);
 
-  fixture->machine_id_file_path = g_build_filename (fixture->test_temp_path,
-                                                    "machine-id",
-                                                    NULL);
-  fixture->override_machine_id_file_path = g_build_filename (fixture->test_temp_path,
-                                                             "override-machine-id",
-                                                             NULL);
-  write_testing_machine_id (fixture->machine_id_file_path, TESTING_ID);
+  fixture->tracking_id_file_path = g_build_filename (fixture->test_temp_path,
+                                                     "tracking-id",
+                                                     NULL);
+  write_testing_machine_id (fixture->tracking_id_file_path, TESTING_TRACKING_ID);
 }
 
 static void
 teardown (MachineIdTestFixture *fixture,
           gconstpointer         dontuseme)
 {
-  g_unlink (fixture->machine_id_file_path);
-  g_unlink (fixture->override_machine_id_file_path);
+  g_unlink (fixture->tracking_id_file_path);
   g_rmdir (fixture->test_temp_path);
 
-  g_free (fixture->machine_id_file_path);
-  g_free (fixture->override_machine_id_file_path);
+  g_free (fixture->tracking_id_file_path);
   g_free (fixture->test_temp_path);
 }
 
@@ -125,73 +118,60 @@ test_machine_id_provider_new_succeeds (MachineIdTestFixture *fixture,
 }
 
 static void
-test_machine_id_provider_can_get_id (MachineIdTestFixture *fixture,
-                                     gconstpointer         dontuseme)
-{
-  g_autoptr(EmerMachineIdProvider) id_provider =
-    emer_machine_id_provider_new_full (fixture->machine_id_file_path,
-                                       fixture->override_machine_id_file_path);
-  uuid_t id;
-  g_assert (emer_machine_id_provider_get_id (id_provider, id));
-  gchar unparsed_id[HYPHENS_IN_ID + FILE_LENGTH];
-  uuid_unparse_lower (id, unparsed_id);
-  g_autofree gchar* unhypenated_id = unhyphenate_uuid (unparsed_id);
-  g_assert_cmpstr (TESTING_ID, ==, unhypenated_id);
-}
-
-static void
-test_machine_id_provider_can_get_id_override (MachineIdTestFixture *fixture,
+test_machine_id_provider_can_get_tracking_id (MachineIdTestFixture *fixture,
                                               gconstpointer         dontuseme)
 {
   g_autoptr(EmerMachineIdProvider) id_provider =
-    emer_machine_id_provider_new_full (fixture->machine_id_file_path,
-                                       fixture->override_machine_id_file_path);
+    emer_machine_id_provider_new_full (fixture->tracking_id_file_path);
   uuid_t id;
-  write_testing_machine_id (fixture->override_machine_id_file_path, TESTING_OVERRIDE_ID);
   g_assert (emer_machine_id_provider_get_id (id_provider, id));
   gchar unparsed_id[HYPHENS_IN_ID + FILE_LENGTH];
   uuid_unparse_lower (id, unparsed_id);
   g_autofree gchar* unhypenated_id = unhyphenate_uuid (unparsed_id);
-  g_assert_cmpstr (TESTING_OVERRIDE_ID, ==, unhypenated_id);
+  g_assert_cmpstr (TESTING_TRACKING_ID, ==, unhypenated_id);
 }
 
 static void
-test_machine_id_provider_writes_correctly_formed_override_id (MachineIdTestFixture *fixture,
+test_machine_id_provider_writes_correctly_formed_tracking_id (MachineIdTestFixture *fixture,
                                                               gconstpointer         dontuseme)
 {
   g_autoptr(EmerMachineIdProvider) id_provider =
-    emer_machine_id_provider_new_full (fixture->machine_id_file_path,
-                                       fixture->override_machine_id_file_path);
+    emer_machine_id_provider_new_full (fixture->tracking_id_file_path);
   g_autoptr(GError) error = NULL;
   g_autofree gchar *contents = NULL;
 
   emer_machine_id_provider_reset_tracking_id (id_provider, &error);
   g_assert_no_error (error);
 
-  /* Read the override_machine_id_file_path using g_file_get_contents
+  /* Read the tracking_id_file_path using g_file_get_contents
    * and check that its size matches what we would normally write to the
    * file */
-  g_file_get_contents (fixture->override_machine_id_file_path, &contents, NULL, &error);
+  g_file_get_contents (fixture->tracking_id_file_path, &contents, NULL, &error);
   g_assert_no_error (error);
 
-  g_assert_cmpint (strlen (contents), ==, strlen (TESTING_OVERRIDE_ID));
-}
+  g_assert_cmpint (strlen (contents), ==, strlen (TESTING_TRACKING_ID));
 
-static void
-test_machine_id_provider_can_get_id_override_malformed (MachineIdTestFixture *fixture,
-                                                        gconstpointer         dontuseme)
-{
-  g_autoptr(EmerMachineIdProvider) id_provider =
-    emer_machine_id_provider_new_full (fixture->machine_id_file_path,
-                                       fixture->override_machine_id_file_path);
+  /* Double check that ID is retriveable with provider_get_id ()
+   * and is different from TESTING_TRACKING_ID */
   uuid_t id;
-  write_testing_machine_id (fixture->override_machine_id_file_path,
-                            TESTING_MALFORMED_OVERRIDE_ID);
   g_assert (emer_machine_id_provider_get_id (id_provider, id));
   gchar unparsed_id[HYPHENS_IN_ID + FILE_LENGTH];
   uuid_unparse_lower (id, unparsed_id);
   g_autofree gchar* unhypenated_id = unhyphenate_uuid (unparsed_id);
-  g_assert_cmpstr (TESTING_ID, ==, unhypenated_id);
+  g_assert_cmpstr (TESTING_TRACKING_ID, !=, unhypenated_id);
+}
+
+static void
+test_machine_id_provider_read_malformed_tracking_id (MachineIdTestFixture *fixture,
+                                                     gconstpointer         dontuseme)
+{
+  g_autoptr(EmerMachineIdProvider) id_provider =
+    emer_machine_id_provider_new_full (fixture->tracking_id_file_path);
+  uuid_t id;
+  write_testing_machine_id (fixture->tracking_id_file_path,
+                            TESTING_MALFORMED_TRACKING_ID);
+  // Fails to read because tracking ID is malformed
+  g_assert_false (emer_machine_id_provider_get_id (id_provider, id));
 }
 
 gint
@@ -206,14 +186,12 @@ main (gint                argc,
 
   ADD_CACHE_TEST_FUNC ("/machine-id-provider/new-succeeds",
                        test_machine_id_provider_new_succeeds);
-  ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-get-id",
-                       test_machine_id_provider_can_get_id);
-  ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-get-id-override",
-                       test_machine_id_provider_can_get_id_override);
-  ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-write-correctly-formed-override-id",
-                       test_machine_id_provider_writes_correctly_formed_override_id);
-  ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-get-id-override-malformed",
-                       test_machine_id_provider_can_get_id_override_malformed);
+  ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-get-tracking-id",
+                       test_machine_id_provider_can_get_tracking_id);
+  ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-write-correctly-formed-tracking-id",
+                       test_machine_id_provider_writes_correctly_formed_tracking_id);
+  ADD_CACHE_TEST_FUNC ("/machine-id-provider/read-malformed-tracking-id",
+                       test_machine_id_provider_read_malformed_tracking_id);
 
 #undef ADD_CACHE_TEST_FUNC
   return g_test_run ();

@@ -81,9 +81,10 @@ unhyphenate_uuid (gchar *uuid_with_hyphens)
 
 static void
 setup (MachineIdTestFixture *fixture,
-       gconstpointer         dontuseme)
+       gconstpointer         tdata)
 {
   g_autoptr(GError) error = NULL;
+  gint write_tracking_id_file_explicitly = GPOINTER_TO_INT (tdata);
 
   fixture->test_temp_path = g_dir_make_tmp (TESTING_BASE_TEMPLATE, &error);
   g_assert_no_error (error);
@@ -91,12 +92,13 @@ setup (MachineIdTestFixture *fixture,
   fixture->tracking_id_file_path = g_build_filename (fixture->test_temp_path,
                                                      "tracking-id",
                                                      NULL);
-  write_testing_machine_id (fixture->tracking_id_file_path, TESTING_TRACKING_ID);
+  if (write_tracking_id_file_explicitly)
+    write_testing_machine_id (fixture->tracking_id_file_path, TESTING_TRACKING_ID);
 }
 
 static void
 teardown (MachineIdTestFixture *fixture,
-          gconstpointer         dontuseme)
+          gconstpointer         tdata)
 {
   g_unlink (fixture->tracking_id_file_path);
   g_rmdir (fixture->test_temp_path);
@@ -108,8 +110,35 @@ teardown (MachineIdTestFixture *fixture,
 // Testing Cases
 
 static void
+test_machine_id_provider_create_tracking_id_if_unavailable (MachineIdTestFixture *fixture,
+                                                            gconstpointer         tdata)
+{
+  g_autoptr(GError) error = NULL;
+  g_autofree gchar *contents = NULL;
+
+  g_assert_false (g_file_test (fixture->tracking_id_file_path, G_FILE_TEST_EXISTS));
+
+  g_autoptr(EmerMachineIdProvider) id_provider =
+    emer_machine_id_provider_new_full (fixture->tracking_id_file_path);
+
+  uuid_t id;
+  // id_provider_get_id will write a new tracking ID, if no ID is found.
+  g_assert (emer_machine_id_provider_get_id (id_provider, id));
+
+  g_assert (g_file_test (fixture->tracking_id_file_path, G_FILE_TEST_EXISTS));
+
+  /* Read the tracking_id_file_path using g_file_get_contents
+   * and check that its size matches what we would normally write to the
+   * file */
+  g_file_get_contents (fixture->tracking_id_file_path, &contents, NULL, &error);
+  g_assert_no_error (error);
+
+  g_assert_cmpint (strlen (contents), ==, strlen (TESTING_TRACKING_ID));
+}
+
+static void
 test_machine_id_provider_new_succeeds (MachineIdTestFixture *fixture,
-                                       gconstpointer         dontuseme)
+                                       gconstpointer         tdata)
 {
   EmerMachineIdProvider *id_provider =
     emer_machine_id_provider_new ();
@@ -119,7 +148,7 @@ test_machine_id_provider_new_succeeds (MachineIdTestFixture *fixture,
 
 static void
 test_machine_id_provider_can_get_tracking_id (MachineIdTestFixture *fixture,
-                                              gconstpointer         dontuseme)
+                                              gconstpointer         tdata)
 {
   g_autoptr(EmerMachineIdProvider) id_provider =
     emer_machine_id_provider_new_full (fixture->tracking_id_file_path);
@@ -133,7 +162,7 @@ test_machine_id_provider_can_get_tracking_id (MachineIdTestFixture *fixture,
 
 static void
 test_machine_id_provider_writes_correctly_formed_tracking_id (MachineIdTestFixture *fixture,
-                                                              gconstpointer         dontuseme)
+                                                              gconstpointer         tdata)
 {
   g_autoptr(EmerMachineIdProvider) id_provider =
     emer_machine_id_provider_new_full (fixture->tracking_id_file_path);
@@ -163,7 +192,7 @@ test_machine_id_provider_writes_correctly_formed_tracking_id (MachineIdTestFixtu
 
 static void
 test_machine_id_provider_read_malformed_tracking_id (MachineIdTestFixture *fixture,
-                                                     gconstpointer         dontuseme)
+                                                     gconstpointer         tdata)
 {
   g_autoptr(EmerMachineIdProvider) id_provider =
     emer_machine_id_provider_new_full (fixture->tracking_id_file_path);
@@ -179,20 +208,29 @@ main (gint                argc,
       const gchar * const argv[])
 {
 // We are using a gboolean as a fixture type, but it will go unused.
-#define ADD_CACHE_TEST_FUNC(path, func) \
-  g_test_add((path), MachineIdTestFixture, NULL, setup, (func), teardown)
+#define ADD_CACHE_TEST_FUNC(path, func, tdata) \
+  g_test_add((path), MachineIdTestFixture, tdata, setup, (func), teardown)
+
+#define WRITE_TRACKING_ID_FILE        GINT_TO_POINTER(TRUE)
+#define DONT_WRITE_TRACKING_ID_FILE   GINT_TO_POINTER(FALSE)
 
   g_test_init (&argc, (gchar ***) &argv, NULL);
 
   ADD_CACHE_TEST_FUNC ("/machine-id-provider/new-succeeds",
-                       test_machine_id_provider_new_succeeds);
+                       test_machine_id_provider_new_succeeds,
+		       WRITE_TRACKING_ID_FILE);
   ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-get-tracking-id",
-                       test_machine_id_provider_can_get_tracking_id);
+                       test_machine_id_provider_can_get_tracking_id,
+		       WRITE_TRACKING_ID_FILE);
   ADD_CACHE_TEST_FUNC ("/machine-id-provider/can-write-correctly-formed-tracking-id",
-                       test_machine_id_provider_writes_correctly_formed_tracking_id);
+                       test_machine_id_provider_writes_correctly_formed_tracking_id,
+                       WRITE_TRACKING_ID_FILE);
   ADD_CACHE_TEST_FUNC ("/machine-id-provider/read-malformed-tracking-id",
-                       test_machine_id_provider_read_malformed_tracking_id);
-
+                       test_machine_id_provider_read_malformed_tracking_id,
+                       WRITE_TRACKING_ID_FILE);
+  ADD_CACHE_TEST_FUNC ("/machine-id-provider/create-tracking-id-if-unavailable",
+                       test_machine_id_provider_create_tracking_id_if_unavailable,
+                       DONT_WRITE_TRACKING_ID_FILE);
 #undef ADD_CACHE_TEST_FUNC
   return g_test_run ();
 }

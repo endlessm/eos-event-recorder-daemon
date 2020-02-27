@@ -54,9 +54,8 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerMachineIdProvider, emer_machine_id_provider, G_T
 
 /*
  * Filepath where an overridden random UUID, separate from /etc/machine-id
- * is stored. The machine-id might be read from this path and used as the
- * tracking ID in cases where we don't want to continue using the machine-id,
- * either on user request or when we enter the demo mode.
+ * is stored. This machine-id is read from this path and used as the
+ * default tracking ID for metrics purposes.
  */
 #define TRACKING_ID_PATH SYSCONFDIR "/metrics/tracking-id"
 
@@ -70,6 +69,8 @@ enum
 };
 
 static GParamSpec *emer_machine_id_provider_props[NPROPS] = { NULL, };
+
+static gboolean write_tracking_id_file (const gchar *path, GError **error);
 
 /*
  * SECTION:emer-machine-id-provider
@@ -304,10 +305,26 @@ read_machine_id (EmerMachineIdProvider *self)
 
   if (!read_one_machine_id (priv->tracking_id_path, id, &local_error))
     {
-      if (g_error_matches (local_error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
+      if (g_error_matches (local_error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
         {
-          g_debug ("Override machine id file %s does not exist.",
+          g_debug ("Tracking id file %s does not exist hence creating one.",
                    priv->tracking_id_path);
+          g_clear_error (&local_error);
+
+          if (!write_tracking_id_file (priv->tracking_id_path, &local_error))
+            {
+              g_message ("Failed to initialize tracking ID at %s: %s.",
+                         priv->tracking_id_path,
+                         local_error->message);
+              return FALSE;
+            }
+	  else if (!read_one_machine_id (priv->tracking_id_path, id, &local_error))
+            {
+              g_message ("Failed to read tracking id %s: %s",
+                         priv->tracking_id_path,
+                         local_error->message);
+              return FALSE;
+            }
         }
       else if (g_error_matches (local_error,
                                 EMER_ERROR,
@@ -316,9 +333,14 @@ read_machine_id (EmerMachineIdProvider *self)
           g_message ("Failed to read tracking id %s: %s",
                      priv->tracking_id_path,
                      local_error->message);
+          return FALSE;
         }
-
-      return FALSE;
+      else
+        {
+          g_message ("Error occured while reading tracking id at %s: %s",
+                     priv->tracking_id_path, local_error->message);
+          return FALSE;
+        }
     }
 
   uuid_copy (priv->id, id);

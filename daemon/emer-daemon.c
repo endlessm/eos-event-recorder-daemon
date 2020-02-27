@@ -843,6 +843,7 @@ create_request_body (EmerDaemon *self,
 
   uuid_t machine_id;
   gboolean read_id = emer_machine_id_provider_get_id (priv->machine_id_provider,
+                                                      NULL,
                                                       machine_id);
   if (!read_id)
     {

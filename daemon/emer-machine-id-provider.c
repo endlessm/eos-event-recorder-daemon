@@ -241,10 +241,11 @@ dehyphenate_uuid (gchar *uuid_with_hyphens)
 
 static gboolean
 read_one_machine_id (const gchar  *machine_id_path,
+                     gchar       **machine_id_hex,
                      uuid_t        id,
                      GError      **error)
 {
-  gchar *machine_id_sans_hyphens;
+  g_autofree gchar *machine_id_sans_hyphens = NULL;
   gsize machine_id_sans_hyphens_length;
   gboolean read_succeeded =
     g_file_get_contents (machine_id_path, &machine_id_sans_hyphens,
@@ -277,7 +278,6 @@ read_one_machine_id (const gchar  *machine_id_path,
     }
 
   gchar *hyphenated_machine_id = hyphenate_uuid (machine_id_sans_hyphens);
-  g_free (machine_id_sans_hyphens);
 
   gint parse_failed = uuid_parse (hyphenated_machine_id, id);
   g_free (hyphenated_machine_id);
@@ -292,18 +292,21 @@ read_one_machine_id (const gchar  *machine_id_path,
       return FALSE;
     }
 
+  if (machine_id_hex)
+    *machine_id_hex = g_strchomp (g_steal_pointer (&machine_id_sans_hyphens));
+
   return TRUE;
 }
 
 static gboolean
-read_machine_id (EmerMachineIdProvider *self)
+read_machine_id (EmerMachineIdProvider *self, gchar **machine_id_hex)
 {
   EmerMachineIdProviderPrivate *priv =
     emer_machine_id_provider_get_instance_private (self);
   g_autoptr(GError) local_error = NULL;
   uuid_t id;
 
-  if (!read_one_machine_id (priv->tracking_id_path, id, &local_error))
+  if (!read_one_machine_id (priv->tracking_id_path, machine_id_hex, id, &local_error))
     {
       if (g_error_matches (local_error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
         {
@@ -318,7 +321,7 @@ read_machine_id (EmerMachineIdProvider *self)
                          local_error->message);
               return FALSE;
             }
-	  else if (!read_one_machine_id (priv->tracking_id_path, id, &local_error))
+	  else if (!read_one_machine_id (priv->tracking_id_path, machine_id_hex, id, &local_error))
             {
               g_message ("Failed to read tracking id %s: %s",
                          priv->tracking_id_path,
@@ -351,6 +354,7 @@ read_machine_id (EmerMachineIdProvider *self)
 /*
  * emer_machine_id_provider_get_id:
  * @self: the machine ID provider
+ * @machine_id_hex: out location for machine-id stored on disk in hex
  * @uuid: (out caller-allocates) (array fixed-size=16) (element-type guchar):
  * allocated 16-byte return location for a UUID.
  *
@@ -364,6 +368,7 @@ read_machine_id (EmerMachineIdProvider *self)
  */
 gboolean
 emer_machine_id_provider_get_id (EmerMachineIdProvider *self,
+                                 gchar                **machine_id_hex,
                                  uuid_t                 machine_id)
 {
   EmerMachineIdProviderPrivate *priv =
@@ -371,7 +376,7 @@ emer_machine_id_provider_get_id (EmerMachineIdProvider *self,
 
   if (!priv->id_is_valid)
     {
-      if (read_machine_id (self))
+      if (read_machine_id (self, machine_id_hex))
         {
           priv->id_is_valid = TRUE;
         }

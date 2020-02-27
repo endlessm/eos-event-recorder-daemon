@@ -85,6 +85,7 @@ EmerMachineIdProvider *emer_machine_id_provider_new      (void);
 EmerMachineIdProvider *emer_machine_id_provider_new_full (const gchar *tracking_id_path);
 
 gboolean               emer_machine_id_provider_get_id   (EmerMachineIdProvider *self,
+                                                          gchar                **machine_id_hex,
                                                           uuid_t                 machine_id);
 gboolean               emer_machine_id_provider_reset_tracking_id (EmerMachineIdProvider  *self,
                                                                    GError                **error);

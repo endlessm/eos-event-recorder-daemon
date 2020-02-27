@@ -1604,6 +1604,19 @@ emer_daemon_new (const gchar             *persistent_cache_directory,
                        NULL);
 }
 
+gchar *
+emer_daemon_get_tracking_id (EmerDaemon *self)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+  g_autofree gchar *machine_id_hex = NULL;
+  uuid_t uuid;
+
+  if (emer_machine_id_provider_get_id (priv->machine_id_provider, &machine_id_hex, uuid))
+      return g_steal_pointer (&machine_id_hex);
+
+  return NULL;
+}
+
 gboolean
 emer_daemon_reset_tracking_id (EmerDaemon  *self,
                                GError     **error)

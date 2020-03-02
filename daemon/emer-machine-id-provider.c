@@ -36,8 +36,7 @@
 
 typedef struct EmerMachineIdProviderPrivate
 {
-  gchar *path;
-  gchar *override_path;
+  gchar *tracking_id_path;
   uuid_t id;
   gboolean id_is_valid;
 } EmerMachineIdProviderPrivate;
@@ -54,34 +53,24 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerMachineIdProvider, emer_machine_id_provider, G_T
 #define FILE_LENGTH 33
 
 /*
- * Filepath at which the random UUID that persistently identifies this machine
- * is stored.
- * In order to protect the anonymity of our users, the ID stored in this file
- * must be randomly generated and not traceable back to the user's device.
- * See http://www.freedesktop.org/software/systemd/man/machine-id.html for more
- * details.
- */
-#define DEFAULT_MACHINE_ID_FILEPATH "/etc/machine-id"
-
-/*
  * Filepath where an overridden random UUID, separate from /etc/machine-id
- * is stored. The machine-id might be read from this path and used as the
- * tracking ID in cases where we don't want to continue using the machine-id,
- * either on user request or when we enter the demo mode.
+ * is stored. This machine-id is read from this path and used as the
+ * default tracking ID for metrics purposes.
  */
-#define TRACKING_ID_OVERRIDE SYSCONFDIR "/metrics/machine-id-override"
+#define TRACKING_ID_PATH SYSCONFDIR "/metrics/tracking-id"
 
 #define UUID_SERIALIZED_LEN 37
 
 enum
 {
   PROP_0,
-  PROP_PATH,
-  PROP_OVERRIDE_PATH,
+  PROP_TRACKING_ID_PATH,
   NPROPS
 };
 
 static GParamSpec *emer_machine_id_provider_props[NPROPS] = { NULL, };
+
+static gboolean write_tracking_id_file (const gchar *path, GError **error);
 
 /*
  * SECTION:emer-machine-id-provider
@@ -107,12 +96,8 @@ emer_machine_id_provider_get_property (GObject    *object,
 
   switch (property_id)
     {
-    case PROP_PATH:
-      g_value_set_string (value, priv->path);
-      break;
-
-    case PROP_OVERRIDE_PATH:
-      g_value_set_string (value, priv->override_path);
+    case PROP_TRACKING_ID_PATH:
+      g_value_set_string (value, priv->tracking_id_path);
       break;
 
     default:
@@ -132,12 +117,8 @@ emer_machine_id_provider_set_property (GObject      *object,
 
   switch (property_id)
     {
-    case PROP_PATH:
-      priv->path = g_value_dup_string (value);
-      break;
-
-    case PROP_OVERRIDE_PATH:
-      priv->override_path = g_value_dup_string (value);
+    case PROP_TRACKING_ID_PATH:
+      priv->tracking_id_path = g_value_dup_string (value);
       break;
 
     default:
@@ -152,8 +133,7 @@ emer_machine_id_provider_finalize (GObject *object)
   EmerMachineIdProviderPrivate *priv =
     emer_machine_id_provider_get_instance_private (self);
 
-  g_free (priv->path);
-  g_free (priv->override_path);
+  g_free (priv->tracking_id_path);
 
   G_OBJECT_CLASS (emer_machine_id_provider_parent_class)->finalize (object);
 }
@@ -168,15 +148,10 @@ emer_machine_id_provider_class_init (EmerMachineIdProviderClass *klass)
   object_class->finalize = emer_machine_id_provider_finalize;
 
   /* Blurb string is good enough default documentation for this */
-  emer_machine_id_provider_props[PROP_PATH] =
-    g_param_spec_string ("path", "Machine ID path",
-                         "The path to where the immutable machine ID is stored.",
-                         DEFAULT_MACHINE_ID_FILEPATH,
-                         G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
-  emer_machine_id_provider_props[PROP_OVERRIDE_PATH] =
-    g_param_spec_string ("override-path", "Tracking ID override path",
-                         "The path to where a mutable tracking ID override path is stored.",
-                         TRACKING_ID_OVERRIDE,
+  emer_machine_id_provider_props[PROP_TRACKING_ID_PATH] =
+    g_param_spec_string ("tracking-id-path", "Tracking ID file path",
+                         "The path to where a mutable tracking ID is stored.",
+                         TRACKING_ID_PATH,
                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, NPROPS,
@@ -194,10 +169,8 @@ emer_machine_id_provider_init (EmerMachineIdProvider *self)
 
 /*
  * emer_machine_id_provider_new_full:
- * @machine_id_file_path: The default location of the machine id,
- *                        see #EmerMachineIdProvider:path
- * @override_file_path: A location for an override tracking id path,
- *                      see #EmerMachineIdProvider:override-path
+ * @tracking_id_path: A location for an tracking id path,
+ *                    see #EmerMachineIdProvider:tracking-id-path
  *
  * Testing function for creating a new #EmerMachineIdProvider in the C API.
  * You only need to use this if you are creating a mock ID provider for unit
@@ -210,12 +183,10 @@ emer_machine_id_provider_init (EmerMachineIdProvider *self)
  * Free with g_object_unref() when done if using C.
  */
 EmerMachineIdProvider *
-emer_machine_id_provider_new_full (const gchar *machine_id_file_path,
-                                   const gchar *override_file_path)
+emer_machine_id_provider_new_full (const gchar *tracking_id_path)
 {
   return g_object_new (EMER_TYPE_MACHINE_ID_PROVIDER,
-                       "path", machine_id_file_path,
-                       "override-path", override_file_path,
+                       "tracking-id-path", tracking_id_path,
                        NULL);
 }
 
@@ -232,8 +203,7 @@ EmerMachineIdProvider *
 emer_machine_id_provider_new (void)
 {
   return g_object_new (EMER_TYPE_MACHINE_ID_PROVIDER,
-                       "path", DEFAULT_MACHINE_ID_FILEPATH,
-                       "override-path", TRACKING_ID_OVERRIDE,
+                       "tracking-id-path", TRACKING_ID_PATH,
                        NULL);
 }
 
@@ -333,36 +303,44 @@ read_machine_id (EmerMachineIdProvider *self)
   g_autoptr(GError) local_error = NULL;
   uuid_t id;
 
-  if (!read_one_machine_id (priv->override_path, id, &local_error))
+  if (!read_one_machine_id (priv->tracking_id_path, id, &local_error))
     {
-      if (g_error_matches (local_error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
+      if (g_error_matches (local_error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
         {
-          g_debug ("Override machine id file %s does not exist, trying default.",
-                   priv->override_path);
+          g_debug ("Tracking id file %s does not exist hence creating one.",
+                   priv->tracking_id_path);
+          g_clear_error (&local_error);
+
+          if (!write_tracking_id_file (priv->tracking_id_path, &local_error))
+            {
+              g_message ("Failed to initialize tracking ID at %s: %s.",
+                         priv->tracking_id_path,
+                         local_error->message);
+              return FALSE;
+            }
+	  else if (!read_one_machine_id (priv->tracking_id_path, id, &local_error))
+            {
+              g_message ("Failed to read tracking id %s: %s",
+                         priv->tracking_id_path,
+                         local_error->message);
+              return FALSE;
+            }
         }
       else if (g_error_matches (local_error,
                                 EMER_ERROR,
                                 EMER_ERROR_INVALID_MACHINE_ID))
         {
-          g_message ("Failed to read override machine id %s: %s",
-                     priv->override_path,
+          g_message ("Failed to read tracking id %s: %s",
+                     priv->tracking_id_path,
                      local_error->message);
+          return FALSE;
         }
-
-      if (!read_one_machine_id (priv->path, id, &local_error))
+      else
         {
-          g_message ("Failed to read machine id %s: %s",
-                     priv->path,
-                     local_error->message);
+          g_message ("Error occured while reading tracking id at %s: %s",
+                     priv->tracking_id_path, local_error->message);
+          return FALSE;
         }
-    }
-
-  if (uuid_is_null (id))
-    {
-      g_critical ("Failed to read in a unique machine id from either %s or %s",
-                 priv->override_path,
-                 priv->path);
-      return FALSE;
     }
 
   uuid_copy (priv->id, id);
@@ -446,10 +424,10 @@ emer_machine_id_provider_reset_tracking_id (EmerMachineIdProvider  *self,
   EmerMachineIdProviderPrivate *priv =
     emer_machine_id_provider_get_instance_private (self);
 
-  if (!write_tracking_id_file (priv->override_path, error))
+  if (!write_tracking_id_file (priv->tracking_id_path, error))
     return FALSE;
 
-  g_message ("EmerMachineIdProvider: Will reload from: %s", priv->override_path);
+  g_message ("EmerMachineIdProvider: Will reload from: %s", priv->tracking_id_path);
 
   priv->id_is_valid = FALSE;
   return TRUE;

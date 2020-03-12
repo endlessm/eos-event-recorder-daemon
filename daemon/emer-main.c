@@ -108,12 +108,17 @@ on_reset_tracking_id (EmerEventRecorderServer *server,
                       EmerDaemon              *daemon)
 {
   g_autoptr(GError) error = NULL;
+  g_autofree gchar *tracking_id = NULL;
 
   if (!emer_daemon_reset_tracking_id (daemon, &error))
     {
       g_dbus_method_invocation_return_gerror (invocation, error);
       return TRUE;
     }
+
+  tracking_id = emer_daemon_get_tracking_id (daemon);
+  emer_event_recorder_server_set_tracking_id (server,
+                                              tracking_id != NULL ? tracking_id : "");
 
   emer_event_recorder_server_complete_reset_tracking_id (server, invocation);
   return TRUE;
@@ -300,6 +305,11 @@ on_bus_acquired (GDBusConnection *system_bus,
 {
   EmerDaemon *daemon = EMER_DAEMON (user_data);
   EmerEventRecorderServer *server = emer_event_recorder_server_skeleton_new ();
+  g_autofree gchar *tracking_id = NULL;
+
+  tracking_id = emer_daemon_get_tracking_id (daemon);
+  emer_event_recorder_server_set_tracking_id (server,
+                                              tracking_id != NULL ? tracking_id : "");
 
   g_signal_connect (server, "handle-record-singular-event",
                     G_CALLBACK (on_record_singular_event), daemon);

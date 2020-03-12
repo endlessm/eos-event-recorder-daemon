@@ -57,6 +57,7 @@ emer_machine_id_provider_new (void)
 
 gboolean
 emer_machine_id_provider_get_id (EmerMachineIdProvider *self,
+                                 gchar                **machine_id_hex,
                                  uuid_t                 machine_id)
 {
   EmerMachineIdProviderPrivate *priv =

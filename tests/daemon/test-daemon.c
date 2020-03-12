@@ -524,7 +524,7 @@ assert_machine_id_matches (GVariant              *machine_id_variant,
   g_assert_cmpuint (actual_length, ==, UUID_LENGTH);
 
   uuid_t expected_machine_id;
-  emer_machine_id_provider_get_id (machine_id_provider, expected_machine_id);
+  emer_machine_id_provider_get_id (machine_id_provider, NULL, expected_machine_id);
 
   gint compare_result = uuid_compare (actual_machine_id, expected_machine_id);
   g_assert_cmpint (compare_result, ==, 0);
@@ -1492,6 +1492,7 @@ test_daemon_refresh_and_reload_machine_id (Fixture       *fixture,
 
   /* Get the initial machine-id for comparing against later */
   emer_machine_id_provider_get_id (fixture->mock_machine_id_provider,
+                                   NULL,
                                    initial_machine_id);
 
   /* Overwrite machine-id */
@@ -1500,6 +1501,7 @@ test_daemon_refresh_and_reload_machine_id (Fixture       *fixture,
 
   /* New machine id should now be different */
   emer_machine_id_provider_get_id (fixture->mock_machine_id_provider,
+                                   NULL,
                                    new_machine_id);
 
   g_assert (uuid_compare (initial_machine_id, new_machine_id) != 0);

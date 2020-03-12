@@ -843,6 +843,7 @@ create_request_body (EmerDaemon *self,
 
   uuid_t machine_id;
   gboolean read_id = emer_machine_id_provider_get_id (priv->machine_id_provider,
+                                                      NULL,
                                                       machine_id);
   if (!read_id)
     {
@@ -1601,6 +1602,19 @@ emer_daemon_new (const gchar             *persistent_cache_directory,
                        "persistent-cache-directory", persistent_cache_directory,
                        "permissions-provider", permissions_provider,
                        NULL);
+}
+
+gchar *
+emer_daemon_get_tracking_id (EmerDaemon *self)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+  g_autofree gchar *machine_id_hex = NULL;
+  uuid_t uuid;
+
+  if (emer_machine_id_provider_get_id (priv->machine_id_provider, &machine_id_hex, uuid))
+      return g_steal_pointer (&machine_id_hex);
+
+  return NULL;
 }
 
 gboolean

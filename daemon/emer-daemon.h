@@ -113,6 +113,7 @@ gboolean                 emer_daemon_upload_events_finish     (EmerDaemon       
                                                                GError                 **error);
 gboolean                 emer_daemon_reset_tracking_id        (EmerDaemon              *self,
                                                                GError                 **error);
+gchar *                  emer_daemon_get_tracking_id          (EmerDaemon              *self);
 
 EmerPermissionsProvider *emer_daemon_get_permissions_provider (EmerDaemon              *self);
 

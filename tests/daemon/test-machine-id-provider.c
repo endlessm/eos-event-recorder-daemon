@@ -35,6 +35,12 @@
 #define TESTING_BASE_TEMPLATE "emer-machine-id-provider-tmp-XXXXXX"
 #define TESTING_TRACKING_ID        "d17b0fd3b28e4302bcd81ab471e06de9\n"
 #define TESTING_MALFORMED_TRACKING_ID        "absoluterubbish\n"
+
+/* The expected size in characters of the hexadecimal representation of a
+ * metrics ID, without any trailing newline.
+ */
+#define TRACKING_ID_LENGTH 32
+
 /*
  * The expected size in bytes of the file located at
  * #EmerMachineIdProvider:path.
@@ -123,7 +129,7 @@ test_machine_id_provider_create_tracking_id_if_unavailable (MachineIdTestFixture
 
   uuid_t id;
   // id_provider_get_id will write a new tracking ID, if no ID is found.
-  g_assert (emer_machine_id_provider_get_id (id_provider, id));
+  g_assert (emer_machine_id_provider_get_id (id_provider, NULL, id));
 
   g_assert (g_file_test (fixture->tracking_id_file_path, G_FILE_TEST_EXISTS));
 
@@ -153,11 +159,18 @@ test_machine_id_provider_can_get_tracking_id (MachineIdTestFixture *fixture,
   g_autoptr(EmerMachineIdProvider) id_provider =
     emer_machine_id_provider_new_full (fixture->tracking_id_file_path);
   uuid_t id;
-  g_assert (emer_machine_id_provider_get_id (id_provider, id));
+
+  // simultaneous check if we can get a unparsed_id directly to show in UI
+  g_autofree gchar *unparsed_id_direct = NULL;
+
+  g_assert (emer_machine_id_provider_get_id (id_provider, &unparsed_id_direct, id));
   gchar unparsed_id[HYPHENS_IN_ID + FILE_LENGTH];
   uuid_unparse_lower (id, unparsed_id);
   g_autofree gchar* unhypenated_id = unhyphenate_uuid (unparsed_id);
   g_assert_cmpstr (TESTING_TRACKING_ID, ==, unhypenated_id);
+
+  g_assert_cmpuint (strlen (unparsed_id_direct), ==, TRACKING_ID_LENGTH);
+  g_assert_cmpmem (TESTING_TRACKING_ID, TRACKING_ID_LENGTH, unparsed_id_direct, TRACKING_ID_LENGTH);
 }
 
 static void
@@ -183,7 +196,7 @@ test_machine_id_provider_writes_correctly_formed_tracking_id (MachineIdTestFixtu
   /* Double check that ID is retriveable with provider_get_id ()
    * and is different from TESTING_TRACKING_ID */
   uuid_t id;
-  g_assert (emer_machine_id_provider_get_id (id_provider, id));
+  g_assert (emer_machine_id_provider_get_id (id_provider, NULL, id));
   gchar unparsed_id[HYPHENS_IN_ID + FILE_LENGTH];
   uuid_unparse_lower (id, unparsed_id);
   g_autofree gchar* unhypenated_id = unhyphenate_uuid (unparsed_id);
@@ -200,7 +213,7 @@ test_machine_id_provider_read_malformed_tracking_id (MachineIdTestFixture *fixtu
   write_testing_machine_id (fixture->tracking_id_file_path,
                             TESTING_MALFORMED_TRACKING_ID);
   // Fails to read because tracking ID is malformed
-  g_assert_false (emer_machine_id_provider_get_id (id_provider, id));
+  g_assert_false (emer_machine_id_provider_get_id (id_provider, NULL, id));
 }
 
 gint

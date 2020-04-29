@@ -219,13 +219,18 @@ on_authorize_method_check (GDBusInterfaceSkeleton *interface,
 
   const gchar *sender_name = g_dbus_method_invocation_get_sender (invocation);
   PolkitSubject *subject = polkit_system_bus_name_new (sender_name);
+  PolkitCheckAuthorizationFlags flags = POLKIT_CHECK_AUTHORIZATION_FLAGS_NONE;
+  GDBusMessage *message = g_dbus_method_invocation_get_message (invocation);
+
+  if (g_dbus_message_get_flags (message) & G_DBUS_MESSAGE_FLAGS_ALLOW_INTERACTIVE_AUTHORIZATION)
+    flags |= POLKIT_CHECK_AUTHORIZATION_FLAGS_ALLOW_USER_INTERACTION;
 
   PolkitAuthorizationResult *result =
     polkit_authority_check_authorization_sync (authority,
                                                subject,
                                                authorized_method->method_full_name,
                                                NULL /*PolkitDetails*/,
-                                               POLKIT_CHECK_AUTHORIZATION_FLAGS_NONE,
+                                               flags,
                                                NULL /*GCancellable*/,
                                                &error);
   g_object_unref (authority);

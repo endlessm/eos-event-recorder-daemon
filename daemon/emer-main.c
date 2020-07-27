@@ -378,6 +378,8 @@ make_daemon (gint                argc,
   g_autofree gchar *persistent_cache_directory = NULL;
   const gchar *persistent_cache_directory_const = PERSISTENT_CACHE_DIR;
   g_autofree gchar *config_file_path = NULL;
+  g_autoptr(EmerMachineIdProvider) machine_id_prov = NULL;
+  g_autofree gchar *tracking_id_file_path = NULL;
   g_autoptr(EmerPermissionsProvider) permissions_provider = NULL;
   GOptionEntry option_entries[] =
   {
@@ -387,6 +389,9 @@ make_daemon (gint                argc,
     { "config-file-path", 'c', G_OPTION_FLAG_NONE,
       G_OPTION_ARG_FILENAME, &config_file_path,
       "Path to permissions config file", "path"},
+    { "tracking-id-file-path", 't', G_OPTION_FLAG_NONE,
+      G_OPTION_ARG_FILENAME, &tracking_id_file_path,
+      "Path to tracking ID of the machine", "path"},
     { NULL }
   };
 
@@ -414,8 +419,13 @@ make_daemon (gint                argc,
     permissions_provider =
       emer_permissions_provider_new_full (config_file_path, NULL);
 
+  if (tracking_id_file_path != NULL)
+    machine_id_prov =
+      emer_machine_id_provider_new_full(tracking_id_file_path);
+
   return emer_daemon_new (persistent_cache_directory_const,
-                          permissions_provider);
+                          permissions_provider,
+                          machine_id_prov);
 }
 
 gint

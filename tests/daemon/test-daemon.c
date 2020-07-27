@@ -1014,7 +1014,8 @@ test_daemon_new_succeeds (Fixture      *fixture,
                           gconstpointer unused)
 {
   EmerDaemon *daemon = emer_daemon_new (NULL /* persistent cache directory */,
-                                        NULL /* permissions provider */);
+                                        NULL /* permissions provider */,
+                                        NULL /* machine id provider */);
   g_assert_nonnull (daemon);
   g_object_unref (daemon);
 }

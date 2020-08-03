@@ -73,7 +73,8 @@ struct _EmerDaemonClass
 GType                    emer_daemon_get_type                 (void) G_GNUC_CONST;
 
 EmerDaemon *             emer_daemon_new                      (const gchar             *persistent_cache_directory,
-                                                               EmerPermissionsProvider *permissions_provider);
+                                                               EmerPermissionsProvider *permissions_provider,
+                                                               EmerMachineIdProvider *machine_id_provider);
 
 EmerDaemon *             emer_daemon_new_full                 (GRand                   *rand,
                                                                const gchar             *server_uri,

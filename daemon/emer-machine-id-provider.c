@@ -172,9 +172,10 @@ emer_machine_id_provider_init (EmerMachineIdProvider *self)
  * @tracking_id_path: A location for an tracking id path,
  *                    see #EmerMachineIdProvider:tracking-id-path
  *
- * Testing function for creating a new #EmerMachineIdProvider in the C API.
- * You only need to use this if you are creating a mock ID provider for unit
- * testing.
+ * For special cases which intends to upload metrics data other than the
+ * host machine, or if you are creating a mock ID provider for unit
+ * testing, use this to create the machine ID provider based on the
+ * spcified ID path.
  *
  * For all normal uses, you should use emer_machine_id_provider_new()
  * instead.

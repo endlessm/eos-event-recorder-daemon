@@ -782,7 +782,7 @@ add_stored_events_to_builders (EmerDaemon        *self,
 
   if (has_invalid)
     {
-      GVariant *payload = g_variant_new ("(tt)", num_variants, token);
+      GVariant *payload = g_variant_new ("(tt)", num_variants, *token);
 
       g_warning ("Invalid data found in the persistent cache: "
                  "%" G_GSIZE_FORMAT " valid records read (%" G_GUINT64_FORMAT " bytes read)",

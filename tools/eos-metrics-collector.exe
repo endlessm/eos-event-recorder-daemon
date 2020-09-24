@@ -1,0 +1,230 @@
+#!/usr/bin/python3
+
+import sys
+import os
+import subprocess
+import shutil
+import time
+import tempfile
+import errno
+import re
+import argparse
+from distutils.version import StrictVersion
+
+
+class OfflineMetrics():
+    def __init__(self):
+        self.metrics_cache_dir = '/var/cache/metrics'
+        self.tracking_id_path = '/etc/metrics/tracking-id'
+        self.machine_id_path = '/etc/machine-id'
+        self.systemd_service = 'eos-metrics-event-recorder.service'
+        self.metrics_config_file = '/etc/metrics/eos-metrics-permissions.conf'
+        self.metrics_proc_name = 'eos-metrics-event-recorder'
+        self.eos_version = None
+
+    def get_eos_version(self):
+        f = open("/etc/os-release")
+        for line in f.readlines():
+            if line.startswith("VERSION="):
+                fdot = line.find('=')
+                major = line[fdot+2:-2]
+                self.eos_version = major
+                return str(major)
+
+    def metrics_proc_exists(self):
+        ps = subprocess.Popen("ps ax -o pid= -o args= ", shell=True, stdout=subprocess.PIPE)
+        ps_pid = ps.pid
+        output = ps.stdout.read()
+        ps.stdout.close()
+        ps.wait()
+
+        for line in str(output).split('\n'):
+            res = re.findall("(\d+) (.*)", line)
+            if res:
+                pid = int(res[0][0])
+                if self.metrics_proc_name in res[0][1] and pid != os.getpid() and pid != ps_pid:
+                    return True
+        return False
+
+    def is_metrics_service_active(self):
+        status = os.system('systemctl is-active --quiet ' + self.systemd_service)
+        return (status == 0)
+
+
+class OfflineMetricsUploader(OfflineMetrics):
+
+    def __init__(self, storage_path=None):
+        super().__init__()
+        self.offline_metrics_usbdisk_node = storage_path
+        self.offline_metrics_src_dir = 'eos-metrics-data'
+        self.offline_tmp_metrics_dir = ''
+
+    def copy_metrics_data_and_upload(self):
+        if (self.is_metrics_service_active()):
+            subprocess.check_output(['/usr/bin/systemctl', 'stop', self.systemd_service])
+        srcdir = os.path.join(self.offline_metrics_usbdisk_node, self.offline_metrics_src_dir)
+        if not os.path.exists(srcdir):
+            print ('No metrics data in the eos-metrics-data directory')
+            sys.exit()
+        for machine_dir in os.listdir(srcdir):
+            self.offline_tmp_metrics_dir = tempfile.mkdtemp()
+            machine_path = os.path.join(srcdir, machine_dir)
+            for file in os.listdir(machine_path):
+                shutil.copy(os.path.join(machine_path, file), self.offline_tmp_metrics_dir)
+            subprocess.check_output(['sudo', 'chown', '-R', 'metrics:metrics', self.offline_tmp_metrics_dir])
+            persistent_cache_dir_arg = '--persistent-cache-directory=' + self.offline_tmp_metrics_dir
+            tracking_id_path_arg = '--tracking-id-file-path=' + self.offline_tmp_metrics_dir + '/tracking-id'
+            self.daemon = subprocess.Popen(['sudo', '-u', 'metrics', '/lib/eos-event-recorder-daemon/eos-metrics-event-recorder', persistent_cache_dir_arg, tracking_id_path_arg], stderr=subprocess.DEVNULL)
+
+            timeout = 0
+            while timeout < 5:
+                time.sleep(1)
+                if self.metrics_proc_exists():
+                    break
+                timeout = timeout + 1
+            if timeout >= 5:
+                print('Fail to launch eos-metrics-event-recorder')
+                sys.exit()
+
+            upload=subprocess.run(['/usr/bin/eos-upload-metrics'], stdout=subprocess.DEVNULL)
+            if (upload.returncode != 0):
+                print('Upload Fail.')
+                sys.exit()
+            else:
+                print("Upload successfully for tracking id " + machine_dir)
+
+            subprocess.check_output(['sudo', 'killall', '/lib/eos-event-recorder-daemon/eos-metrics-event-recorder'])
+            subprocess.check_output(['sudo', 'rm', '-rf', self.offline_tmp_metrics_dir])
+
+    def __del__(self):
+        '''
+        Remove temporary cache data, kill the eos-metrics-event-recorder.
+        And restart the service
+        '''
+        if os.path.exists(self.offline_tmp_metrics_dir):
+            subprocess.check_output(['sudo', 'rm', '-rf', self.offline_tmp_metrics_dir])
+        if self.metrics_proc_exists():
+            subprocess.check_output(['sudo', 'killall', '/lib/eos-event-recorder-daemon/eos-metrics-event-recorder'])
+        if (not self.is_metrics_service_active()):
+            subprocess.check_output(['/usr/bin/systemctl', 'start', self.systemd_service])
+
+
+class OfflineMetricsCollector(OfflineMetrics):
+
+    def __init__(self, storage_path=None):
+        super().__init__()
+        self.offline_metrics_usbdisk_node = storage_path
+        self.offline_metrics_dst_dir = 'eos-metrics-data'
+        self.disk_free_space_in_bytes = 0
+        self.offline_machine_data_dir = None
+
+    def get_usbdisk_free_space(self):
+        disk_usage = shutil.disk_usage(self.offline_metrics_usbdisk_node)
+        self.disk_free_space_in_bytes = disk_usage.free
+        return disk_usage.free
+
+    def create_folder_for_machine(self):
+        target_dir = os.path.join(self.offline_metrics_usbdisk_node, self.offline_metrics_dst_dir)
+        if os.path.exists(target_dir) is False:
+            os.mkdir(target_dir)
+
+        if os.path.exists(self.tracking_id_path) is True:
+            f = open(self.tracking_id_path)
+        elif os.path.exists(self.machine_id_path) is True:
+            f = open(self.machine_id_path)
+        else:
+            print('No tracking/machine id file found')
+            sys.exit()
+
+        self.offline_machine_data_dir = os.path.join(target_dir, f.read(32))
+        if os.path.exists(self.offline_machine_data_dir) is False:
+            os.mkdir(self.offline_machine_data_dir)
+        else:
+            subprocess.check_output(['rm', '-rf', self.offline_machine_data_dir])
+            os.mkdir(self.offline_machine_data_dir)
+        f.close()
+
+    def copy_tracking_id(self):
+        if os.path.exists(self.tracking_id_path) is True:
+            # The tracking id file has permission -rwxrwsr-x  which
+            # will raise PermissionError for shutil.copy, use copyfile
+            # instead
+            shutil.copyfile(self.tracking_id_path, os.path.join(self.offline_machine_data_dir, os.path.basename(self.tracking_id_path)))
+        elif os.path.exists(self.machine_id_path) is True:
+            shutil.copyfile(self.machine_id_path, os.path.join(self.offline_machine_data_dir, os.path.basename(self.tracking_id_path)))
+        else:
+            print('No tracking/machine id file found')
+            sys.exit()
+
+    def copy_metrics_data(self):
+        # Check whether the network_send_file exists or not
+        if os.path.exists(os.path.join(self.metrics_cache_dir, 'network_send_file')) is True:
+            shutil.copyfile(os.path.join(self.metrics_cache_dir, 'network_send_file'), os.path.join(self.offline_machine_data_dir, 'network_send_file'))
+
+        # Copy mandatory files
+        files = ['boot_offset_metafile', 'local_version_file', 'variants.dat', 'variants.dat.metadata']
+        for file in files:
+            shutil.copyfile(os.path.join(self.metrics_cache_dir, file), os.path.join(self.offline_machine_data_dir, os.path.basename(file)))
+
+    def reset_metrics_data(self):
+        files = ['variants.dat', 'variants.dat.metadata']
+        for file in files:
+            target_file = os.path.join(self.metrics_cache_dir, file)
+            subprocess.check_output(['sudo', 'rm', '-f', target_file])
+
+    def collect_metrics(self):
+        if (self.is_metrics_service_active()):
+            subprocess.check_output(['/usr/bin/systemctl', 'stop', self.systemd_service])
+        self.create_folder_for_machine()
+        self.copy_tracking_id()
+        self.copy_metrics_data()
+        self.reset_metrics_data()
+        subprocess.check_output(['/usr/bin/systemctl', 'start', self.systemd_service])
+
+    def evaluate_metrics_data_size(self):
+        size = 0
+        size += os.path.getsize(self.metrics_cache_dir)
+        if os.path.exists(self.tracking_id_path):
+            size += os.path.getsize(self.tracking_id_path)
+        if os.path.exists(self.machine_id_path):
+            size += os.path.getsize(self.machine_id_path)
+        return size
+
+
+def main():
+    location = os.path.dirname(os.path.realpath(sys.argv[0]))
+    parser = argparse.ArgumentParser(
+    description='Offline Metrics Collector. There are 2 actions, collect'
+                'and upload. The program is expected to be located in'
+                'a removable storage. The metrics data of the target'
+                'machine will be copied to eos-metrics-data directory'
+                'of the removable storage while doing collect. All collected'
+                'data can uploaded to Metrics Server by doing upload'
+                ) 
+    parser.add_argument('action', metavar='ACTION', type=str,
+                        help='collect or upload')
+    args=parser.parse_args()
+
+    if args.action == "collect":
+        print('collect')
+        collector = OfflineMetricsCollector(location)
+        if collector.get_usbdisk_free_space() > collector.evaluate_metrics_data_size():
+            collector.collect_metrics()
+            print("Metrics Collect Done")
+        else:
+            print("Insufficient free space for metrics data")
+    elif args.action == "upload":
+        uploader = OfflineMetricsUploader(location)
+        if StrictVersion(uploader.get_eos_version()) < StrictVersion("3.9.0"):
+            print("Please run this command on >= EOS 3.9.0")
+        else:
+            uploader.copy_metrics_data_and_upload()
+            print("All metrics data been successfully uploaded")
+            shutil.rmtree(os.path.join(location, uploader.offline_metrics_src_dir))
+    else:
+        print('Invalid action ' + args.action)
+
+
+if __name__ == '__main__':
+    main()
+

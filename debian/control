@@ -17,11 +17,11 @@ Build-Depends: autoconf-archive,
                systemd,
                uuid-dev
 Standards-Version: 3.9.4
-Section: non-free/libs
+Section: net
 Homepage: http://www.endlessm.com
 
 Package: eos-event-recorder-daemon
-Section: non-free/net
+Section: net
 Architecture: any
 Breaks: eos-metrics-event-recorder
 Replaces: eos-metrics-event-recorder

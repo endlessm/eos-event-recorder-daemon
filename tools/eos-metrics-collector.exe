@@ -220,8 +220,6 @@ def main():
         else:
             print("Insufficient free space for metrics data")
     elif args.action == "upload":
-        uploader = OfflineMetricsUploader(location)
-
         eos_version = get_eos_version()
         if eos_version is None:
             sys.exit("This program only works on Endless OS, exiting.")
@@ -232,6 +230,7 @@ def main():
             )
             sys.exit(msg)
 
+        uploader = OfflineMetricsUploader(location)
         uploader.copy_metrics_data_and_upload()
         print("All metrics data been successfully uploaded")
         shutil.rmtree(os.path.join(location, uploader.offline_metrics_src_dir))

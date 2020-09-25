@@ -197,6 +197,32 @@ class OfflineMetricsCollector(OfflineMetrics):
         return size
 
 
+def collect(location):
+    collector = OfflineMetricsCollector(location)
+    if collector.get_usbdisk_free_space() > collector.evaluate_metrics_data_size():
+        collector.collect_metrics()
+        print("Metrics Collect Done")
+    else:
+        print("Insufficient free space for metrics data")
+
+
+def upload(location):
+    eos_version = get_eos_version()
+    if eos_version is None:
+        sys.exit("This program only works on Endless OS, exiting.")
+    if StrictVersion(eos_version) < StrictVersion("3.9.0"):
+        msg = (
+            f"Uploading metrics collected from other machines requires "
+            f"EOS >= 3.9.0, and {eos_version} was detected, exiting."
+        )
+        sys.exit(msg)
+
+    uploader = OfflineMetricsUploader(location)
+    uploader.copy_metrics_data_and_upload()
+    print("All metrics data been successfully uploaded")
+    shutil.rmtree(os.path.join(location, uploader.offline_metrics_src_dir))
+
+
 def main():
     location = os.path.dirname(os.path.realpath(sys.argv[0]))
     parser = argparse.ArgumentParser(
@@ -212,28 +238,9 @@ def main():
     args=parser.parse_args()
 
     if args.action == "collect":
-        print('collect')
-        collector = OfflineMetricsCollector(location)
-        if collector.get_usbdisk_free_space() > collector.evaluate_metrics_data_size():
-            collector.collect_metrics()
-            print("Metrics Collect Done")
-        else:
-            print("Insufficient free space for metrics data")
+        collect(location)
     elif args.action == "upload":
-        eos_version = get_eos_version()
-        if eos_version is None:
-            sys.exit("This program only works on Endless OS, exiting.")
-        if StrictVersion(eos_version) < StrictVersion("3.9.0"):
-            msg = (
-                f"Uploading metrics collected from other machines requires "
-                f"EOS >= 3.9.0, and {eos_version} was detected, exiting."
-            )
-            sys.exit(msg)
-
-        uploader = OfflineMetricsUploader(location)
-        uploader.copy_metrics_data_and_upload()
-        print("All metrics data been successfully uploaded")
-        shutil.rmtree(os.path.join(location, uploader.offline_metrics_src_dir))
+        upload(location)
     else:
         print('Invalid action ' + args.action)
 

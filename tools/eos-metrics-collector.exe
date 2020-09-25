@@ -12,6 +12,21 @@ import argparse
 from distutils.version import StrictVersion
 
 
+def get_eos_version():
+    f = open("/etc/os-release")
+
+    for line in f.readlines():
+        key, value = line.split("=")
+        if key == "ID":
+            distro = value.rstrip('\n').strip('"')
+        if key == "VERSION_ID":
+            version = value.rstrip('\n').strip('"')
+
+    if distro == "endless":
+        return version
+    return None
+
+
 class OfflineMetrics():
     def __init__(self):
         self.metrics_cache_dir = '/var/cache/metrics'
@@ -20,16 +35,7 @@ class OfflineMetrics():
         self.systemd_service = 'eos-metrics-event-recorder.service'
         self.metrics_config_file = '/etc/metrics/eos-metrics-permissions.conf'
         self.metrics_proc_name = 'eos-metrics-event-recorder'
-        self.eos_version = None
 
-    def get_eos_version(self):
-        f = open("/etc/os-release")
-        for line in f.readlines():
-            if line.startswith("VERSION="):
-                fdot = line.find('=')
-                major = line[fdot+2:-2]
-                self.eos_version = major
-                return str(major)
 
     def metrics_proc_exists(self):
         ps = subprocess.Popen("ps ax -o pid= -o args= ", shell=True, stdout=subprocess.PIPE)
@@ -214,13 +220,20 @@ def main():
         else:
             print("Insufficient free space for metrics data")
     elif args.action == "upload":
+        eos_version = get_eos_version()
+        if eos_version is None:
+            sys.exit("This program only works on Endless OS, exiting.")
+        if StrictVersion(eos_version) < StrictVersion("3.9.0"):
+            msg = (
+                f"Uploading metrics collected from other machines requires "
+                f"EOS >= 3.9.0, and {eos_version} was detected, exiting."
+            )
+            sys.exit(msg)
+
         uploader = OfflineMetricsUploader(location)
-        if StrictVersion(uploader.get_eos_version()) < StrictVersion("3.9.0"):
-            print("Please run this command on >= EOS 3.9.0")
-        else:
-            uploader.copy_metrics_data_and_upload()
-            print("All metrics data been successfully uploaded")
-            shutil.rmtree(os.path.join(location, uploader.offline_metrics_src_dir))
+        uploader.copy_metrics_data_and_upload()
+        print("All metrics data been successfully uploaded")
+        shutil.rmtree(os.path.join(location, uploader.offline_metrics_src_dir))
     else:
         print('Invalid action ' + args.action)
 

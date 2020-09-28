@@ -36,7 +36,6 @@ class OfflineMetrics():
         self.metrics_config_file = '/etc/metrics/eos-metrics-permissions.conf'
         self.metrics_proc_name = 'eos-metrics-event-recorder'
 
-
     def metrics_proc_exists(self):
         ps = subprocess.Popen("ps ax -o pid= -o args= ", shell=True, stdout=subprocess.PIPE)
         ps_pid = ps.pid
@@ -70,7 +69,7 @@ class OfflineMetricsUploader(OfflineMetrics):
             subprocess.check_output(['/usr/bin/systemctl', 'stop', self.systemd_service])
         srcdir = os.path.join(self.offline_metrics_usbdisk_node, self.offline_metrics_src_dir)
         if not os.path.exists(srcdir):
-            print ('No metrics data in the eos-metrics-data directory')
+            print('No metrics data in the eos-metrics-data directory')
             sys.exit()
         for machine_dir in os.listdir(srcdir):
             self.offline_tmp_metrics_dir = tempfile.mkdtemp()
@@ -92,7 +91,7 @@ class OfflineMetricsUploader(OfflineMetrics):
                 print('Fail to launch eos-metrics-event-recorder')
                 sys.exit()
 
-            upload=subprocess.run(['/usr/bin/eos-upload-metrics'], stdout=subprocess.DEVNULL)
+            upload = subprocess.run(['/usr/bin/eos-upload-metrics'], stdout=subprocess.DEVNULL)
             if (upload.returncode != 0):
                 print('Upload Fail.')
                 sys.exit()
@@ -232,10 +231,10 @@ def main():
                 'machine will be copied to eos-metrics-data directory'
                 'of the removable storage while doing collect. All collected'
                 'data can uploaded to Metrics Server by doing upload'
-                ) 
+                )
     parser.add_argument('action', metavar='ACTION', type=str,
                         help='collect or upload')
-    args=parser.parse_args()
+    args = parser.parse_args()
 
     if args.action == "collect":
         collect(location)
@@ -247,4 +246,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

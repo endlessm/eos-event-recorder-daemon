@@ -1,13 +1,14 @@
 #!/usr/bin/python3
 
-import sys
+import argparse
 import os
-import subprocess
+import re
 import shutil
+import subprocess
+import sys
 import time
 import tempfile
-import re
-import argparse
+
 from distutils.version import StrictVersion
 
 

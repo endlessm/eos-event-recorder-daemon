@@ -224,7 +224,6 @@ def upload(location):
 
 
 def main():
-    location = os.path.dirname(os.path.realpath(sys.argv[0]))
     parser = argparse.ArgumentParser(
     description='Offline Metrics Collector. There are 2 actions, collect'
                 'and upload. The program is expected to be located in'
@@ -237,6 +236,7 @@ def main():
                         help='collect or upload')
     args = parser.parse_args()
 
+    location = sys.path[0]
     if args.action == "collect":
         collect(location)
     elif args.action == "upload":

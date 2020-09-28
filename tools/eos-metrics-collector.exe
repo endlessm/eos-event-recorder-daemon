@@ -6,7 +6,6 @@ import subprocess
 import shutil
 import time
 import tempfile
-import errno
 import re
 import argparse
 from distutils.version import StrictVersion

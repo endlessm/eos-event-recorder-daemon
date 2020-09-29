@@ -154,10 +154,10 @@ class OfflineMetricsCollector(OfflineMetrics):
         os.mkdir(self.offline_machine_data_dir)
 
     def copy_tracking_id(self):
+        # shutil.copy tries to maintain the file mode, and some files have the
+        # sticky bit set, which is not supported by FAT32, so we use
+        # shutil.copyfile which ignores file metadata.
         if os.path.exists(self.tracking_id_path):
-            # The tracking id file has permission -rwxrwsr-x  which
-            # will raise PermissionError for shutil.copy, use copyfile
-            # instead
             shutil.copyfile(self.tracking_id_path, os.path.join(self.offline_machine_data_dir, os.path.basename(self.tracking_id_path)))
         elif os.path.exists(self.machine_id_path):
             shutil.copyfile(self.machine_id_path, os.path.join(self.offline_machine_data_dir, os.path.basename(self.tracking_id_path)))

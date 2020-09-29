@@ -136,7 +136,7 @@ class OfflineMetricsUploader(OfflineMetrics):
 
             self.daemon.terminate()
             self.daemon = None
-            shutil.rmtree(machine_dstdir)
+            shutil.rmtree(machine_srcdir)
             print("Successfully uploaded metrics for {tracking_id}")
         self.cleanup()
 

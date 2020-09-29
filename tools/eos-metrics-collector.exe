@@ -52,8 +52,9 @@ class OfflineMetrics():
         return False
 
     def is_metrics_service_active(self):
-        status = os.system('systemctl is-active --quiet ' + self.systemd_service)
-        return (status == 0)
+        p = subprocess.run(['systemctl', 'is-active', '--quiet ',
+            self.systemd_service])
+        return (p.returncode == 0)
 
 
 class OfflineMetricsUploader(OfflineMetrics):

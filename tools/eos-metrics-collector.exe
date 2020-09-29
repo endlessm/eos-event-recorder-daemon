@@ -117,12 +117,10 @@ class OfflineMetricsUploader(OfflineMetrics):
 class OfflineMetricsCollector(OfflineMetrics):
     def __init__(self, storage_root):
         super().__init__(storage_root)
-        self.disk_free_space_in_bytes = 0
         self.offline_machine_data_dir = None
 
     def get_usbdisk_free_space(self):
         disk_usage = shutil.disk_usage(self.storage_root)
-        self.disk_free_space_in_bytes = disk_usage.free
         return disk_usage.free
 
     def calculate_metrics_data_size(self):

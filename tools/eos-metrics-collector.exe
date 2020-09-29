@@ -124,8 +124,7 @@ class OfflineMetricsCollector(OfflineMetrics):
         return disk_usage.free
 
     def calculate_metrics_data_size(self):
-        size = 0
-        size += os.path.getsize(self.metrics_cache_dir)
+        size = os.path.getsize(self.metrics_cache_dir)
         if os.path.exists(self.tracking_id_path):
             size += os.path.getsize(self.tracking_id_path)
         if os.path.exists(self.machine_id_path):

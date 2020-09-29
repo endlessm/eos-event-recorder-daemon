@@ -74,7 +74,19 @@ class OfflineMetricsUploader(OfflineMetrics):
         self.bin_dir = "/usr/lib/eos-event-recorder-daemon"
         self.bin_name = "eos-metrics-event-recorder"
         self.bin_path = os.path.join(self.bin_dir, self.bin_name)
+        self.up_trigger_bin = "eos-upload-metrics"
         self.tmpdir = ''
+        self.daemon = None
+        self.unit_was_running = False
+
+    def cleanup(self):
+        if self.daemon is not None:
+            self.daemon.terminate()
+            self.daemon = None
+        if os.path.exists(self.tmpdir):
+            shutil.rmtree(self.tmpdir)
+        if self.unit_was_running:
+            self.metrics_unit('start')
 
     def copy_metrics_data_and_upload(self):
         if not os.path.exists(self.storage_dir):
@@ -104,7 +116,7 @@ class OfflineMetricsUploader(OfflineMetrics):
 
             dir_arg = f"--persistent-cache-directory={machine_dstdir}"
             id_arg = f"--tracking-id-file-path={machine_dstdir}/tracking-id"
-            daemon = subprocess.Popen(
+            self.daemon = subprocess.Popen(
                 ['sudo', '-u', 'metrics', self.bin_path, dir_arg, id_arg])
 
             timeout = 0
@@ -114,30 +126,24 @@ class OfflineMetricsUploader(OfflineMetrics):
                     break
                 timeout = timeout + 1
             if timeout >= 5:
-                print('Fail to launch eos-metrics-event-recorder')
-                sys.exit()
+                self.cleanup()
+                sys.exit(f'Failed to launch {self.bin_name}, aborting.')
 
-            upload = subprocess.run(['/usr/bin/eos-upload-metrics'], stdout=subprocess.DEVNULL)
-            if (upload.returncode != 0):
-                print('Upload Fail.')
-                sys.exit()
-            else:
-                print("Upload successfully for tracking id " + tracking_id)
+            up_trigger = subprocess.run(self.up_trigger_bin,
+                                        stdout=subprocess.DEVNULL)
+            if up_trigger.returncode != 0:
+                msg = (
+                    f"Failed to upload metrics, {self.up_trigger_bin} failed "
+                    f"with status {up_trigger.returncode}. Aborting."
+                )
+                self.cleanup()
+                sys.exit(msg)
 
-            daemon.terminate()
+            self.daemon.terminate()
+            self.daemon = None
             shutil.rmtree(machine_dstdir)
-
-    def __del__(self):
-        '''
-        Remove temporary cache data, kill the eos-metrics-event-recorder.
-        And restart the service
-        '''
-        if os.path.exists(self.tmpdir):
-            subprocess.check_output(['sudo', 'rm', '-rf', self.tmpdir])
-        if self.metrics_proc_exists():
-            subprocess.check_output(['sudo', 'killall', '/lib/eos-event-recorder-daemon/eos-metrics-event-recorder'])
-        if self.unit_was_running:
-            self.metrics_unit('start')
+            print(f"Successfully uploaded metrics data for {tracking_id}.")
+        self.cleanup()
 
 
 class OfflineMetricsCollector(OfflineMetrics):

@@ -37,6 +37,10 @@ class OfflineMetrics():
         self.metrics_proc_name = 'eos-metrics-event-recorder'
         self.storage_root = storage_root
         self.storage_metrics_dir = 'eos-metrics-data'
+        if os.path.exists(self.tracking_id_path):
+            self.metrics_id = self.tracking_id_path
+        else:
+            self.metrics_id = self.machine_id_path
 
     def metrics_proc_exists(self):
         ps = subprocess.Popen("ps ax -o pid= -o args= ", shell=True, stdout=subprocess.PIPE)
@@ -141,33 +145,22 @@ class OfflineMetricsCollector(OfflineMetrics):
         if not os.path.exists(target_dir):
             os.mkdir(target_dir)
 
-        if os.path.exists(self.tracking_id_path):
-            f = open(self.tracking_id_path)
-        elif os.path.exists(self.machine_id_path):
-            f = open(self.machine_id_path)
-        else:
-            print('No tracking/machine id file found')
-            sys.exit()
-
+        f = open(self.metrics_id)
         self.target_dir = os.path.join(target_dir, f.read(32))
+        f.close()
+
         if not os.path.exists(self.target_dir):
             os.mkdir(self.target_dir)
         else:
             subprocess.check_output(['rm', '-rf', self.target_dir])
             os.mkdir(self.target_dir)
-        f.close()
 
     def copy_tracking_id(self):
-        if os.path.exists(self.tracking_id_path):
-            # The tracking id file has permission -rwxrwsr-x  which
-            # will raise PermissionError for shutil.copy, use copyfile
-            # instead
-            shutil.copyfile(self.tracking_id_path, os.path.join(self.target_dir, os.path.basename(self.tracking_id_path)))
-        elif os.path.exists(self.machine_id_path):
-            shutil.copyfile(self.machine_id_path, os.path.join(self.target_dir, os.path.basename(self.tracking_id_path)))
-        else:
-            print('No tracking/machine id file found')
-            sys.exit()
+        # we can't use shutil.copy here to copy all files in one call because
+        # it tries to maintain files' mode, and some files have the sticky bit
+        # set, which is not supported by FAT32
+        shutil.copyfile(self.metrics_id,
+            os.path.join(self.target_dir, 'tracking-id'))
 
     def copy_metrics_data(self):
         # Check whether the network_send_file exists or not

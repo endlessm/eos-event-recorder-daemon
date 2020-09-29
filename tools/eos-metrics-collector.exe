@@ -51,9 +51,15 @@ class OfflineMetrics():
                     return True
         return False
 
-    def is_metrics_service_active(self):
-        status = os.system('systemctl is-active --quiet ' + self.systemd_service)
-        return (status == 0)
+    def metrics_unit(self, operation):
+        # TODO: the metrics daemon is also D-Bus activatable, so on stop we
+        # should also do something to prevent it being started over D-Bus.
+        cmd = ['systemctl', operation]
+        if operation == 'is-active':
+            cmd.append('--quiet')
+        cmd.append(self.systemd_service)
+        p = subprocess.run(cmd)
+        return (p.returncode == 0)
 
 
 class OfflineMetricsUploader(OfflineMetrics):
@@ -65,8 +71,8 @@ class OfflineMetricsUploader(OfflineMetrics):
         self.offline_tmp_metrics_dir = ''
 
     def copy_metrics_data_and_upload(self):
-        if (self.is_metrics_service_active()):
-            subprocess.check_output(['/usr/bin/systemctl', 'stop', self.systemd_service])
+        self.unit_was_running = self.metrics_unit('is-active')
+        self.metrics_unit('stop')
         srcdir = os.path.join(self.offline_metrics_usbdisk_node, self.offline_metrics_src_dir)
         if not os.path.exists(srcdir):
             print('No metrics data in the eos-metrics-data directory')
@@ -110,8 +116,8 @@ class OfflineMetricsUploader(OfflineMetrics):
             subprocess.check_output(['sudo', 'rm', '-rf', self.offline_tmp_metrics_dir])
         if self.metrics_proc_exists():
             subprocess.check_output(['sudo', 'killall', '/lib/eos-event-recorder-daemon/eos-metrics-event-recorder'])
-        if (not self.is_metrics_service_active()):
-            subprocess.check_output(['/usr/bin/systemctl', 'start', self.systemd_service])
+        if self.unit_was_running:
+            self.metrics_unit('start')
 
 
 class OfflineMetricsCollector(OfflineMetrics):
@@ -186,13 +192,14 @@ class OfflineMetricsCollector(OfflineMetrics):
             subprocess.check_output(['sudo', 'rm', '-f', target_file])
 
     def collect_metrics(self):
-        if (self.is_metrics_service_active()):
-            subprocess.check_output(['/usr/bin/systemctl', 'stop', self.systemd_service])
+        unit_was_running = self.metrics_unit('is-active')
+        self.metrics_unit('stop')
         self.create_folder_for_machine()
         self.copy_tracking_id()
         self.copy_metrics_data()
         self.reset_metrics_data()
-        subprocess.check_output(['/usr/bin/systemctl', 'start', self.systemd_service])
+        if unit_was_running:
+            self.metrics_unit('start')
 
 
 def collect(location):

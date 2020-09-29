@@ -224,14 +224,23 @@ def upload(location):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-    description='Offline Metrics Collector. There are 2 actions, collect'
-                'and upload. The program is expected to be located in'
-                'a removable storage. The metrics data of the target'
-                'machine will be copied to eos-metrics-data directory'
-                'of the removable storage while doing collect. All collected'
-                'data can uploaded to Metrics Server by doing upload'
-                )
+    desc = """
+    Offline Metrics Collector for Endless OS.
+
+    This program is designed to be executed from a removable storage device,
+    like a USB flash drive. It supports two actions, 'collect' and 'upload'.
+
+    The 'collect' action will extract any existing metrics from the system
+    where it is running and copy it to the removable storage device that it is
+    running from.
+
+    The 'upload' action will upload all extracted metrics data located in the
+    removable storage device that it is running from to the Endless' metrics
+    servers."""
+    epil = "The 'upload' action requires Endless OS 3.9.0 or newer."
+
+    parser = argparse.ArgumentParser(description=desc, epilog=epil,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('action', nargs='?', choices=['collect', 'upload'],
         default='collect', help='action to be performed (default: %(default)s)')
     args = parser.parse_args()

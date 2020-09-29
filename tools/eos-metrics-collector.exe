@@ -28,13 +28,15 @@ def get_eos_version():
 
 
 class OfflineMetrics():
-    def __init__(self):
+    def __init__(self, storage_root):
         self.metrics_cache_dir = '/var/cache/metrics'
         self.tracking_id_path = '/etc/metrics/tracking-id'
         self.machine_id_path = '/etc/machine-id'
         self.systemd_service = 'eos-metrics-event-recorder.service'
         self.metrics_config_file = '/etc/metrics/eos-metrics-permissions.conf'
         self.metrics_proc_name = 'eos-metrics-event-recorder'
+        self.storage_root = storage_root
+        self.storage_metrics_dir = 'eos-metrics-data'
 
     def metrics_proc_exists(self):
         ps = subprocess.Popen("ps ax -o pid= -o args= ", shell=True, stdout=subprocess.PIPE)
@@ -63,17 +65,14 @@ class OfflineMetrics():
 
 
 class OfflineMetricsUploader(OfflineMetrics):
-
-    def __init__(self, storage_path=None):
-        super().__init__()
-        self.offline_metrics_usbdisk_node = storage_path
-        self.offline_metrics_src_dir = 'eos-metrics-data'
+    def __init__(self, storage_root):
+        super().__init__(storage_root)
         self.offline_tmp_metrics_dir = ''
 
     def copy_metrics_data_and_upload(self):
         self.unit_was_running = self.metrics_unit('is-active')
         self.metrics_unit('stop')
-        srcdir = os.path.join(self.offline_metrics_usbdisk_node, self.offline_metrics_src_dir)
+        srcdir = os.path.join(self.storage_root, self.storage_metrics_dir)
         if not os.path.exists(srcdir):
             print('No metrics data in the eos-metrics-data directory')
             sys.exit()
@@ -121,17 +120,12 @@ class OfflineMetricsUploader(OfflineMetrics):
 
 
 class OfflineMetricsCollector(OfflineMetrics):
-
-    def __init__(self, storage_path=None):
-        super().__init__()
-        self.offline_metrics_usbdisk_node = storage_path
-        self.offline_metrics_dst_dir = 'eos-metrics-data'
-        self.disk_free_space_in_bytes = 0
-        self.offline_machine_data_dir = None
+    def __init__(self, storage_root):
+        super().__init__(storage_root)
+        self.target_dir = None
 
     def get_usbdisk_free_space(self):
-        disk_usage = shutil.disk_usage(self.offline_metrics_usbdisk_node)
-        self.disk_free_space_in_bytes = disk_usage.free
+        disk_usage = shutil.disk_usage(self.storage_root)
         return disk_usage.free
 
     def calculate_metrics_data_size(self):
@@ -143,47 +137,47 @@ class OfflineMetricsCollector(OfflineMetrics):
         return size
 
     def create_folder_for_machine(self):
-        target_dir = os.path.join(self.offline_metrics_usbdisk_node, self.offline_metrics_dst_dir)
-        if os.path.exists(target_dir) is False:
+        target_dir = os.path.join(self.storage_root, self.storage_metrics_dir)
+        if not os.path.exists(target_dir):
             os.mkdir(target_dir)
 
-        if os.path.exists(self.tracking_id_path) is True:
+        if os.path.exists(self.tracking_id_path):
             f = open(self.tracking_id_path)
-        elif os.path.exists(self.machine_id_path) is True:
+        elif os.path.exists(self.machine_id_path):
             f = open(self.machine_id_path)
         else:
             print('No tracking/machine id file found')
             sys.exit()
 
-        self.offline_machine_data_dir = os.path.join(target_dir, f.read(32))
-        if os.path.exists(self.offline_machine_data_dir) is False:
-            os.mkdir(self.offline_machine_data_dir)
+        self.target_dir = os.path.join(target_dir, f.read(32))
+        if not os.path.exists(self.target_dir):
+            os.mkdir(self.target_dir)
         else:
-            subprocess.check_output(['rm', '-rf', self.offline_machine_data_dir])
-            os.mkdir(self.offline_machine_data_dir)
+            subprocess.check_output(['rm', '-rf', self.target_dir])
+            os.mkdir(self.target_dir)
         f.close()
 
     def copy_tracking_id(self):
-        if os.path.exists(self.tracking_id_path) is True:
+        if os.path.exists(self.tracking_id_path):
             # The tracking id file has permission -rwxrwsr-x  which
             # will raise PermissionError for shutil.copy, use copyfile
             # instead
-            shutil.copyfile(self.tracking_id_path, os.path.join(self.offline_machine_data_dir, os.path.basename(self.tracking_id_path)))
-        elif os.path.exists(self.machine_id_path) is True:
-            shutil.copyfile(self.machine_id_path, os.path.join(self.offline_machine_data_dir, os.path.basename(self.tracking_id_path)))
+            shutil.copyfile(self.tracking_id_path, os.path.join(self.target_dir, os.path.basename(self.tracking_id_path)))
+        elif os.path.exists(self.machine_id_path):
+            shutil.copyfile(self.machine_id_path, os.path.join(self.target_dir, os.path.basename(self.tracking_id_path)))
         else:
             print('No tracking/machine id file found')
             sys.exit()
 
     def copy_metrics_data(self):
         # Check whether the network_send_file exists or not
-        if os.path.exists(os.path.join(self.metrics_cache_dir, 'network_send_file')) is True:
-            shutil.copyfile(os.path.join(self.metrics_cache_dir, 'network_send_file'), os.path.join(self.offline_machine_data_dir, 'network_send_file'))
+        if os.path.exists(os.path.join(self.metrics_cache_dir, 'network_send_file')):
+            shutil.copyfile(os.path.join(self.metrics_cache_dir, 'network_send_file'), os.path.join(self.target_dir, 'network_send_file'))
 
         # Copy mandatory files
         files = ['boot_offset_metafile', 'local_version_file', 'variants.dat', 'variants.dat.metadata']
         for file in files:
-            shutil.copyfile(os.path.join(self.metrics_cache_dir, file), os.path.join(self.offline_machine_data_dir, os.path.basename(file)))
+            shutil.copyfile(os.path.join(self.metrics_cache_dir, file), os.path.join(self.target_dir, os.path.basename(file)))
 
     def reset_metrics_data(self):
         files = ['variants.dat', 'variants.dat.metadata']
@@ -202,8 +196,8 @@ class OfflineMetricsCollector(OfflineMetrics):
             self.metrics_unit('start')
 
 
-def collect(location):
-    collector = OfflineMetricsCollector(location)
+def collect(storage_root):
+    collector = OfflineMetricsCollector(storage_root)
     free_space = collector.get_usbdisk_free_space()
     data_size = collector.calculate_metrics_data_size()
     if free_space < data_size:
@@ -216,7 +210,7 @@ def collect(location):
     print(f"Metrics data collected ({data_size} bytes).")
 
 
-def upload(location):
+def upload(storage_root):
     eos_version = get_eos_version()
     if eos_version is None:
         sys.exit("This program only works on Endless OS, exiting.")
@@ -227,9 +221,9 @@ def upload(location):
         )
         sys.exit(msg)
 
-    uploader = OfflineMetricsUploader(location)
+    uploader = OfflineMetricsUploader(storage_root)
     uploader.copy_metrics_data_and_upload()
-    shutil.rmtree(os.path.join(location, uploader.offline_metrics_src_dir))
+    shutil.rmtree(os.path.join(storage_root, uploader.storage_metrics_dir))
     print("All metrics data uploaded.")
 
 
@@ -258,11 +252,11 @@ def main():
                         help='action to be performed (default: %(default)s)')
     args = parser.parse_args()
 
-    location = sys.path[0]
+    storage_root = sys.path[0]
     if args.action == "collect":
-        collect(location)
+        collect(storage_root)
     elif args.action == "upload":
-        upload(location)
+        upload(storage_root)
 
 
 if __name__ == '__main__':

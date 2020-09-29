@@ -81,8 +81,8 @@ class OfflineMetricsUploader(OfflineMetrics):
         for tracking_id in os.listdir(self.storage_dir):
             self.offline_tmp_metrics_dir = tempfile.mkdtemp()
             machine_dir = os.path.join(self.storage_dir, tracking_id)
-            for file in os.listdir(machine_dir):
-                shutil.copy(os.path.join(machine_dir, file), self.offline_tmp_metrics_dir)
+            for f in os.listdir(machine_dir):
+                shutil.copy(os.path.join(machine_dir, f), self.offline_tmp_metrics_dir)
             subprocess.check_output(['sudo', 'chown', '-R', 'metrics:metrics', self.offline_tmp_metrics_dir])
             persistent_cache_dir_arg = '--persistent-cache-directory=' + self.offline_tmp_metrics_dir
             tracking_id_path_arg = '--tracking-id-file-path=' + self.offline_tmp_metrics_dir + '/tracking-id'

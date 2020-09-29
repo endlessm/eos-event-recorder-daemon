@@ -76,7 +76,7 @@ class OfflineMetricsUploader(OfflineMetrics):
             print(msg)
             sys.exit(0)
 
-        self.daemon_was_running = self.metrics_unit('is-active')
+        self.unit_was_running = self.metrics_unit('is-active')
         self.metrics_unit('stop')
 
         self.tmpdir = tempfile.mkdtemp()
@@ -127,7 +127,7 @@ class OfflineMetricsUploader(OfflineMetrics):
             subprocess.check_output(['sudo', 'rm', '-rf', self.tmpdir])
         if self.metrics_proc_exists():
             subprocess.check_output(['sudo', 'killall', '/lib/eos-event-recorder-daemon/eos-metrics-event-recorder'])
-        if self.daemon_was_running:
+        if self.unit_was_running:
             self.metrics_unit('start')
 
 
@@ -189,11 +189,11 @@ class OfflineMetricsCollector(OfflineMetrics):
 
     def collect_metrics(self):
         self.create_machine_dir()
-        daemon_was_running = self.metrics_unit('is-active')
+        unit_was_running = self.metrics_unit('is-active')
         self.metrics_unit('stop')
         self.copy_metrics_data()
         self.reset_metrics_data()
-        if daemon_was_running:
+        if unit_was_running:
             self.metrics_unit('start')
 
 

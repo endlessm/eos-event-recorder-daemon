@@ -223,8 +223,8 @@ def upload(location):
 
     uploader = OfflineMetricsUploader(location)
     uploader.copy_metrics_data_and_upload()
-    print("All metrics data been successfully uploaded")
     shutil.rmtree(os.path.join(location, uploader.offline_metrics_src_dir))
+    print("Metrics data successfully uploaded")
 
 
 def main():

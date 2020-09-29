@@ -70,8 +70,8 @@ class OfflineMetricsUploader(OfflineMetrics):
         self.offline_tmp_metrics_dir = ''
 
     def copy_metrics_data_and_upload(self):
-        if (self.metrics_unit('is-active')):
-            self.metrics_unit('stop')
+        daemon_was_running = self.metrics_unit('is-active')
+        self.metrics_unit('stop')
         srcdir = os.path.join(self.storage_root, self.storage_metrics_dir)
         if not os.path.exists(srcdir):
             print('No metrics data in the eos-metrics-data directory')
@@ -115,7 +115,7 @@ class OfflineMetricsUploader(OfflineMetrics):
             subprocess.check_output(['sudo', 'rm', '-rf', self.offline_tmp_metrics_dir])
         if self.metrics_proc_exists():
             subprocess.check_output(['sudo', 'killall', '/lib/eos-event-recorder-daemon/eos-metrics-event-recorder'])
-        if (not self.metrics_unit('is-active')):
+        if daemon_was_running:
             self.metrics_unit('start')
 
 

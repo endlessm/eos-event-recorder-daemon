@@ -133,19 +133,19 @@ class OfflineMetricsCollector(OfflineMetrics):
 
     def create_folder_for_machine(self):
         target_dir = os.path.join(self.storage_root, self.storage_metrics_dir)
-        if os.path.exists(target_dir) is False:
+        if not os.path.exists(target_dir):
             os.mkdir(target_dir)
 
-        if os.path.exists(self.tracking_id_path) is True:
+        if os.path.exists(self.tracking_id_path):
             f = open(self.tracking_id_path)
-        elif os.path.exists(self.machine_id_path) is True:
+        elif os.path.exists(self.machine_id_path):
             f = open(self.machine_id_path)
         else:
             print('No tracking/machine id file found')
             sys.exit()
 
         self.offline_machine_data_dir = os.path.join(target_dir, f.read(32))
-        if os.path.exists(self.offline_machine_data_dir) is False:
+        if not os.path.exists(self.offline_machine_data_dir):
             os.mkdir(self.offline_machine_data_dir)
         else:
             subprocess.check_output(['rm', '-rf', self.offline_machine_data_dir])
@@ -153,12 +153,12 @@ class OfflineMetricsCollector(OfflineMetrics):
         f.close()
 
     def copy_tracking_id(self):
-        if os.path.exists(self.tracking_id_path) is True:
+        if os.path.exists(self.tracking_id_path):
             # The tracking id file has permission -rwxrwsr-x  which
             # will raise PermissionError for shutil.copy, use copyfile
             # instead
             shutil.copyfile(self.tracking_id_path, os.path.join(self.offline_machine_data_dir, os.path.basename(self.tracking_id_path)))
-        elif os.path.exists(self.machine_id_path) is True:
+        elif os.path.exists(self.machine_id_path):
             shutil.copyfile(self.machine_id_path, os.path.join(self.offline_machine_data_dir, os.path.basename(self.tracking_id_path)))
         else:
             print('No tracking/machine id file found')
@@ -166,7 +166,7 @@ class OfflineMetricsCollector(OfflineMetrics):
 
     def copy_metrics_data(self):
         # Check whether the network_send_file exists or not
-        if os.path.exists(os.path.join(self.metrics_cache_dir, 'network_send_file')) is True:
+        if os.path.exists(os.path.join(self.metrics_cache_dir, 'network_send_file')):
             shutil.copyfile(os.path.join(self.metrics_cache_dir, 'network_send_file'), os.path.join(self.offline_machine_data_dir, 'network_send_file'))
 
         # Copy mandatory files

@@ -36,7 +36,7 @@ class OfflineMetrics():
         self.metrics_config_file = '/etc/metrics/eos-metrics-permissions.conf'
         self.metrics_proc_name = 'eos-metrics-event-recorder'
         self.storage_root = storage_root
-        self.storage_metrics_dir = 'eos-metrics-data'
+        self.storage_dir = os.path.join(self.storage_root, 'eos-metrics-data')
         if os.path.exists(self.tracking_id_path):
             self.metrics_id = self.tracking_id_path
         else:
@@ -70,7 +70,7 @@ class OfflineMetricsUploader(OfflineMetrics):
         self.offline_tmp_metrics_dir = ''
 
     def copy_metrics_data_and_upload(self):
-        srcdir = os.path.join(self.storage_root, self.storage_metrics_dir)
+        srcdir = self.storage_dir
         if not os.path.exists(srcdir):
             print(f"No metrics data found in {srcdir}, nothing to do.")
             sys.exit(0)
@@ -139,7 +139,7 @@ class OfflineMetricsCollector(OfflineMetrics):
         return size
 
     def create_target_dir(self):
-        target_dir = os.path.join(self.storage_root, self.storage_metrics_dir)
+        target_dir = self.storage_dir
         if not os.path.exists(target_dir):
             os.mkdir(target_dir)
 
@@ -215,7 +215,7 @@ def upload(storage_root):
 
     uploader = OfflineMetricsUploader(storage_root)
     uploader.copy_metrics_data_and_upload()
-    shutil.rmtree(os.path.join(storage_root, uploader.storage_metrics_dir))
+    shutil.rmtree(self.storage_dir)
     print("Metrics data successfully uploaded")
 
 

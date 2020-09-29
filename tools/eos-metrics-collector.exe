@@ -70,17 +70,17 @@ class OfflineMetricsUploader(OfflineMetrics):
         self.offline_tmp_metrics_dir = ''
 
     def copy_metrics_data_and_upload(self):
-        srcdir = self.storage_dir
-        if not os.path.exists(srcdir):
-            print(f"No metrics data found in {srcdir}, nothing to do.")
+        if not os.path.exists(self.storage_dir):
+            msg = f"No metrics data found in {self.storage_dir}, nothing to do."
+            print(msg)
             sys.exit(0)
 
         daemon_was_running = self.metrics_unit('is-active')
         self.metrics_unit('stop')
 
-        for machine_dir in os.listdir(srcdir):
+        for machine_dir in os.listdir(self.storage_dir):
             self.offline_tmp_metrics_dir = tempfile.mkdtemp()
-            machine_path = os.path.join(srcdir, machine_dir)
+            machine_path = os.path.join(self.storage_dir, machine_dir)
             for file in os.listdir(machine_path):
                 shutil.copy(os.path.join(machine_path, file), self.offline_tmp_metrics_dir)
             subprocess.check_output(['sudo', 'chown', '-R', 'metrics:metrics', self.offline_tmp_metrics_dir])

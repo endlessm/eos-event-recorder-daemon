@@ -72,8 +72,8 @@ class OfflineMetricsUploader(OfflineMetrics):
     def copy_metrics_data_and_upload(self):
         srcdir = os.path.join(self.storage_root, self.storage_metrics_dir)
         if not os.path.exists(srcdir):
-            print('No metrics data in the eos-metrics-data directory')
-            sys.exit()
+            print(f"No metrics data found in {srcdir}, nothing to do.")
+            sys.exit(0)
 
         daemon_was_running = self.metrics_unit('is-active')
         self.metrics_unit('stop')

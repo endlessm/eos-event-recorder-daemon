@@ -59,7 +59,6 @@ class OfflineMetrics():
 
 
 class OfflineMetricsUploader(OfflineMetrics):
-
     def __init__(self, storage_root):
         super().__init__(storage_root)
         self.offline_metrics_src_dir = 'eos-metrics-data'
@@ -116,7 +115,6 @@ class OfflineMetricsUploader(OfflineMetrics):
 
 
 class OfflineMetricsCollector(OfflineMetrics):
-
     def __init__(self, storage_root):
         super().__init__(storage_root)
         self.offline_metrics_dst_dir = 'eos-metrics-data'

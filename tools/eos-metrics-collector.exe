@@ -78,11 +78,11 @@ class OfflineMetricsUploader(OfflineMetrics):
         daemon_was_running = self.metrics_unit('is-active')
         self.metrics_unit('stop')
 
-        for machine_dir in os.listdir(self.storage_dir):
+        for tracking_id in os.listdir(self.storage_dir):
             self.offline_tmp_metrics_dir = tempfile.mkdtemp()
-            machine_path = os.path.join(self.storage_dir, machine_dir)
-            for file in os.listdir(machine_path):
-                shutil.copy(os.path.join(machine_path, file), self.offline_tmp_metrics_dir)
+            machine_dir = os.path.join(self.storage_dir, tracking_id)
+            for file in os.listdir(machine_dir):
+                shutil.copy(os.path.join(machine_dir, file), self.offline_tmp_metrics_dir)
             subprocess.check_output(['sudo', 'chown', '-R', 'metrics:metrics', self.offline_tmp_metrics_dir])
             persistent_cache_dir_arg = '--persistent-cache-directory=' + self.offline_tmp_metrics_dir
             tracking_id_path_arg = '--tracking-id-file-path=' + self.offline_tmp_metrics_dir + '/tracking-id'
@@ -103,7 +103,7 @@ class OfflineMetricsUploader(OfflineMetrics):
                 print('Upload Fail.')
                 sys.exit()
             else:
-                print("Upload successfully for tracking id " + machine_dir)
+                print("Upload successfully for tracking id " + tracking_id)
 
             subprocess.check_output(['sudo', 'killall', '/lib/eos-event-recorder-daemon/eos-metrics-event-recorder'])
             subprocess.check_output(['sudo', 'rm', '-rf', self.offline_tmp_metrics_dir])

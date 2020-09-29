@@ -42,7 +42,6 @@ class OfflineMetrics():
         else:
             self.metrics_id = self.machine_id_path
 
-
     def metrics_proc_exists(self):
         ps = subprocess.Popen("ps ax -o pid= -o args= ", shell=True, stdout=subprocess.PIPE)
         ps_pid = ps.pid
@@ -60,7 +59,7 @@ class OfflineMetrics():
 
     def metrics_unit(self, operation):
         p = subprocess.run(['systemctl', operation, '--quiet ',
-            self.systemd_service])
+                            self.systemd_service])
         return (p.returncode == 0)
 
 
@@ -71,11 +70,13 @@ class OfflineMetricsUploader(OfflineMetrics):
 
     def copy_metrics_data_and_upload(self):
         if not os.path.exists(self.storage_dir):
-            msg = f"No metrics data found in {self.storage_dir}, nothing to do."
+            msg = (
+                f"No metrics data found in {self.storage_dir}, nothing to do."
+            )
             print(msg)
             sys.exit(0)
 
-        daemon_was_running = self.metrics_unit('is-active')
+        self.daemon_was_running = self.metrics_unit('is-active')
         self.metrics_unit('stop')
 
         self.tmpdir = tempfile.mkdtemp()
@@ -92,7 +93,8 @@ class OfflineMetricsUploader(OfflineMetrics):
             x = "/usr/lib/eos-event-recorder-daemon/eos-metrics-event-recorder"
             dir_arg = f"--persistent-cache-directory={machine_dstdir}"
             id_arg = f"--tracking-id-file-path={machine_dstdir}/tracking-id"
-            sp = subprocess.Popen(['sudo', '-u', 'metrics', x, dir_arg, id_arg],
+            daemon = subprocess.Popen(
+                ['sudo', '-u', 'metrics', x, dir_arg, id_arg],
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL)
 
@@ -113,7 +115,7 @@ class OfflineMetricsUploader(OfflineMetrics):
             else:
                 print("Upload successfully for tracking id " + tracking_id)
 
-            sp.terminate()
+            daemon.terminate()
             shutil.rmtree(machine_dstdir)
 
     def __del__(self):
@@ -125,7 +127,7 @@ class OfflineMetricsUploader(OfflineMetrics):
             subprocess.check_output(['sudo', 'rm', '-rf', self.tmpdir])
         if self.metrics_proc_exists():
             subprocess.check_output(['sudo', 'killall', '/lib/eos-event-recorder-daemon/eos-metrics-event-recorder'])
-        if daemon_was_running:
+        if self.daemon_was_running:
             self.metrics_unit('start')
 
 
@@ -177,7 +179,7 @@ class OfflineMetricsCollector(OfflineMetrics):
             if os.path.exists(src):
                 shutil.copyfile(src, dst)
         shutil.copyfile(self.metrics_id,
-            os.path.join(self.machine_dir, 'tracking-id'))
+                        os.path.join(self.machine_dir, 'tracking-id'))
 
     def reset_metrics_data(self):
         files = ['variants.dat', 'variants.dat.metadata']
@@ -222,7 +224,7 @@ def upload(storage_root):
 
     uploader = OfflineMetricsUploader(storage_root)
     uploader.copy_metrics_data_and_upload()
-    shutil.rmtree(self.storage_dir)
+    shutil.rmtree(storage_root)
     print("Metrics data successfully uploaded")
 
 
@@ -242,10 +244,13 @@ def main():
     servers."""
     epil = "The 'upload' action requires Endless OS 3.9.0 or newer."
 
-    parser = argparse.ArgumentParser(description=desc, epilog=epil,
-        formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=desc, epilog=epil,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument('action', nargs='?', choices=['collect', 'upload'],
-        default='collect', help='action to be performed (default: %(default)s)')
+                        default='collect',
+                        help='action to be performed (default: %(default)s)')
     args = parser.parse_args()
 
     storage_root = sys.path[0]

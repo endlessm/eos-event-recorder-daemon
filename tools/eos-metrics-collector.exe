@@ -155,22 +155,21 @@ class OfflineMetricsCollector(OfflineMetrics):
             subprocess.check_output(['rm', '-rf', self.target_dir])
             os.mkdir(self.target_dir)
 
-    def copy_tracking_id(self):
+    def copy_metrics_data(self):
         # we can't use shutil.copy here to copy all files in one call because
         # it tries to maintain files' mode, and some files have the sticky bit
         # set, which is not supported by FAT32
+        files = [
+            'boot_offset_metafile', 'local_version_file', 'network_send_file',
+            'variants.dat', 'variants.dat.metadata'
+        ]
+        for f in files:
+            src = os.path.join(self.metrics_cache_dir, f)
+            dst = os.path.join(self.target_dir, f)
+            if os.path.exists(src):
+                shutil.copyfile(src, dst)
         shutil.copyfile(self.metrics_id,
-            os.path.join(self.target_dir, 'tracking-id'))
-
-    def copy_metrics_data(self):
-        # Check whether the network_send_file exists or not
-        if os.path.exists(os.path.join(self.metrics_cache_dir, 'network_send_file')):
-            shutil.copyfile(os.path.join(self.metrics_cache_dir, 'network_send_file'), os.path.join(self.target_dir, 'network_send_file'))
-
-        # Copy mandatory files
-        files = ['boot_offset_metafile', 'local_version_file', 'variants.dat', 'variants.dat.metadata']
-        for file in files:
-            shutil.copyfile(os.path.join(self.metrics_cache_dir, file), os.path.join(self.target_dir, os.path.basename(file)))
+                        os.path.join(self.target_dir, 'tracking-id'))
 
     def reset_metrics_data(self):
         files = ['variants.dat', 'variants.dat.metadata']
@@ -182,7 +181,6 @@ class OfflineMetricsCollector(OfflineMetrics):
         unit_was_running = self.metrics_unit('is-active')
         self.metrics_unit('stop')
         self.create_folder_for_machine()
-        self.copy_tracking_id()
         self.copy_metrics_data()
         self.reset_metrics_data()
         if unit_was_running:

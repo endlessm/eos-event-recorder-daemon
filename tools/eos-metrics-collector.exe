@@ -85,7 +85,7 @@ class OfflineMetricsUploader(OfflineMetrics):
         if self.unit_was_running:
             self.metrics_unit('start')
 
-    def copy_metrics_data_and_upload(self):
+    def upload_metrics(self):
         if not os.path.exists(self.storage_dir):
             msg = (
                 f"No metrics data found in {self.storage_dir}, nothing to do."
@@ -233,9 +233,8 @@ def upload(storage_root):
         sys.exit(msg)
 
     uploader = OfflineMetricsUploader(storage_root)
-    uploader.copy_metrics_data_and_upload()
-    shutil.rmtree(storage_root)
-    print("Metrics data successfully uploaded")
+    uploader.upload_metrics()
+    print("All metrics data successfully uploaded")
 
 
 def main():

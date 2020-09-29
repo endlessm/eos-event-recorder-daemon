@@ -162,14 +162,15 @@ class OfflineMetricsCollector(OfflineMetrics):
             os.path.join(self.target_dir, 'tracking-id'))
 
     def copy_metrics_data(self):
-        # Check whether the network_send_file exists or not
-        if os.path.exists(os.path.join(self.metrics_cache_dir, 'network_send_file')):
-            shutil.copyfile(os.path.join(self.metrics_cache_dir, 'network_send_file'), os.path.join(self.target_dir, 'network_send_file'))
-
-        # Copy mandatory files
-        files = ['boot_offset_metafile', 'local_version_file', 'variants.dat', 'variants.dat.metadata']
-        for file in files:
-            shutil.copyfile(os.path.join(self.metrics_cache_dir, file), os.path.join(self.target_dir, os.path.basename(file)))
+        files = [
+            'boot_offset_metafile', 'local_version_file', 'network_send_file',
+            'variants.dat', 'variants.dat.metadata'
+        ]
+        for f in files:
+            src = os.path.join(self.metrics_cache_dir, f)
+            dst = os.path.join(self.target_dir, f)
+            if os.path.exists(src):
+                shutil.copyfile(src, dst)
 
     def reset_metrics_data(self):
         files = ['variants.dat', 'variants.dat.metadata']

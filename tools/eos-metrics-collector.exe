@@ -117,7 +117,7 @@ class OfflineMetricsUploader(OfflineMetrics):
 class OfflineMetricsCollector(OfflineMetrics):
     def __init__(self, storage_root):
         super().__init__(storage_root)
-        self.offline_machine_data_dir = None
+        self.target_dir = None
 
     def get_usbdisk_free_space(self):
         disk_usage = shutil.disk_usage(self.storage_root)
@@ -141,26 +141,26 @@ class OfflineMetricsCollector(OfflineMetrics):
         else:
             f = open(self.machine_id_path)
 
-        self.offline_machine_data_dir = os.path.join(target_dir, f.read(32))
+        self.target_dir = os.path.join(target_dir, f.read(32))
         f.close()
 
-        if os.path.exists(self.offline_machine_data_dir):
+        if os.path.exists(self.target_dir):
             msg = (
                 f"Looks like metrics data for this machine exists in the "
                 f"target storage device. Please use a different target device "
-                f"or manually remove{self.offline_machine_data_dir}. Aborting."
+                f"or manually remove{self.target_dir}. Aborting."
             )
             sys.exit(msg)
-        os.mkdir(self.offline_machine_data_dir)
+        os.mkdir(self.target_dir)
 
     def copy_tracking_id(self):
         # shutil.copy tries to maintain the file mode, and some files have the
         # sticky bit set, which is not supported by FAT32, so we use
         # shutil.copyfile which ignores file metadata.
         if os.path.exists(self.tracking_id_path):
-            shutil.copyfile(self.tracking_id_path, os.path.join(self.offline_machine_data_dir, os.path.basename(self.tracking_id_path)))
+            shutil.copyfile(self.tracking_id_path, os.path.join(self.target_dir, os.path.basename(self.tracking_id_path)))
         elif os.path.exists(self.machine_id_path):
-            shutil.copyfile(self.machine_id_path, os.path.join(self.offline_machine_data_dir, os.path.basename(self.tracking_id_path)))
+            shutil.copyfile(self.machine_id_path, os.path.join(self.target_dir, os.path.basename(self.tracking_id_path)))
         else:
             print('No tracking/machine id file found')
             sys.exit()
@@ -168,12 +168,12 @@ class OfflineMetricsCollector(OfflineMetrics):
     def copy_metrics_data(self):
         # Check whether the network_send_file exists or not
         if os.path.exists(os.path.join(self.metrics_cache_dir, 'network_send_file')):
-            shutil.copyfile(os.path.join(self.metrics_cache_dir, 'network_send_file'), os.path.join(self.offline_machine_data_dir, 'network_send_file'))
+            shutil.copyfile(os.path.join(self.metrics_cache_dir, 'network_send_file'), os.path.join(self.target_dir, 'network_send_file'))
 
         # Copy mandatory files
         files = ['boot_offset_metafile', 'local_version_file', 'variants.dat', 'variants.dat.metadata']
         for file in files:
-            shutil.copyfile(os.path.join(self.metrics_cache_dir, file), os.path.join(self.offline_machine_data_dir, os.path.basename(file)))
+            shutil.copyfile(os.path.join(self.metrics_cache_dir, file), os.path.join(self.target_dir, os.path.basename(file)))
 
     def reset_metrics_data(self):
         files = ['variants.dat', 'variants.dat.metadata']

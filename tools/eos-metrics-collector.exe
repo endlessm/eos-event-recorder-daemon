@@ -154,23 +154,21 @@ class OfflineMetricsCollector(OfflineMetrics):
             sys.exit(msg)
         os.mkdir(self.target_dir)
 
-    def copy_tracking_id(self):
-        # shutil.copy tries to maintain the file mode, and some files have the
-        # sticky bit set, which is not supported by FAT32, so we use
-        # shutil.copyfile which ignores file metadata.
-        shutil.copyfile(self.metrics_id,
-            os.path.join(self.target_dir, 'tracking-id'))
-
     def copy_metrics_data(self):
         files = [
             'boot_offset_metafile', 'local_version_file', 'network_send_file',
             'variants.dat', 'variants.dat.metadata'
         ]
+        # shutil.copy tries to maintain the file mode, and some files have the
+        # sticky bit set, which is not supported by FAT32, so we use
+        # shutil.copyfile which ignores metadata.
         for f in files:
             src = os.path.join(self.metrics_cache_dir, f)
             dst = os.path.join(self.target_dir, f)
             if os.path.exists(src):
                 shutil.copyfile(src, dst)
+        shutil.copyfile(self.metrics_id,
+            os.path.join(self.target_dir, 'tracking-id'))
 
     def reset_metrics_data(self):
         files = ['variants.dat', 'variants.dat.metadata']
@@ -182,7 +180,6 @@ class OfflineMetricsCollector(OfflineMetrics):
         daemon_was_running = self.metrics_unit('is-active')
         self.metrics_unit('stop')
         self.create_folder_for_machine()
-        self.copy_tracking_id()
         self.copy_metrics_data()
         self.reset_metrics_data()
         if daemon_was_running:

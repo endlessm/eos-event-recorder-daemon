@@ -74,12 +74,14 @@ class OfflineMetricsUploader(OfflineMetrics):
         self.offline_tmp_metrics_dir = ''
 
     def copy_metrics_data_and_upload(self):
-        self.unit_was_running = self.metrics_unit('is-active')
-        self.metrics_unit('stop')
         srcdir = os.path.join(self.storage_root, self.storage_metrics_dir)
         if not os.path.exists(srcdir):
-            print('No metrics data in the eos-metrics-data directory')
-            sys.exit()
+            print(f"No metrics data found in {srcdir}, nothing to do.")
+            sys.exit(0)
+
+        self.unit_was_running = self.metrics_unit('is-active')
+        self.metrics_unit('stop')
+
         for machine_dir in os.listdir(srcdir):
             self.offline_tmp_metrics_dir = tempfile.mkdtemp()
             machine_path = os.path.join(srcdir, machine_dir)
@@ -140,7 +142,7 @@ class OfflineMetricsCollector(OfflineMetrics):
             size += os.path.getsize(self.machine_id_path)
         return size
 
-    def create_folder_for_machine(self):
+    def create_machine_dir(self):
         target_dir = os.path.join(self.storage_root, self.storage_metrics_dir)
         if not os.path.exists(target_dir):
             os.mkdir(target_dir)
@@ -180,9 +182,9 @@ class OfflineMetricsCollector(OfflineMetrics):
             os.remove(os.path.join(self.metrics_cache_dir, f))
 
     def collect_metrics(self):
+        self.create_machine_dir()
         unit_was_running = self.metrics_unit('is-active')
         self.metrics_unit('stop')
-        self.create_folder_for_machine()
         self.copy_metrics_data()
         self.reset_metrics_data()
         if unit_was_running:

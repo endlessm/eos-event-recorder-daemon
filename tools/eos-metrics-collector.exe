@@ -124,7 +124,7 @@ class OfflineMetricsUploader(OfflineMetrics):
 class OfflineMetricsCollector(OfflineMetrics):
     def __init__(self, storage_root):
         super().__init__(storage_root)
-        self.target_dir = None
+        self.machine_dir = None
 
     def get_usbdisk_free_space(self):
         disk_usage = shutil.disk_usage(self.storage_root)
@@ -138,23 +138,23 @@ class OfflineMetricsCollector(OfflineMetrics):
             size += os.path.getsize(self.machine_id_path)
         return size
 
-    def create_target_dir(self):
+    def create_machine_dir(self):
         target_dir = self.storage_dir
         if not os.path.exists(target_dir):
             os.mkdir(target_dir)
 
         f = open(self.metrics_id_path)
-        self.target_dir = os.path.join(target_dir, f.read(32))
+        self.machine_dir = os.path.join(target_dir, f.read(32))
         f.close()
 
-        if os.path.exists(self.target_dir):
+        if os.path.exists(self.machine_dir):
             msg = (
                 f"Looks like metrics data for this machine exists in the "
                 f"target storage device. Please use a different target device "
-                f"or manually remove{self.target_dir}. Aborting."
+                f"or manually remove{self.machine_dir}. Aborting."
             )
             sys.exit(msg)
-        os.mkdir(self.target_dir)
+        os.mkdir(self.machine_dir)
 
     def copy_metrics_data(self):
         files = [
@@ -166,11 +166,11 @@ class OfflineMetricsCollector(OfflineMetrics):
         # shutil.copyfile which ignores metadata.
         for f in files:
             src = os.path.join(self.metrics_cache_dir, f)
-            dst = os.path.join(self.target_dir, f)
+            dst = os.path.join(self.machine_dir, f)
             if os.path.exists(src):
                 shutil.copyfile(src, dst)
         shutil.copyfile(self.metrics_id,
-            os.path.join(self.target_dir, 'tracking-id'))
+            os.path.join(self.machine_dir, 'tracking-id'))
 
     def reset_metrics_data(self):
         files = ['variants.dat', 'variants.dat.metadata']
@@ -179,7 +179,7 @@ class OfflineMetricsCollector(OfflineMetrics):
             subprocess.run(['rm', '-f', target])
 
     def collect_metrics(self):
-        self.create_target_dir()
+        self.create_machine_dir()
         daemon_was_running = self.metrics_unit('is-active')
         self.metrics_unit('stop')
         self.copy_metrics_data()

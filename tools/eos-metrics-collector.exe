@@ -36,6 +36,7 @@ class OfflineMetrics():
         self.metrics_config_file = '/etc/metrics/eos-metrics-permissions.conf'
         self.metrics_proc_name = 'eos-metrics-event-recorder'
         self.storage_root = storage_root
+        self.storage_metrics_dir = 'eos-metrics-data'
 
     def metrics_proc_exists(self):
         ps = subprocess.Popen("ps ax -o pid= -o args= ", shell=True, stdout=subprocess.PIPE)
@@ -61,13 +62,12 @@ class OfflineMetrics():
 class OfflineMetricsUploader(OfflineMetrics):
     def __init__(self, storage_root):
         super().__init__(storage_root)
-        self.offline_metrics_src_dir = 'eos-metrics-data'
         self.offline_tmp_metrics_dir = ''
 
     def copy_metrics_data_and_upload(self):
         if (self.metrics_unit('is-active')):
             self.metrics_unit('stop')
-        srcdir = os.path.join(self.storage_root, self.offline_metrics_src_dir)
+        srcdir = os.path.join(self.storage_root, self.storage_metrics_dir)
         if not os.path.exists(srcdir):
             print('No metrics data in the eos-metrics-data directory')
             sys.exit()
@@ -117,7 +117,6 @@ class OfflineMetricsUploader(OfflineMetrics):
 class OfflineMetricsCollector(OfflineMetrics):
     def __init__(self, storage_root):
         super().__init__(storage_root)
-        self.offline_metrics_dst_dir = 'eos-metrics-data'
         self.disk_free_space_in_bytes = 0
         self.offline_machine_data_dir = None
 
@@ -136,7 +135,7 @@ class OfflineMetricsCollector(OfflineMetrics):
         return size
 
     def create_folder_for_machine(self):
-        target_dir = os.path.join(self.storage_root, self.offline_metrics_dst_dir)
+        target_dir = os.path.join(self.storage_root, self.storage_metrics_dir)
         if os.path.exists(target_dir) is False:
             os.mkdir(target_dir)
 
@@ -221,7 +220,7 @@ def upload(storage_root):
 
     uploader = OfflineMetricsUploader(storage_root)
     uploader.copy_metrics_data_and_upload()
-    shutil.rmtree(os.path.join(storage_root, uploader.offline_metrics_src_dir))
+    shutil.rmtree(os.path.join(storage_root, uploader.storage_metrics_dir))
     print("Metrics data successfully uploaded")
 
 

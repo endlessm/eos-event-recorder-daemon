@@ -177,9 +177,9 @@ class OfflineMetricsCollector(OfflineMetrics):
             subprocess.run(['rm', '-f', target])
 
     def collect_metrics(self):
+        self.create_target_dir()
         daemon_was_running = self.metrics_unit('is-active')
         self.metrics_unit('stop')
-        self.create_target_dir()
         self.copy_metrics_data()
         self.reset_metrics_data()
         if daemon_was_running:

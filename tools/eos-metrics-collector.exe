@@ -181,13 +181,14 @@ class OfflineMetricsCollector(OfflineMetrics):
             subprocess.check_output(['sudo', 'rm', '-f', target_file])
 
     def collect_metrics(self):
-        if (self.metrics_unit('is-active')):
-            self.metrics_unit('stop')
+        daemon_was_running = self.metrics_unit('is-active')
+        self.metrics_unit('stop')
         self.create_folder_for_machine()
         self.copy_tracking_id()
         self.copy_metrics_data()
         self.reset_metrics_data()
-        self.metrics_unit('start')
+        if daemon_was_running:
+            self.metrics_unit('start')
 
 
 def collect(storage_root):

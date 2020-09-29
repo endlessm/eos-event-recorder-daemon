@@ -139,12 +139,11 @@ class OfflineMetricsCollector(OfflineMetrics):
         return size
 
     def create_machine_dir(self):
-        target_dir = self.storage_dir
-        if not os.path.exists(target_dir):
-            os.mkdir(target_dir)
+        if not os.path.exists(self.storage_dir):
+            os.mkdir(self.storage_dir)
 
         f = open(self.metrics_id_path)
-        self.machine_dir = os.path.join(target_dir, f.read(32))
+        self.machine_dir = os.path.join(self.storage_dir, f.read(32))
         f.close()
 
         if os.path.exists(self.machine_dir):

@@ -68,6 +68,9 @@ class OfflineMetrics():
 class OfflineMetricsUploader(OfflineMetrics):
     def __init__(self, storage_root):
         super().__init__(storage_root)
+        self.bin_dir = "/usr/lib/eos-event-recorder-daemon"
+        self.bin_name = "eos-metrics-event-recorder"
+        self.bin_path = os.path.join(self.bin_dir, self.bin_name)
         self.tmpdir = ''
 
     def copy_metrics_data_and_upload(self):
@@ -92,11 +95,10 @@ class OfflineMetricsUploader(OfflineMetrics):
                 shutil.copyfile(src, dst)
             subprocess.run(['chown', '-R', 'metrics:metrics', machine_dstdir])
 
-            x = "/usr/lib/eos-event-recorder-daemon/eos-metrics-event-recorder"
             dir_arg = f"--persistent-cache-directory={machine_dstdir}"
             id_arg = f"--tracking-id-file-path={machine_dstdir}/tracking-id"
             daemon = subprocess.Popen(
-                ['sudo', '-u', 'metrics', x, dir_arg, id_arg],
+                ['sudo', '-u', 'metrics', self.bin_path, dir_arg, id_arg],
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL)
 

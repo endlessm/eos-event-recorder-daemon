@@ -71,6 +71,9 @@ class OfflineMetrics():
 class OfflineMetricsUploader(OfflineMetrics):
     def __init__(self, storage_root):
         super().__init__(storage_root)
+        self.bin_dir = "/usr/lib/eos-event-recorder-daemon"
+        self.bin_name = "eos-metrics-event-recorder"
+        self.bin_path = os.path.join(self.bin_dir, self.bin_name)
         self.tmpdir = ''
 
     def copy_metrics_data_and_upload(self):
@@ -84,15 +87,25 @@ class OfflineMetricsUploader(OfflineMetrics):
         self.unit_was_running = self.metrics_unit('is-active')
         self.metrics_unit('stop')
 
+        self.tmpdir = tempfile.mkdtemp()
+        shutil.chown(self.tmpdir, user='metrics', group='metrics')
+
         for tracking_id in os.listdir(self.storage_dir):
-            self.tmpdir = tempfile.mkdtemp()
-            machine_dir = os.path.join(self.storage_dir, tracking_id)
-            for f in os.listdir(machine_dir):
-                shutil.copy(os.path.join(machine_dir, f), self.tmpdir)
-            subprocess.check_output(['sudo', 'chown', '-R', 'metrics:metrics', self.tmpdir])
-            persistent_cache_dir_arg = '--persistent-cache-directory=' + self.tmpdir
-            tracking_id_path_arg = '--tracking-id-file-path=' + self.tmpdir + '/tracking-id'
-            self.daemon = subprocess.Popen(['sudo', '-u', 'metrics', '/lib/eos-event-recorder-daemon/eos-metrics-event-recorder', persistent_cache_dir_arg, tracking_id_path_arg], stderr=subprocess.DEVNULL)
+            machine_srcdir = os.path.join(self.storage_dir, tracking_id)
+            machine_dstdir = os.path.join(self.tmpdir, tracking_id)
+
+            os.mkdir(machine_dstdir)
+            shutil.chown(machine_dstdir, user='metrics', group='metrics')
+            for f in os.listdir(machine_srcdir):
+                src = os.path.join(machine_srcdir, f)
+                dst = os.path.join(machine_dstdir, f)
+                shutil.copyfile(src, dst)
+                shutil.chown(dst, user='metrics', group='metrics')
+
+            dir_arg = f"--persistent-cache-directory={machine_dstdir}"
+            id_arg = f"--tracking-id-file-path={machine_dstdir}/tracking-id"
+            daemon = subprocess.Popen(
+                ['sudo', '-u', 'metrics', self.bin_path, dir_arg, id_arg])
 
             timeout = 0
             while timeout < 5:
@@ -111,8 +124,8 @@ class OfflineMetricsUploader(OfflineMetrics):
             else:
                 print("Upload successfully for tracking id " + tracking_id)
 
-            subprocess.check_output(['sudo', 'killall', '/lib/eos-event-recorder-daemon/eos-metrics-event-recorder'])
-            subprocess.check_output(['sudo', 'rm', '-rf', self.tmpdir])
+            daemon.terminate()
+            shutil.rmtree(machine_dstdir)
 
     def __del__(self):
         '''

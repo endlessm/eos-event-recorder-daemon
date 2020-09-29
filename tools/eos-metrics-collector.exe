@@ -176,9 +176,8 @@ class OfflineMetricsCollector(OfflineMetrics):
 
     def reset_metrics_data(self):
         files = ['variants.dat', 'variants.dat.metadata']
-        for file in files:
-            target_file = os.path.join(self.metrics_cache_dir, file)
-            subprocess.check_output(['sudo', 'rm', '-f', target_file])
+        for f in files:
+            os.remove(os.path.join(self.metrics_cache_dir, f))
 
     def collect_metrics(self):
         unit_was_running = self.metrics_unit('is-active')

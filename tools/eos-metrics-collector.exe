@@ -197,7 +197,6 @@ class OfflineMetricsCollector(OfflineMetrics):
 
 
 def collect(location):
-    print('collect')
     collector = OfflineMetricsCollector(location)
     if collector.get_usbdisk_free_space() > collector.evaluate_metrics_data_size():
         collector.collect_metrics()

@@ -70,12 +70,14 @@ class OfflineMetricsUploader(OfflineMetrics):
         self.offline_tmp_metrics_dir = ''
 
     def copy_metrics_data_and_upload(self):
-        daemon_was_running = self.metrics_unit('is-active')
-        self.metrics_unit('stop')
         srcdir = os.path.join(self.storage_root, self.storage_metrics_dir)
         if not os.path.exists(srcdir):
             print('No metrics data in the eos-metrics-data directory')
             sys.exit()
+
+        daemon_was_running = self.metrics_unit('is-active')
+        self.metrics_unit('stop')
+
         for machine_dir in os.listdir(srcdir):
             self.offline_tmp_metrics_dir = tempfile.mkdtemp()
             machine_path = os.path.join(srcdir, machine_dir)

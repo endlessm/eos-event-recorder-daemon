@@ -132,7 +132,7 @@ class OfflineMetricsCollector(OfflineMetrics):
         size = os.path.getsize(self.metrics_cache_dir)
         if os.path.exists(self.tracking_id_path):
             size += os.path.getsize(self.tracking_id_path)
-        if os.path.exists(self.machine_id_path):
+        elif os.path.exists(self.machine_id_path):
             size += os.path.getsize(self.machine_id_path)
         return size
 

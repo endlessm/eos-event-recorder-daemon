@@ -128,6 +128,15 @@ class OfflineMetricsCollector(OfflineMetrics):
         self.disk_free_space_in_bytes = disk_usage.free
         return disk_usage.free
 
+    def calculate_metrics_data_size(self):
+        size = 0
+        size += os.path.getsize(self.metrics_cache_dir)
+        if os.path.exists(self.tracking_id_path):
+            size += os.path.getsize(self.tracking_id_path)
+        if os.path.exists(self.machine_id_path):
+            size += os.path.getsize(self.machine_id_path)
+        return size
+
     def create_folder_for_machine(self):
         target_dir = os.path.join(self.offline_metrics_usbdisk_node, self.offline_metrics_dst_dir)
         if os.path.exists(target_dir) is False:
@@ -186,23 +195,19 @@ class OfflineMetricsCollector(OfflineMetrics):
         self.reset_metrics_data()
         subprocess.check_output(['/usr/bin/systemctl', 'start', self.systemd_service])
 
-    def evaluate_metrics_data_size(self):
-        size = 0
-        size += os.path.getsize(self.metrics_cache_dir)
-        if os.path.exists(self.tracking_id_path):
-            size += os.path.getsize(self.tracking_id_path)
-        if os.path.exists(self.machine_id_path):
-            size += os.path.getsize(self.machine_id_path)
-        return size
-
 
 def collect(location):
     collector = OfflineMetricsCollector(location)
-    if collector.get_usbdisk_free_space() > collector.evaluate_metrics_data_size():
-        collector.collect_metrics()
-        print("Metrics Collect Done")
-    else:
-        print("Insufficient free space for metrics data")
+    free_space = collector.get_usbdisk_free_space()
+    data_size = collector.calculate_metrics_data_size()
+    if free_space < data_size:
+        msg = (
+            f"Insufficient free space ({free_space} bytes) for metrics "
+            f"data size ({data_size} bytes), aborting."
+        )
+        sys.exit(msg)
+    collector.collect_metrics()
+    print("Metrics data successfully collected ({data_size} bytes)")
 
 
 def upload(location):

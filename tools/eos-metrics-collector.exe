@@ -149,11 +149,14 @@ class OfflineMetricsCollector(OfflineMetrics):
         self.target_dir = os.path.join(target_dir, f.read(32))
         f.close()
 
-        if not os.path.exists(self.target_dir):
-            os.mkdir(self.target_dir)
-        else:
-            subprocess.check_output(['rm', '-rf', self.target_dir])
-            os.mkdir(self.target_dir)
+        if os.path.exists(self.target_dir):
+            msg = (
+                f"Looks like metrics data for this machine exists in the "
+                f"target storage device. Please use a different target device "
+                f"or manually remove {self.target_dir}. Aborting."
+            )
+            sys.exit(msg)
+        os.mkdir(self.target_dir)
 
     def copy_metrics_data(self):
         # we can't use shutil.copy here to copy all files in one call because

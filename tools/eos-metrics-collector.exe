@@ -138,11 +138,8 @@ class OfflineMetricsCollector(OfflineMetrics):
 
         if os.path.exists(self.tracking_id_path):
             f = open(self.tracking_id_path)
-        elif os.path.exists(self.machine_id_path):
-            f = open(self.machine_id_path)
         else:
-            print('No tracking/machine id file found')
-            sys.exit()
+            f = open(self.machine_id_path)
 
         self.offline_machine_data_dir = os.path.join(target_dir, f.read(32))
         if not os.path.exists(self.offline_machine_data_dir):

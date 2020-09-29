@@ -114,7 +114,7 @@ class OfflineMetricsUploader(OfflineMetrics):
                 print("Upload successfully for tracking id " + tracking_id)
 
             sp.terminate()
-            subprocess.check_output(['sudo', 'rm', '-rf', machine_dstdir])
+            shutil.rmtree(machine_dstdir)
 
     def __del__(self):
         '''

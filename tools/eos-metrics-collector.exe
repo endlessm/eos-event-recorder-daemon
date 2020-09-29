@@ -78,15 +78,23 @@ class OfflineMetricsUploader(OfflineMetrics):
         daemon_was_running = self.metrics_unit('is-active')
         self.metrics_unit('stop')
 
+        self.tmpdir = tempfile.mkdtemp()
         for tracking_id in os.listdir(self.storage_dir):
-            self.tmpdir = tempfile.mkdtemp()
-            machine_dir = os.path.join(self.storage_dir, tracking_id)
-            for f in os.listdir(machine_dir):
-                shutil.copy(os.path.join(machine_dir, f), self.tmpdir)
-            subprocess.check_output(['sudo', 'chown', '-R', 'metrics:metrics', self.tmpdir])
-            persistent_cache_dir_arg = '--persistent-cache-directory=' + self.tmpdir
-            tracking_id_path_arg = '--tracking-id-file-path=' + self.tmpdir + '/tracking-id'
-            self.daemon = subprocess.Popen(['sudo', '-u', 'metrics', '/lib/eos-event-recorder-daemon/eos-metrics-event-recorder', persistent_cache_dir_arg, tracking_id_path_arg], stderr=subprocess.DEVNULL)
+            machine_srcdir = os.path.join(self.storage_dir, tracking_id)
+            machine_dstdir = os.path.join(self.tmpdir, tracking_id)
+
+            for f in os.listdir(machine_srcdir):
+                src = os.path.join(machine_srcdir, f)
+                dst = os.path.join(machine_dstdir, f)
+                shutil.copyfile(src, dst)
+            subprocess.run(['chown', '-R', 'metrics:metrics', machine_dstdir])
+
+            x = "/usr/lib/eos-event-recorder-daemon/eos-metrics-event-recorder"
+            dir_arg = f"--persistent-cache-directory={machine_dstdir}"
+            id_arg = f"--tracking-id-file-path={machine_dstdir}/tracking-id"
+            sp = subprocess.Popen(['sudo', '-u', 'metrics', x, dir_arg, id_arg],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL)
 
             timeout = 0
             while timeout < 5:
@@ -106,7 +114,7 @@ class OfflineMetricsUploader(OfflineMetrics):
                 print("Upload successfully for tracking id " + tracking_id)
 
             subprocess.check_output(['sudo', 'killall', '/lib/eos-event-recorder-daemon/eos-metrics-event-recorder'])
-            subprocess.check_output(['sudo', 'rm', '-rf', self.tmpdir])
+            subprocess.check_output(['sudo', 'rm', '-rf', machine_dstdir])
 
     def __del__(self):
         '''

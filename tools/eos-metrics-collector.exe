@@ -36,7 +36,7 @@ class OfflineMetrics():
         self.metrics_config_file = '/etc/metrics/eos-metrics-permissions.conf'
         self.metrics_proc_name = 'eos-metrics-event-recorder'
         self.storage_root = storage_root
-        self.storage_metrics_dir = 'eos-metrics-data'
+        self.storage_dir = os.path.join(self.storage_root, 'eos-metrics-data')
         if os.path.exists(self.tracking_id_path):
             self.metrics_id = self.tracking_id_path
         else:
@@ -71,25 +71,27 @@ class OfflineMetrics():
 class OfflineMetricsUploader(OfflineMetrics):
     def __init__(self, storage_root):
         super().__init__(storage_root)
-        self.offline_tmp_metrics_dir = ''
+        self.tmpdir = ''
 
     def copy_metrics_data_and_upload(self):
-        srcdir = os.path.join(self.storage_root, self.storage_metrics_dir)
-        if not os.path.exists(srcdir):
-            print(f"No metrics data found in {srcdir}, nothing to do.")
+        if not os.path.exists(self.storage_dir):
+            msg = (
+                f"No metrics data found in {self.storage_dir}, nothing to do."
+            )
+            print(msg)
             sys.exit(0)
 
         self.unit_was_running = self.metrics_unit('is-active')
         self.metrics_unit('stop')
 
-        for machine_dir in os.listdir(srcdir):
-            self.offline_tmp_metrics_dir = tempfile.mkdtemp()
-            machine_path = os.path.join(srcdir, machine_dir)
-            for file in os.listdir(machine_path):
-                shutil.copy(os.path.join(machine_path, file), self.offline_tmp_metrics_dir)
-            subprocess.check_output(['sudo', 'chown', '-R', 'metrics:metrics', self.offline_tmp_metrics_dir])
-            persistent_cache_dir_arg = '--persistent-cache-directory=' + self.offline_tmp_metrics_dir
-            tracking_id_path_arg = '--tracking-id-file-path=' + self.offline_tmp_metrics_dir + '/tracking-id'
+        for tracking_id in os.listdir(self.storage_dir):
+            self.tmpdir = tempfile.mkdtemp()
+            machine_dir = os.path.join(self.storage_dir, tracking_id)
+            for f in os.listdir(machine_dir):
+                shutil.copy(os.path.join(machine_dir, f), self.tmpdir)
+            subprocess.check_output(['sudo', 'chown', '-R', 'metrics:metrics', self.tmpdir])
+            persistent_cache_dir_arg = '--persistent-cache-directory=' + self.tmpdir
+            tracking_id_path_arg = '--tracking-id-file-path=' + self.tmpdir + '/tracking-id'
             self.daemon = subprocess.Popen(['sudo', '-u', 'metrics', '/lib/eos-event-recorder-daemon/eos-metrics-event-recorder', persistent_cache_dir_arg, tracking_id_path_arg], stderr=subprocess.DEVNULL)
 
             timeout = 0
@@ -107,18 +109,18 @@ class OfflineMetricsUploader(OfflineMetrics):
                 print('Upload Fail.')
                 sys.exit()
             else:
-                print("Upload successfully for tracking id " + machine_dir)
+                print("Upload successfully for tracking id " + tracking_id)
 
             subprocess.check_output(['sudo', 'killall', '/lib/eos-event-recorder-daemon/eos-metrics-event-recorder'])
-            subprocess.check_output(['sudo', 'rm', '-rf', self.offline_tmp_metrics_dir])
+            subprocess.check_output(['sudo', 'rm', '-rf', self.tmpdir])
 
     def __del__(self):
         '''
         Remove temporary cache data, kill the eos-metrics-event-recorder.
         And restart the service
         '''
-        if os.path.exists(self.offline_tmp_metrics_dir):
-            subprocess.check_output(['sudo', 'rm', '-rf', self.offline_tmp_metrics_dir])
+        if os.path.exists(self.tmpdir):
+            subprocess.check_output(['sudo', 'rm', '-rf', self.tmpdir])
         if self.metrics_proc_exists():
             subprocess.check_output(['sudo', 'killall', '/lib/eos-event-recorder-daemon/eos-metrics-event-recorder'])
         if self.unit_was_running:
@@ -128,7 +130,7 @@ class OfflineMetricsUploader(OfflineMetrics):
 class OfflineMetricsCollector(OfflineMetrics):
     def __init__(self, storage_root):
         super().__init__(storage_root)
-        self.target_dir = None
+        self.machine_dir = None
 
     def get_usbdisk_free_space(self):
         disk_usage = shutil.disk_usage(self.storage_root)
@@ -143,22 +145,21 @@ class OfflineMetricsCollector(OfflineMetrics):
         return size
 
     def create_machine_dir(self):
-        target_dir = os.path.join(self.storage_root, self.storage_metrics_dir)
-        if not os.path.exists(target_dir):
-            os.mkdir(target_dir)
+        if not os.path.exists(self.storage_dir):
+            os.mkdir(self.storage_dir)
 
         f = open(self.metrics_id)
-        self.target_dir = os.path.join(target_dir, f.read(32))
+        self.machine_dir = os.path.join(self.storage_dir, f.read(32))
         f.close()
 
-        if os.path.exists(self.target_dir):
+        if os.path.exists(self.machine_dir):
             msg = (
                 f"Looks like metrics data for this machine exists in the "
                 f"target storage device. Please use a different target device "
-                f"or manually remove {self.target_dir}. Aborting."
+                f"or manually remove {self.machine_dir}. Aborting."
             )
             sys.exit(msg)
-        os.mkdir(self.target_dir)
+        os.mkdir(self.machine_dir)
 
     def copy_metrics_data(self):
         # we can't use shutil.copy here to copy all files in one call because
@@ -170,11 +171,11 @@ class OfflineMetricsCollector(OfflineMetrics):
         ]
         for f in files:
             src = os.path.join(self.metrics_cache_dir, f)
-            dst = os.path.join(self.target_dir, f)
+            dst = os.path.join(self.machine_dir, f)
             if os.path.exists(src):
                 shutil.copyfile(src, dst)
         shutil.copyfile(self.metrics_id,
-                        os.path.join(self.target_dir, 'tracking-id'))
+                        os.path.join(self.machine_dir, 'tracking-id'))
 
     def reset_metrics_data(self):
         files = ['variants.dat', 'variants.dat.metadata']
@@ -218,7 +219,7 @@ def upload(storage_root):
 
     uploader = OfflineMetricsUploader(storage_root)
     uploader.copy_metrics_data_and_upload()
-    shutil.rmtree(os.path.join(storage_root, uploader.storage_metrics_dir))
+    shutil.rmtree(self.storage_dir)
     print("All metrics data uploaded.")
 
 

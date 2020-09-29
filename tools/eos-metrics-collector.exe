@@ -37,6 +37,11 @@ class OfflineMetrics():
         self.metrics_proc_name = 'eos-metrics-event-recorder'
         self.storage_root = storage_root
         self.storage_metrics_dir = 'eos-metrics-data'
+        if os.path.exists(self.tracking_id_path):
+            self.metrics_id = self.tracking_id_path
+        else:
+            self.metrics_id = self.machine_id_path
+
 
     def metrics_proc_exists(self):
         ps = subprocess.Popen("ps ax -o pid= -o args= ", shell=True, stdout=subprocess.PIPE)
@@ -136,11 +141,7 @@ class OfflineMetricsCollector(OfflineMetrics):
         if not os.path.exists(target_dir):
             os.mkdir(target_dir)
 
-        if os.path.exists(self.tracking_id_path):
-            f = open(self.tracking_id_path)
-        else:
-            f = open(self.machine_id_path)
-
+        f = open(self.metrics_id_path)
         self.target_dir = os.path.join(target_dir, f.read(32))
         f.close()
 
@@ -157,13 +158,8 @@ class OfflineMetricsCollector(OfflineMetrics):
         # shutil.copy tries to maintain the file mode, and some files have the
         # sticky bit set, which is not supported by FAT32, so we use
         # shutil.copyfile which ignores file metadata.
-        if os.path.exists(self.tracking_id_path):
-            shutil.copyfile(self.tracking_id_path, os.path.join(self.target_dir, os.path.basename(self.tracking_id_path)))
-        elif os.path.exists(self.machine_id_path):
-            shutil.copyfile(self.machine_id_path, os.path.join(self.target_dir, os.path.basename(self.tracking_id_path)))
-        else:
-            print('No tracking/machine id file found')
-            sys.exit()
+        shutil.copyfile(self.metrics_id,
+            os.path.join(self.target_dir, 'tracking-id'))
 
     def copy_metrics_data(self):
         # Check whether the network_send_file exists or not

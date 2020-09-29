@@ -136,7 +136,7 @@ class OfflineMetricsCollector(OfflineMetrics):
             size += os.path.getsize(self.machine_id_path)
         return size
 
-    def create_folder_for_machine(self):
+    def create_target_dir(self):
         target_dir = os.path.join(self.storage_root, self.storage_metrics_dir)
         if not os.path.exists(target_dir):
             os.mkdir(target_dir)
@@ -179,7 +179,7 @@ class OfflineMetricsCollector(OfflineMetrics):
     def collect_metrics(self):
         daemon_was_running = self.metrics_unit('is-active')
         self.metrics_unit('stop')
-        self.create_folder_for_machine()
+        self.create_target_dir()
         self.copy_metrics_data()
         self.reset_metrics_data()
         if daemon_was_running:

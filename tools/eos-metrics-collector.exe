@@ -113,7 +113,7 @@ class OfflineMetricsUploader(OfflineMetrics):
             else:
                 print("Upload successfully for tracking id " + tracking_id)
 
-            subprocess.check_output(['sudo', 'killall', '/lib/eos-event-recorder-daemon/eos-metrics-event-recorder'])
+            sp.terminate()
             subprocess.check_output(['sudo', 'rm', '-rf', machine_dstdir])
 
     def __del__(self):

@@ -142,12 +142,13 @@ class OfflineMetricsCollector(OfflineMetrics):
             f = open(self.machine_id_path)
 
         self.offline_machine_data_dir = os.path.join(target_dir, f.read(32))
+        f.close()
+
         if not os.path.exists(self.offline_machine_data_dir):
             os.mkdir(self.offline_machine_data_dir)
         else:
             subprocess.check_output(['rm', '-rf', self.offline_machine_data_dir])
             os.mkdir(self.offline_machine_data_dir)
-        f.close()
 
     def copy_tracking_id(self):
         if os.path.exists(self.tracking_id_path):

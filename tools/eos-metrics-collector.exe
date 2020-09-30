@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 
 import argparse
+import dbus
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -37,25 +37,19 @@ class OfflineMetrics():
         self.metrics_proc_name = 'eos-metrics-event-recorder'
         self.storage_root = storage_root
         self.storage_dir = os.path.join(self.storage_root, 'eos-metrics-data')
+        self.dbus_name = "com.endlessm.Metrics"
         if os.path.exists(self.tracking_id_path):
             self.metrics_id = self.tracking_id_path
         else:
             self.metrics_id = self.machine_id_path
 
-    def metrics_proc_exists(self):
-        ps = subprocess.Popen("ps ax -o pid= -o args= ", shell=True, stdout=subprocess.PIPE)
-        ps_pid = ps.pid
-        output = ps.stdout.read()
-        ps.stdout.close()
-        ps.wait()
-
-        for line in str(output).split('\n'):
-            res = re.findall("(\d+) (.*)", line)
-            if res:
-                pid = int(res[0][0])
-                if self.metrics_proc_name in res[0][1] and pid != os.getpid() and pid != ps_pid:
-                    return True
-        return False
+    def metrics_pid_is_ready(self, pid):
+        bus = dbus.SystemBus()
+        if not bus.name_has_owner(self.dbus_name):
+            return False
+        proxy = bus.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus")
+        iface = dbus.Interface(proxy, "org.freedesktop.DBus")
+        return (pid == iface.GetConnectionUnixProcessID(self.dbus_name))
 
     def metrics_unit(self, operation):
         # TODO: the metrics daemon is also D-Bus activatable, so on stop we
@@ -119,13 +113,15 @@ class OfflineMetricsUploader(OfflineMetrics):
             self.daemon = subprocess.Popen(
                 ['sudo', '-u', 'metrics', self.bin_path, dir_arg, id_arg])
 
-            timeout = 0
-            while timeout < 5:
+            # NOTE: Ideally we would get rid of this busy waiting here, but we
+            # are already making a bigger design compromise by having to stop
+            # the daemon and restart it with different command line parameters
+            # for each data set, so let's roll with it for now.
+            tries = 5
+            while not self.metrics_pid_is_ready(self.daemon.pid) and tries > 0:
                 time.sleep(1)
-                if self.metrics_proc_exists():
-                    break
-                timeout = timeout + 1
-            if timeout >= 5:
+                tries -= 1
+            if tries == 0:
                 self.cleanup()
                 sys.exit(f'Failed to launch {self.bin_name}, aborting.')
 

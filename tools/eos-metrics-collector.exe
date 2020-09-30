@@ -54,8 +54,8 @@ class OfflineMetrics():
     def metrics_unit(self, operation):
         # TODO: the metrics daemon is also D-Bus activatable, so on stop we
         # should also do something to prevent it being started over D-Bus.
-        p = subprocess.run(['systemctl', operation, '--quiet ',
-                            self.systemd_service])
+        p = subprocess.run(['systemctl', operation,
+                            self.systemd_service, '--quiet'])
         return (p.returncode == 0)
 
 
@@ -75,8 +75,8 @@ class OfflineMetricsUploader(OfflineMetrics):
             self.daemon.terminate()
             self.daemon = None
         if os.path.exists(self.tmpdir):
-            shutil.rmtree(self.tmpdir)
-        if self.unit_was_running:
+            subprocess.run(['sudo', 'rm', '-rf', self.tmpdir])
+        if not self.unit_was_running:
             self.metrics_unit('start')
 
     def upload_metrics(self):
@@ -90,16 +90,16 @@ class OfflineMetricsUploader(OfflineMetrics):
         self.unit_was_running = self.metrics_unit('is-active')
         self.metrics_unit('stop')
 
-        self.tmpdir = tempfile.mkdtemp()
         for tracking_id in os.listdir(self.storage_dir):
+            self.tmpdir = tempfile.mkdtemp()
             machine_srcdir = os.path.join(self.storage_dir, tracking_id)
-            machine_dstdir = os.path.join(self.tmpdir, tracking_id)
+            machine_dstdir = self.tmpdir
 
             for f in os.listdir(machine_srcdir):
                 src = os.path.join(machine_srcdir, f)
                 dst = os.path.join(machine_dstdir, f)
                 shutil.copyfile(src, dst)
-            subprocess.run(['chown', '-R', 'metrics:metrics', machine_dstdir])
+            subprocess.run(['sudo', 'chown', '-R', 'metrics:metrics', machine_dstdir])
 
             dir_arg = f"--persistent-cache-directory={machine_dstdir}"
             id_arg = f"--tracking-id-file-path={machine_dstdir}/tracking-id"
@@ -130,10 +130,11 @@ class OfflineMetricsUploader(OfflineMetrics):
                 self.cleanup()
                 sys.exit(msg)
 
-            self.daemon.terminate()
+            subprocess.run(['sudo', 'killall', self.bin_path])
             self.daemon = None
             shutil.rmtree(machine_srcdir)
-            print("Successfully uploaded metrics for {tracking_id}")
+            subprocess.run(['sudo', 'rm', '-rf', self.tmpdir])
+            print("Successfully uploaded metrics for {}".format(tracking_id))
         self.cleanup()
 
 
@@ -158,7 +159,7 @@ class OfflineMetricsCollector(OfflineMetrics):
         if not os.path.exists(self.storage_dir):
             os.mkdir(self.storage_dir)
 
-        f = open(self.metrics_id_path)
+        f = open(self.metrics_id)
         self.machine_dir = os.path.join(self.storage_dir, f.read(32))
         f.close()
 
@@ -191,7 +192,7 @@ class OfflineMetricsCollector(OfflineMetrics):
         files = ['variants.dat', 'variants.dat.metadata']
         for f in files:
             target = os.path.join(self.metrics_cache_dir, f)
-            subprocess.run(['rm', '-f', target])
+            subprocess.run(['sudo', 'rm', '-f', target])
 
     def collect_metrics(self):
         self.create_machine_dir()
@@ -199,7 +200,7 @@ class OfflineMetricsCollector(OfflineMetrics):
         self.metrics_unit('stop')
         self.copy_metrics_data()
         self.reset_metrics_data()
-        if unit_was_running:
+        if not unit_was_running:
             self.metrics_unit('start')
 
 
@@ -214,7 +215,7 @@ def collect(storage_root):
         )
         sys.exit(msg)
     collector.collect_metrics()
-    print("Metrics data successfully collected ({data_size} bytes)")
+    print("Metrics data successfully collected ({} bytes)".format(data_size))
 
 
 def upload(storage_root):

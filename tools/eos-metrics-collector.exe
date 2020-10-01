@@ -121,14 +121,14 @@ class OfflineMetricsUploader(OfflineMetrics):
                 tries -= 1
             if tries > 0:
                 self.cleanup()
-                sys.exit('Failed to launch {self.bin_name}, aborting.')
+                sys.exit(f'Failed to launch {self.bin_name}, aborting.')
 
             up_trigger = subprocess.run(self.up_trigger_bin,
                                         stdout=subprocess.DEVNULL)
             if up_trigger.returncode != 0:
                 msg = (
-                    "Failed to upload metrics, {self.up_trigger_bin} failed "
-                    "with status {up_trigger.returncode}. Aborting."
+                    f"Failed to upload metrics, {self.up_trigger_bin} failed "
+                    f"with status {up_trigger.returncode}. Aborting."
                 )
                 self.cleanup()
                 sys.exit(msg)
@@ -136,7 +136,7 @@ class OfflineMetricsUploader(OfflineMetrics):
             self.daemon.terminate()
             self.daemon = None
             shutil.rmtree(machine_srcdir)
-            print("Successfully uploaded metrics for {tracking_id}")
+            print(f"Successfully uploaded metrics for {tracking_id}")
         self.cleanup()
 
 
@@ -169,7 +169,7 @@ class OfflineMetricsCollector(OfflineMetrics):
             msg = (
                 f"Looks like metrics data for this machine exists in the "
                 f"target storage device. Please use a different target device "
-                f"or manually remove{self.machine_dir}. Aborting."
+                f"or manually remove {self.machine_dir}. Aborting."
             )
             sys.exit(msg)
         os.mkdir(self.machine_dir)
@@ -217,7 +217,7 @@ def collect(storage_root):
         )
         sys.exit(msg)
     collector.collect_metrics()
-    print("Metrics data successfully collected ({data_size} bytes)")
+    print(f"Metrics data successfully collected ({data_size} bytes)")
 
 
 def upload(storage_root):

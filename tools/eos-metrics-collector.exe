@@ -2,6 +2,7 @@
 
 import argparse
 import dbus
+import errno
 import os
 import shutil
 import subprocess
@@ -258,6 +259,18 @@ def upload(storage_root):
     print("All metrics data successfully uploaded")
 
 
+def become_root():
+    if os.getuid() == 0:
+        return
+    # sys.executable will be the python interpreter, so we need to manually
+    # resolve our absolute path (sys.argv[0])
+    args = [sys.executable] + [os.path.abspath(sys.argv[0])] + sys.argv[1:]
+    if os.environ.get("DISPLAY"):
+        cmd = 'pkexec'
+    else:
+        cmd = 'sudo'
+    os.execvp(cmd, [cmd] + args)
+
 def main():
     desc = """
     Offline Metrics Collector for Endless OS.
@@ -282,6 +295,8 @@ def main():
                         default='collect',
                         help='action to be performed (default: %(default)s)')
     args = parser.parse_args()
+
+    become_root()
 
     storage_root = sys.path[0]
     if args.action == "collect":

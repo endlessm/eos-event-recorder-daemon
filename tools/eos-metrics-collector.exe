@@ -94,16 +94,19 @@ class OfflineMetricsUploader(OfflineMetrics):
         self.metrics_unit('stop')
 
         self.tmpdir = tempfile.mkdtemp()
+        shutil.chown(self.tmpdir, user='metrics', group='metrics')
+
         for tracking_id in os.listdir(self.storage_dir):
             machine_srcdir = os.path.join(self.storage_dir, tracking_id)
             machine_dstdir = os.path.join(self.tmpdir, tracking_id)
 
             os.mkdir(machine_dstdir)
+            shutil.chown(machine_dstdir, user='metrics', group='metrics')
             for f in os.listdir(machine_srcdir):
                 src = os.path.join(machine_srcdir, f)
                 dst = os.path.join(machine_dstdir, f)
                 shutil.copyfile(src, dst)
-            subprocess.run(['chown', '-R', 'metrics:metrics', machine_dstdir])
+                shutil.chown(dst, user='metrics', group='metrics')
 
             dir_arg = f"--persistent-cache-directory={machine_dstdir}"
             id_arg = f"--tracking-id-file-path={machine_dstdir}/tracking-id"

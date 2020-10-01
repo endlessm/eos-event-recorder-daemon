@@ -98,6 +98,7 @@ class OfflineMetricsUploader(OfflineMetrics):
             machine_srcdir = os.path.join(self.storage_dir, tracking_id)
             machine_dstdir = os.path.join(self.tmpdir, tracking_id)
 
+            os.mkdir(machine_dstdir)
             for f in os.listdir(machine_srcdir):
                 src = os.path.join(machine_srcdir, f)
                 dst = os.path.join(machine_dstdir, f)

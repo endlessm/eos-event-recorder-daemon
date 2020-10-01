@@ -111,9 +111,7 @@ class OfflineMetricsUploader(OfflineMetrics):
             dir_arg = f"--persistent-cache-directory={machine_dstdir}"
             id_arg = f"--tracking-id-file-path={machine_dstdir}/tracking-id"
             self.daemon = subprocess.Popen(
-                ['sudo', '-u', 'metrics', self.bin_path, dir_arg, id_arg],
-                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL)
+                ['sudo', '-u', 'metrics', self.bin_path, dir_arg, id_arg])
 
             # NOTE: Ideally we would get rid of this busy waiting here, but we
             # are already making a bigger design compromise by having to stop

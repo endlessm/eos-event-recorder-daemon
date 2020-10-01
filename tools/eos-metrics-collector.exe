@@ -161,7 +161,7 @@ class OfflineMetricsCollector(OfflineMetrics):
         if not os.path.exists(self.storage_dir):
             os.mkdir(self.storage_dir)
 
-        f = open(self.metrics_id_path)
+        f = open(self.metrics_id)
         self.machine_dir = os.path.join(self.storage_dir, f.read(32))
         f.close()
 

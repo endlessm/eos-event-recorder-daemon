@@ -197,8 +197,7 @@ class OfflineMetricsCollector(OfflineMetrics):
     def reset_metrics_data(self):
         files = ['variants.dat', 'variants.dat.metadata']
         for f in files:
-            target = os.path.join(self.metrics_cache_dir, f)
-            subprocess.run(['rm', '-f', target])
+            os.remove(os.path.join(self.metrics_cache_dir, f))
 
     def collect_metrics(self):
         self.create_machine_dir()

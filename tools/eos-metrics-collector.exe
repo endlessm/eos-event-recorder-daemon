@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 import tempfile
+import pwd
 
 from distutils.version import StrictVersion
 
@@ -43,14 +44,6 @@ class OfflineMetrics():
         else:
             self.metrics_id = self.machine_id_path
 
-    def metrics_pid_is_ready(self, pid):
-        bus = dbus.SystemBus()
-        if not bus.name_has_owner(self.dbus_name):
-            return False
-        proxy = bus.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus")
-        iface = dbus.Interface(proxy, "org.freedesktop.DBus")
-        return (pid == iface.GetConnectionUnixProcessID(self.dbus_name))
-
     def metrics_unit(self, operation):
         # TODO: the metrics daemon is also D-Bus activatable, so on stop we
         # should also do something to prevent it being started over D-Bus.
@@ -81,6 +74,44 @@ class OfflineMetricsUploader(OfflineMetrics):
             shutil.rmtree(self.tmpdir)
         if self.unit_was_running:
             self.metrics_unit('start')
+
+    def chusr(self):
+        pwd_entry = pwd.getpwnam('metrics')
+        os.setgid(pwd_entry.pw_gid)
+        os.setuid(pwd_entry.pw_uid)
+
+    def metrics_pid_is_ready(self, pid):
+        bus = dbus.SystemBus()
+        if not bus.name_has_owner(self.dbus_name):
+            return False
+        proxy = bus.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus")
+        iface = dbus.Interface(proxy, "org.freedesktop.DBus")
+        return (pid == iface.GetConnectionUnixProcessID(self.dbus_name))
+
+    def spawn_metrics_daemon(self, path):
+        dir_arg = f"--persistent-cache-directory={path}"
+        id_arg = f"--tracking-id-file-path={path}/tracking-id"
+
+        env = os.environ.copy()
+        env['USER'] = 'metrics'
+        env['LOGNAME'] = 'metrics'
+        env['HOME'] = path
+        daemon = subprocess.Popen(
+            [self.bin_path, dir_arg, id_arg], preexec_fn=self.chusr, env=env)
+
+        # NOTE: Ideally we would get rid of this busy waiting here, but we
+        # are already making a bigger design compromise by having to stop
+        # the daemon and restart it with different command line parameters
+        # for each data set, so let's roll with it for now.
+        tries = 5
+        while not self.metrics_pid_is_ready(daemon.pid) and tries > 0:
+            time.sleep(1)
+            tries -= 1
+        if tries == 0:
+            self.cleanup()
+            sys.exit(f'Failed to launch {self.bin_name}, aborting.')
+
+        return daemon
 
     def upload_metrics(self):
         exists = os.path.exists(self.storage_dir)
@@ -113,22 +144,7 @@ class OfflineMetricsUploader(OfflineMetrics):
                 shutil.copyfile(src, dst)
                 shutil.chown(dst, user='metrics', group='metrics')
 
-            dir_arg = f"--persistent-cache-directory={machine_dstdir}"
-            id_arg = f"--tracking-id-file-path={machine_dstdir}/tracking-id"
-            self.daemon = subprocess.Popen(
-                ['sudo', '-u', 'metrics', self.bin_path, dir_arg, id_arg])
-
-            # NOTE: Ideally we would get rid of this busy waiting here, but we
-            # are already making a bigger design compromise by having to stop
-            # the daemon and restart it with different command line parameters
-            # for each data set, so let's roll with it for now.
-            tries = 5
-            while not self.metrics_pid_is_ready(self.daemon.pid) and tries > 0:
-                time.sleep(1)
-                tries -= 1
-            if tries == 0:
-                self.cleanup()
-                sys.exit(f'Failed to launch {self.bin_name}, aborting.')
+            self.daemon = self.spawn_metrics_daemon(machine_dstdir)
 
             up_trigger = subprocess.run(self.up_trigger_bin,
                                         stdout=subprocess.DEVNULL)

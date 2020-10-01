@@ -83,7 +83,12 @@ class OfflineMetricsUploader(OfflineMetrics):
             self.metrics_unit('start')
 
     def upload_metrics(self):
-        if not os.path.exists(self.storage_dir):
+        exists = os.path.exists(self.storage_dir)
+        isdir = os.path.isdir(self.storage_dir)
+        if exists and isdir:
+            isempty = not os.listdir(self.storage_dir)
+
+        if not exists or not isdir or isempty:
             msg = (
                 f"No metrics data found in {self.storage_dir}, nothing to do."
             )

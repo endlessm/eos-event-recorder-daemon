@@ -1,0 +1,309 @@
+#!/usr/bin/python3
+
+import argparse
+import dbus
+import errno
+import os
+import shutil
+import subprocess
+import sys
+import time
+import tempfile
+import pwd
+
+from distutils.version import StrictVersion
+
+
+def get_eos_version():
+    f = open("/etc/os-release")
+
+    for line in f.readlines():
+        key, value = line.split("=")
+        if key == "ID":
+            distro = value.rstrip('\n').strip('"')
+        if key == "VERSION_ID":
+            version = value.rstrip('\n').strip('"')
+
+    if distro == "endless":
+        return version
+    return None
+
+
+class OfflineMetrics():
+    def __init__(self, storage_root):
+        self.metrics_cache_dir = '/var/cache/metrics'
+        self.tracking_id_path = '/etc/metrics/tracking-id'
+        self.machine_id_path = '/etc/machine-id'
+        self.systemd_service = 'eos-metrics-event-recorder.service'
+        self.metrics_config_file = '/etc/metrics/eos-metrics-permissions.conf'
+        self.metrics_proc_name = 'eos-metrics-event-recorder'
+        self.storage_root = storage_root
+        self.storage_dir = os.path.join(self.storage_root, 'eos-metrics-data')
+        self.dbus_name = "com.endlessm.Metrics"
+        if os.path.exists(self.tracking_id_path):
+            self.metrics_id = self.tracking_id_path
+        else:
+            self.metrics_id = self.machine_id_path
+
+    def metrics_unit(self, operation):
+        # TODO: the metrics daemon is also D-Bus activatable, so on stop we
+        # should also do something to prevent it being started over D-Bus.
+        cmd = ['systemctl', operation]
+        if operation == 'is-active':
+            cmd.append('--quiet')
+        cmd.append(self.systemd_service)
+        p = subprocess.run(cmd)
+        return (p.returncode == 0)
+
+
+class OfflineMetricsUploader(OfflineMetrics):
+    def __init__(self, storage_root):
+        super().__init__(storage_root)
+        self.bin_dir = "/usr/lib/eos-event-recorder-daemon"
+        self.bin_name = "eos-metrics-event-recorder"
+        self.bin_path = os.path.join(self.bin_dir, self.bin_name)
+        self.up_trigger_bin = "eos-upload-metrics"
+        self.tmpdir = ''
+        self.daemon = None
+        self.unit_was_running = False
+
+    def cleanup(self):
+        if self.daemon is not None:
+            self.daemon.terminate()
+            self.daemon = None
+        if os.path.exists(self.tmpdir):
+            shutil.rmtree(self.tmpdir)
+        if self.unit_was_running:
+            self.metrics_unit('start')
+
+    def chusr(self):
+        pwd_entry = pwd.getpwnam('metrics')
+        os.setgid(pwd_entry.pw_gid)
+        os.setuid(pwd_entry.pw_uid)
+
+    def metrics_pid_is_ready(self, pid):
+        bus = dbus.SystemBus()
+        if not bus.name_has_owner(self.dbus_name):
+            return False
+        proxy = bus.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus")
+        iface = dbus.Interface(proxy, "org.freedesktop.DBus")
+        return (pid == iface.GetConnectionUnixProcessID(self.dbus_name))
+
+    def spawn_metrics_daemon(self, path):
+        dir_arg = f"--persistent-cache-directory={path}"
+        id_arg = f"--tracking-id-file-path={path}/tracking-id"
+
+        env = os.environ.copy()
+        env['USER'] = 'metrics'
+        env['LOGNAME'] = 'metrics'
+        env['HOME'] = path
+        daemon = subprocess.Popen(
+            [self.bin_path, dir_arg, id_arg], preexec_fn=self.chusr, env=env)
+
+        # NOTE: Ideally we would get rid of this busy waiting here, but we
+        # are already making a bigger design compromise by having to stop
+        # the daemon and restart it with different command line parameters
+        # for each data set, so let's roll with it for now.
+        tries = 5
+        while not self.metrics_pid_is_ready(daemon.pid) and tries > 0:
+            time.sleep(1)
+            tries -= 1
+        if tries == 0:
+            self.cleanup()
+            sys.exit(f'Failed to launch {self.bin_name}, aborting.')
+
+        return daemon
+
+    def upload_metrics(self):
+        exists = os.path.exists(self.storage_dir)
+        isdir = os.path.isdir(self.storage_dir)
+        if exists and isdir:
+            isempty = not os.listdir(self.storage_dir)
+
+        if not exists or not isdir or isempty:
+            msg = (
+                f"No metrics data found in {self.storage_dir}, nothing to do."
+            )
+            print(msg)
+            sys.exit(0)
+
+        self.unit_was_running = self.metrics_unit('is-active')
+        self.metrics_unit('stop')
+
+        self.tmpdir = tempfile.mkdtemp()
+        shutil.chown(self.tmpdir, user='metrics', group='metrics')
+
+        for tracking_id in os.listdir(self.storage_dir):
+            machine_srcdir = os.path.join(self.storage_dir, tracking_id)
+            machine_dstdir = os.path.join(self.tmpdir, tracking_id)
+
+            os.mkdir(machine_dstdir)
+            shutil.chown(machine_dstdir, user='metrics', group='metrics')
+            for f in os.listdir(machine_srcdir):
+                src = os.path.join(machine_srcdir, f)
+                dst = os.path.join(machine_dstdir, f)
+                shutil.copyfile(src, dst)
+                shutil.chown(dst, user='metrics', group='metrics')
+
+            self.daemon = self.spawn_metrics_daemon(machine_dstdir)
+
+            up_trigger = subprocess.run(self.up_trigger_bin,
+                                        stdout=subprocess.DEVNULL)
+            if up_trigger.returncode != 0:
+                msg = (
+                    f"Failed to upload metrics, {self.up_trigger_bin} failed "
+                    f"with status {up_trigger.returncode}. Aborting."
+                )
+                self.cleanup()
+                sys.exit(msg)
+
+            self.daemon.terminate()
+            self.daemon = None
+            shutil.rmtree(machine_srcdir)
+            print(f"Successfully uploaded metrics data for {tracking_id}.")
+        self.cleanup()
+
+
+class OfflineMetricsCollector(OfflineMetrics):
+    def __init__(self, storage_root):
+        super().__init__(storage_root)
+        self.machine_dir = None
+
+    def get_usbdisk_free_space(self):
+        disk_usage = shutil.disk_usage(self.storage_root)
+        return disk_usage.free
+
+    def calculate_metrics_data_size(self):
+        size = os.path.getsize(self.metrics_cache_dir)
+        if os.path.exists(self.tracking_id_path):
+            size += os.path.getsize(self.tracking_id_path)
+        elif os.path.exists(self.machine_id_path):
+            size += os.path.getsize(self.machine_id_path)
+        return size
+
+    def create_machine_dir(self):
+        if not os.path.exists(self.storage_dir):
+            os.mkdir(self.storage_dir)
+
+        f = open(self.metrics_id)
+        self.machine_dir = os.path.join(self.storage_dir, f.read(32))
+        f.close()
+
+        if os.path.exists(self.machine_dir):
+            msg = (
+                f"Looks like metrics data for this machine exists in the "
+                f"target storage device. Please use a different target device "
+                f"or manually remove {self.machine_dir}. Aborting."
+            )
+            sys.exit(msg)
+        os.mkdir(self.machine_dir)
+
+    def copy_metrics_data(self):
+        # we can't use shutil.copy here to copy all files in one call because
+        # it tries to maintain files' mode, and some files have the sticky bit
+        # set, which is not supported by FAT32
+        files = [
+            'boot_offset_metafile', 'local_version_file', 'network_send_file',
+            'variants.dat', 'variants.dat.metadata'
+        ]
+        for f in files:
+            src = os.path.join(self.metrics_cache_dir, f)
+            dst = os.path.join(self.machine_dir, f)
+            if os.path.exists(src):
+                shutil.copyfile(src, dst)
+        shutil.copyfile(self.metrics_id,
+                        os.path.join(self.machine_dir, 'tracking-id'))
+
+    def reset_metrics_data(self):
+        files = ['variants.dat', 'variants.dat.metadata']
+        for f in files:
+            os.remove(os.path.join(self.metrics_cache_dir, f))
+
+    def collect_metrics(self):
+        self.create_machine_dir()
+        unit_was_running = self.metrics_unit('is-active')
+        self.metrics_unit('stop')
+        self.copy_metrics_data()
+        self.reset_metrics_data()
+        if unit_was_running:
+            self.metrics_unit('start')
+
+
+def collect(storage_root):
+    collector = OfflineMetricsCollector(storage_root)
+    free_space = collector.get_usbdisk_free_space()
+    data_size = collector.calculate_metrics_data_size()
+    if free_space < data_size:
+        msg = (
+            f"Insufficient free space ({free_space} bytes) for metrics "
+            f"data size ({data_size} bytes), aborting."
+        )
+        sys.exit(msg)
+    collector.collect_metrics()
+    print(f"Metrics data collected ({data_size} bytes).")
+
+
+def upload(storage_root):
+    eos_version = get_eos_version()
+    if eos_version is None:
+        sys.exit("This program only works on Endless OS, exiting.")
+    if StrictVersion(eos_version) < StrictVersion("3.9.0"):
+        msg = (
+            f"Uploading metrics collected from other machines requires "
+            f"EOS >= 3.9.0, and {eos_version} was detected, exiting."
+        )
+        sys.exit(msg)
+
+    uploader = OfflineMetricsUploader(storage_root)
+    uploader.upload_metrics()
+    print("All metrics data uploaded.")
+
+
+def become_root():
+    if os.getuid() == 0:
+        return
+    # sys.executable will be the python interpreter, so we need to manually
+    # resolve our absolute path (sys.argv[0])
+    args = [sys.executable] + [os.path.abspath(sys.argv[0])] + sys.argv[1:]
+    if os.environ.get("DISPLAY"):
+        cmd = 'pkexec'
+    else:
+        cmd = 'sudo'
+    os.execvp(cmd, [cmd] + args)
+
+def main():
+    desc = """
+    Offline Metrics Collector for Endless OS.
+
+    This program is designed to be executed from a removable storage device,
+    like a USB flash drive. It supports two actions, 'collect' and 'upload'.
+
+    The 'collect' action will extract any existing metrics from the system
+    where it is running and copy it to the removable storage device that it is
+    running from.
+
+    The 'upload' action will upload all extracted metrics data located in the
+    removable storage device that it is running from to the Endless' metrics
+    servers."""
+    epil = "The 'upload' action requires Endless OS 3.9.0 or newer."
+
+    parser = argparse.ArgumentParser(
+        description=desc, epilog=epil,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument('action', nargs='?', choices=['collect', 'upload'],
+                        default='collect',
+                        help='action to be performed (default: %(default)s)')
+    args = parser.parse_args()
+
+    become_root()
+
+    storage_root = sys.path[0]
+    if args.action == "collect":
+        collect(storage_root)
+    elif args.action == "upload":
+        upload(storage_root)
+
+
+if __name__ == '__main__':
+    main()

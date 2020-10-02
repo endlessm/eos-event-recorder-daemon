@@ -44,6 +44,8 @@ tools_print_persistent_cache_SOURCES = \
 tools_print_persistent_cache_CPPFLAGS = $(PERSISTENT_CACHE_TOOL_FLAGS)
 tools_print_persistent_cache_LDADD = $(PERSISTENT_CACHE_TOOL_LIBS)
 
+dist_libexec_SCRIPTS = tools/eos-metrics-collector.exe
+
 dist_bin_SCRIPTS = \
 	tools/eos-enable-metrics-uploading \
 	tools/eos-select-metrics-env \

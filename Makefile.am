@@ -64,7 +64,7 @@ noinst_PROGRAMS +=
 noinst_LTLIBRARIES +=
 
 # Binaries that should be installed in libexecdir
-libexec_PROGRAMS = 
+libexec_PROGRAMS =
 
 substitute_libexecdir = sed \
 	-e 's|@libexecdir[@]|$(libexecdir)|g' \
@@ -72,25 +72,25 @@ substitute_libexecdir = sed \
 
 # dbus services
 dbusservicedir = ${datadir}/dbus-1/system-services
-dist_dbusservice_DATA = 
+dist_dbusservice_DATA =
 
 # dbus security policy
 systembussecuritypolicydir = ${sysconfdir}/dbus-1/system.d
-dist_systembussecuritypolicy_DATA = 
+dist_systembussecuritypolicy_DATA =
 
 # policykit
 policydir = ${datadir}/polkit-1/actions
-dist_policy_DATA = 
+dist_policy_DATA =
 
 policyrulesdir = $(datadir)/polkit-1/rules.d
-dist_policyrules_DATA = 
+dist_policyrules_DATA =
 
 persistentcachedir=$(localstatedir)/cache/metrics/
 configdir=$(sysconfdir)/metrics/
 permissions_file=$(configdir)eos-metrics-permissions.conf
 
 # systemd
-systemdsystemunit_DATA = 
+systemdsystemunit_DATA =
 
 # chown and chgrp are not allowed unless you are root or under some specific
 # other conditions that may not be met every time you run 'make'.

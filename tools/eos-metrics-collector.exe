@@ -2,7 +2,6 @@
 
 import argparse
 import dbus
-import errno
 import os
 import shutil
 import subprocess
@@ -20,25 +19,25 @@ def get_eos_version():
     for line in f.readlines():
         key, value = line.split("=")
         if key == "ID":
-            distro = value.rstrip('\n').strip('"')
+            distro = value.rstrip("\n").strip('"')
         if key == "VERSION_ID":
-            version = value.rstrip('\n').strip('"')
+            version = value.rstrip("\n").strip('"')
 
     if distro == "endless":
         return version
     return None
 
 
-class OfflineMetrics():
+class OfflineMetrics:
     def __init__(self, storage_root):
-        self.metrics_cache_dir = '/var/cache/metrics'
-        self.tracking_id_path = '/etc/metrics/tracking-id'
-        self.machine_id_path = '/etc/machine-id'
-        self.systemd_service = 'eos-metrics-event-recorder.service'
-        self.metrics_config_file = '/etc/metrics/eos-metrics-permissions.conf'
-        self.metrics_proc_name = 'eos-metrics-event-recorder'
+        self.metrics_cache_dir = "/var/cache/metrics"
+        self.tracking_id_path = "/etc/metrics/tracking-id"
+        self.machine_id_path = "/etc/machine-id"
+        self.systemd_service = "eos-metrics-event-recorder.service"
+        self.metrics_config_file = "/etc/metrics/eos-metrics-permissions.conf"
+        self.metrics_proc_name = "eos-metrics-event-recorder"
         self.storage_root = storage_root
-        self.storage_dir = os.path.join(self.storage_root, 'eos-metrics-data')
+        self.storage_dir = os.path.join(self.storage_root, "eos-metrics-data")
         self.dbus_name = "com.endlessm.Metrics"
         if os.path.exists(self.tracking_id_path):
             self.metrics_id = self.tracking_id_path
@@ -48,12 +47,12 @@ class OfflineMetrics():
     def metrics_unit(self, operation):
         # TODO: the metrics daemon is also D-Bus activatable, so on stop we
         # should also do something to prevent it being started over D-Bus.
-        cmd = ['systemctl', operation]
-        if operation == 'is-active':
-            cmd.append('--quiet')
+        cmd = ["systemctl", operation]
+        if operation == "is-active":
+            cmd.append("--quiet")
         cmd.append(self.systemd_service)
         p = subprocess.run(cmd)
-        return (p.returncode == 0)
+        return p.returncode == 0
 
 
 class OfflineMetricsUploader(OfflineMetrics):
@@ -63,7 +62,7 @@ class OfflineMetricsUploader(OfflineMetrics):
         self.bin_name = "eos-metrics-event-recorder"
         self.bin_path = os.path.join(self.bin_dir, self.bin_name)
         self.up_trigger_bin = "eos-upload-metrics"
-        self.tmpdir = ''
+        self.tmpdir = ""
         self.daemon = None
         self.unit_was_running = False
 
@@ -74,10 +73,10 @@ class OfflineMetricsUploader(OfflineMetrics):
         if os.path.exists(self.tmpdir):
             shutil.rmtree(self.tmpdir)
         if self.unit_was_running:
-            self.metrics_unit('start')
+            self.metrics_unit("start")
 
     def chusr(self):
-        pwd_entry = pwd.getpwnam('metrics')
+        pwd_entry = pwd.getpwnam("metrics")
         os.setgid(pwd_entry.pw_gid)
         os.setuid(pwd_entry.pw_uid)
 
@@ -87,18 +86,19 @@ class OfflineMetricsUploader(OfflineMetrics):
             return False
         proxy = bus.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus")
         iface = dbus.Interface(proxy, "org.freedesktop.DBus")
-        return (pid == iface.GetConnectionUnixProcessID(self.dbus_name))
+        return pid == iface.GetConnectionUnixProcessID(self.dbus_name)
 
     def spawn_metrics_daemon(self, path):
         dir_arg = f"--persistent-cache-directory={path}"
         id_arg = f"--tracking-id-file-path={path}/tracking-id"
 
         env = os.environ.copy()
-        env['USER'] = 'metrics'
-        env['LOGNAME'] = 'metrics'
-        env['HOME'] = path
+        env["USER"] = "metrics"
+        env["LOGNAME"] = "metrics"
+        env["HOME"] = path
         daemon = subprocess.Popen(
-            [self.bin_path, dir_arg, id_arg], preexec_fn=self.chusr, env=env)
+            [self.bin_path, dir_arg, id_arg], preexec_fn=self.chusr, env=env
+        )
 
         # NOTE: Ideally we would get rid of this busy waiting here, but we
         # are already making a bigger design compromise by having to stop
@@ -110,7 +110,7 @@ class OfflineMetricsUploader(OfflineMetrics):
             tries -= 1
         if tries == 0:
             self.cleanup()
-            sys.exit(f'Failed to launch {self.bin_name}, aborting.')
+            sys.exit(f"Failed to launch {self.bin_name}, aborting.")
 
         return daemon
 
@@ -121,34 +121,31 @@ class OfflineMetricsUploader(OfflineMetrics):
             isempty = not os.listdir(self.storage_dir)
 
         if not exists or not isdir or isempty:
-            msg = (
-                f"No metrics data found in {self.storage_dir}, nothing to do."
-            )
+            msg = f"No metrics data found in {self.storage_dir}, nothing to do."
             print(msg)
             sys.exit(0)
 
-        self.unit_was_running = self.metrics_unit('is-active')
-        self.metrics_unit('stop')
+        self.unit_was_running = self.metrics_unit("is-active")
+        self.metrics_unit("stop")
 
         self.tmpdir = tempfile.mkdtemp()
-        shutil.chown(self.tmpdir, user='metrics', group='metrics')
+        shutil.chown(self.tmpdir, user="metrics", group="metrics")
 
         for tracking_id in os.listdir(self.storage_dir):
             machine_srcdir = os.path.join(self.storage_dir, tracking_id)
             machine_dstdir = os.path.join(self.tmpdir, tracking_id)
 
             os.mkdir(machine_dstdir)
-            shutil.chown(machine_dstdir, user='metrics', group='metrics')
+            shutil.chown(machine_dstdir, user="metrics", group="metrics")
             for f in os.listdir(machine_srcdir):
                 src = os.path.join(machine_srcdir, f)
                 dst = os.path.join(machine_dstdir, f)
                 shutil.copyfile(src, dst)
-                shutil.chown(dst, user='metrics', group='metrics')
+                shutil.chown(dst, user="metrics", group="metrics")
 
             self.daemon = self.spawn_metrics_daemon(machine_dstdir)
 
-            up_trigger = subprocess.run(self.up_trigger_bin,
-                                        stdout=subprocess.DEVNULL)
+            up_trigger = subprocess.run(self.up_trigger_bin, stdout=subprocess.DEVNULL)
             if up_trigger.returncode != 0:
                 msg = (
                     f"Failed to upload metrics, {self.up_trigger_bin} failed "
@@ -203,30 +200,32 @@ class OfflineMetricsCollector(OfflineMetrics):
         # it tries to maintain files' mode, and some files have the sticky bit
         # set, which is not supported by FAT32
         files = [
-            'boot_offset_metafile', 'local_version_file', 'network_send_file',
-            'variants.dat', 'variants.dat.metadata'
+            "boot_offset_metafile",
+            "local_version_file",
+            "network_send_file",
+            "variants.dat",
+            "variants.dat.metadata",
         ]
         for f in files:
             src = os.path.join(self.metrics_cache_dir, f)
             dst = os.path.join(self.machine_dir, f)
             if os.path.exists(src):
                 shutil.copyfile(src, dst)
-        shutil.copyfile(self.metrics_id,
-                        os.path.join(self.machine_dir, 'tracking-id'))
+        shutil.copyfile(self.metrics_id, os.path.join(self.machine_dir, "tracking-id"))
 
     def reset_metrics_data(self):
-        files = ['variants.dat', 'variants.dat.metadata']
+        files = ["variants.dat", "variants.dat.metadata"]
         for f in files:
             os.remove(os.path.join(self.metrics_cache_dir, f))
 
     def collect_metrics(self):
         self.create_machine_dir()
-        unit_was_running = self.metrics_unit('is-active')
-        self.metrics_unit('stop')
+        unit_was_running = self.metrics_unit("is-active")
+        self.metrics_unit("stop")
         self.copy_metrics_data()
         self.reset_metrics_data()
         if unit_was_running:
-            self.metrics_unit('start')
+            self.metrics_unit("start")
 
 
 def collect(storage_root):
@@ -266,10 +265,11 @@ def become_root():
     # resolve our absolute path (sys.argv[0])
     args = [sys.executable] + [os.path.abspath(sys.argv[0])] + sys.argv[1:]
     if os.environ.get("DISPLAY"):
-        cmd = 'pkexec'
+        cmd = "pkexec"
     else:
-        cmd = 'sudo'
+        cmd = "sudo"
     os.execvp(cmd, [cmd] + args)
+
 
 def main():
     desc = """
@@ -288,12 +288,17 @@ def main():
     epil = "The 'upload' action requires Endless OS 3.9.0 or newer."
 
     parser = argparse.ArgumentParser(
-        description=desc, epilog=epil,
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        description=desc,
+        epilog=epil,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument('action', nargs='?', choices=['collect', 'upload'],
-                        default='collect',
-                        help='action to be performed (default: %(default)s)')
+    parser.add_argument(
+        "action",
+        nargs="?",
+        choices=["collect", "upload"],
+        default="collect",
+        help="action to be performed (default: %(default)s)",
+    )
     args = parser.parse_args()
 
     become_root()
@@ -305,5 +310,5 @@ def main():
         upload(storage_root)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

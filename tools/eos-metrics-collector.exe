@@ -89,8 +89,8 @@ class OfflineMetricsUploader(OfflineMetrics):
         return pid == iface.GetConnectionUnixProcessID(self.dbus_name)
 
     def spawn_metrics_daemon(self, path):
-        dir_arg = f"--persistent-cache-directory={path}"
-        id_arg = f"--tracking-id-file-path={path}/tracking-id"
+        dir_arg = "--persistent-cache-directory={}".format(path)
+        id_arg = "--tracking-id-file-path={}/tracking-id".format(path)
 
         env = os.environ.copy()
         env["USER"] = "metrics"
@@ -110,7 +110,7 @@ class OfflineMetricsUploader(OfflineMetrics):
             tries -= 1
         if tries == 0:
             self.cleanup()
-            sys.exit(f"Failed to launch {self.bin_name}, aborting.")
+            sys.exit("Failed to launch {}, aborting.".format(self.bin_name))
 
         return daemon
 
@@ -121,7 +121,7 @@ class OfflineMetricsUploader(OfflineMetrics):
             isempty = not os.listdir(self.storage_dir)
 
         if not exists or not isdir or isempty:
-            msg = f"No metrics data found in {self.storage_dir}, nothing to do."
+            msg = "No metrics data found in {}, nothing to do.".format(self.storage_dir)
             print(msg)
             sys.exit(0)
 
@@ -148,8 +148,8 @@ class OfflineMetricsUploader(OfflineMetrics):
             up_trigger = subprocess.run(self.up_trigger_bin, stdout=subprocess.DEVNULL)
             if up_trigger.returncode != 0:
                 msg = (
-                    f"Failed to upload metrics, {self.up_trigger_bin} failed "
-                    f"with status {up_trigger.returncode}. Aborting."
+                    "Failed to upload metrics, {} failed with status {}. "
+                    "Aborting.".format(self.up_trigger_bin, up_trigger.returncode)
                 )
                 self.cleanup()
                 sys.exit(msg)
@@ -157,7 +157,7 @@ class OfflineMetricsUploader(OfflineMetrics):
             self.daemon.terminate()
             self.daemon = None
             shutil.rmtree(machine_srcdir)
-            print(f"Successfully uploaded metrics data for {tracking_id}.")
+            print("Successfully uploaded metrics data for {}.".format(tracking_id))
         self.cleanup()
 
 
@@ -188,9 +188,9 @@ class OfflineMetricsCollector(OfflineMetrics):
 
         if os.path.exists(self.machine_dir):
             msg = (
-                f"Looks like metrics data for this machine exists in the "
-                f"target storage device. Please use a different target device "
-                f"or manually remove {self.machine_dir}. Aborting."
+                "Looks like metrics data for this machine exists in the "
+                "target storage device. Please use a different target device "
+                "or manually remove {}. Aborting.".format(self.machine_dir)
             )
             sys.exit(msg)
         os.mkdir(self.machine_dir)
@@ -234,12 +234,12 @@ def collect(storage_root):
     data_size = collector.calculate_metrics_data_size()
     if free_space < data_size:
         msg = (
-            f"Insufficient free space ({free_space} bytes) for metrics "
-            f"data size ({data_size} bytes), aborting."
+            "Insufficient free space ({} bytes) for metrics data size "
+            "({} bytes), aborting.".format(free_space, data_size)
         )
         sys.exit(msg)
     collector.collect_metrics()
-    print(f"Metrics data collected ({data_size} bytes).")
+    print("Metrics data collected ({} bytes).".format(data_size))
 
 
 def upload(storage_root):
@@ -248,8 +248,8 @@ def upload(storage_root):
         sys.exit("This program only works on Endless OS, exiting.")
     if StrictVersion(eos_version) < StrictVersion("3.9.0"):
         msg = (
-            f"Uploading metrics collected from other machines requires "
-            f"EOS >= 3.9.0, and {eos_version} was detected, exiting."
+            "Uploading metrics collected from other machines requires "
+            "EOS >= 3.9.0, and {} was detected, exiting.".format(eos_version)
         )
         sys.exit(msg)
 

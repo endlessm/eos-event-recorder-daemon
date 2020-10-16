@@ -51,8 +51,8 @@ class OfflineMetrics:
         if operation == "is-active":
             cmd.append("--quiet")
         cmd.append(self.systemd_service)
-        p = subprocess.run(cmd)
-        return p.returncode == 0
+        returncode = subprocess.call(cmd)
+        return returncode == 0
 
 
 class OfflineMetricsUploader(OfflineMetrics):
@@ -145,11 +145,11 @@ class OfflineMetricsUploader(OfflineMetrics):
 
             self.daemon = self.spawn_metrics_daemon(machine_dstdir)
 
-            up_trigger = subprocess.run(self.up_trigger_bin, stdout=subprocess.DEVNULL)
-            if up_trigger.returncode != 0:
+            returncode = subprocess.run(self.up_trigger_bin, stdout=subprocess.DEVNULL)
+            if returncode != 0:
                 msg = (
                     "Failed to upload metrics, {} failed with status {}. "
-                    "Aborting.".format(self.up_trigger_bin, up_trigger.returncode)
+                    "Aborting.".format(self.up_trigger_bin, returncode)
                 )
                 self.cleanup()
                 sys.exit(msg)

@@ -145,7 +145,7 @@ class OfflineMetricsUploader(OfflineMetrics):
 
             self.daemon = self.spawn_metrics_daemon(machine_dstdir)
 
-            returncode = subprocess.run(self.up_trigger_bin, stdout=subprocess.DEVNULL)
+            returncode = subprocess.call(self.up_trigger_bin, stdout=subprocess.DEVNULL)
             if returncode != 0:
                 msg = (
                     "Failed to upload metrics, {} failed with status {}. "

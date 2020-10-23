@@ -45,14 +45,19 @@ class OfflineMetrics:
             self.metrics_id = self.machine_id_path
 
     def metrics_unit(self, operation):
-        # TODO: the metrics daemon is also D-Bus activatable, so on stop we
-        # should also do something to prevent it being started over D-Bus.
-        cmd = ["systemctl", operation]
-        if operation == "is-active":
-            cmd.append("--quiet")
-        cmd.append(self.systemd_service)
-        returncode = subprocess.call(cmd)
-        return returncode == 0
+        supported_ops = ["mask", "unmask"]
+        if operation not in supported_ops:
+            raise ValueError
+        if operation == "mask":
+            cmd = ["systemctl", "mask", "--runtime", "--now", "--quiet"]
+            cmd.append(self.systemd_service)
+            subprocess.call(cmd)
+        else:
+            systemd_runtime_dir = "/run/systemd/system"
+            try:
+                os.remove(os.path.join(systemd_runtime_dir, self.systemd_service))
+            except FileNotFoundError:
+                pass
 
 
 class OfflineMetricsUploader(OfflineMetrics):
@@ -64,7 +69,6 @@ class OfflineMetricsUploader(OfflineMetrics):
         self.up_trigger_bin = "eos-upload-metrics"
         self.tmpdir = ""
         self.daemon = None
-        self.unit_was_running = False
 
     def cleanup(self):
         if self.daemon is not None:
@@ -72,8 +76,7 @@ class OfflineMetricsUploader(OfflineMetrics):
             self.daemon = None
         if os.path.exists(self.tmpdir):
             shutil.rmtree(self.tmpdir)
-        if self.unit_was_running:
-            self.metrics_unit("start")
+        self.metrics_unit("unmask")
 
     def chusr(self):
         pwd_entry = pwd.getpwnam("metrics")
@@ -125,8 +128,7 @@ class OfflineMetricsUploader(OfflineMetrics):
             print(msg)
             sys.exit(0)
 
-        self.unit_was_running = self.metrics_unit("is-active")
-        self.metrics_unit("stop")
+        self.metrics_unit("mask")
 
         self.tmpdir = tempfile.mkdtemp()
         shutil.chown(self.tmpdir, user="metrics", group="metrics")
@@ -220,12 +222,10 @@ class OfflineMetricsCollector(OfflineMetrics):
 
     def collect_metrics(self):
         self.create_machine_dir()
-        unit_was_running = self.metrics_unit("is-active")
-        self.metrics_unit("stop")
+        self.metrics_unit("mask")
         self.copy_metrics_data()
         self.reset_metrics_data()
-        if unit_was_running:
-            self.metrics_unit("start")
+        self.metrics_unit("unmask")
 
 
 def collect(storage_root):

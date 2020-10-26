@@ -48,16 +48,9 @@ class OfflineMetrics:
         supported_ops = ["mask", "unmask"]
         if operation not in supported_ops:
             raise ValueError
-        if operation == "mask":
-            cmd = ["systemctl", "mask", "--runtime", "--now", "--quiet"]
-            cmd.append(self.systemd_service)
-            subprocess.call(cmd)
-        else:
-            systemd_runtime_dir = "/run/systemd/system"
-            try:
-                os.remove(os.path.join(systemd_runtime_dir, self.systemd_service))
-            except FileNotFoundError:
-                pass
+        cmd = ["systemctl", operation, "--runtime", "--now", "--quiet"]
+        cmd.append(self.systemd_service)
+        subprocess.call(cmd)
 
 
 class OfflineMetricsUploader(OfflineMetrics):

@@ -60,6 +60,7 @@ class OfflineMetricsUploader(OfflineMetrics):
         self.bin_name = "eos-metrics-event-recorder"
         self.bin_path = os.path.join(self.bin_dir, self.bin_name)
         self.up_trigger_bin = "eos-upload-metrics"
+        self.metrics_env_bin = "eos-select-metrics-env"
         self.tmpdir = ""
         self.daemon = None
 
@@ -70,6 +71,11 @@ class OfflineMetricsUploader(OfflineMetrics):
         if os.path.exists(self.tmpdir):
             shutil.rmtree(self.tmpdir)
         self.metrics_unit("unmask")
+
+    def set_metrics_production_env(self):
+        return subprocess.call(
+            self.metrics_env_bin, "production", stdout=subprocess.DEVNULL
+        )
 
     def chusr(self):
         pwd_entry = pwd.getpwnam("metrics")
@@ -122,6 +128,7 @@ class OfflineMetricsUploader(OfflineMetrics):
             sys.exit(0)
 
         self.metrics_unit("mask")
+        self.set_metrics_production_env()
 
         self.tmpdir = tempfile.mkdtemp()
         shutil.chown(self.tmpdir, user="metrics", group="metrics")

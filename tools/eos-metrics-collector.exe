@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import argparse
+import configparser
 import dbus
 import os
 import shutil
@@ -26,6 +27,17 @@ def get_eos_version():
     if distro == "endless":
         return version
     return None
+
+
+def get_metrics_env():
+    config = configparser.ConfigParser()
+    config.read("/etc/metrics/eos-metrics-permissions.conf")
+    return config.get("global", "environment")
+
+
+def get_ostree_url():
+    cmd = ["ostree", "remote", "show-url", "eos"]
+    return subprocess.check_output(cmd).decode("utf-8").rstrip("\n")
 
 
 class OfflineMetrics:
@@ -243,6 +255,24 @@ def upload(storage_root):
         msg = (
             "Uploading metrics collected from other machines requires "
             "EOS >= 3.9.0, and {} was detected, exiting.".format(eos_version)
+        )
+        sys.exit(msg)
+
+    metrics_env = get_metrics_env()
+    if metrics_env != "production":
+        msg = (
+            "Metrics environment is set to '{}', refusing to upload. Please "
+            "set the metrics environment to production before trying to "
+            "upload offline metrics data.".format(metrics_env)
+        )
+        sys.exit(msg)
+
+    ostree_url = get_ostree_url()
+    if "staging" in ostree_url:
+        msg = (
+            "Staging ostree detected, refusing to upload. If this machine is "
+            "set to follow the beta channel, please set it to the production "
+            "channel before trying to upload offline metrics data."
         )
         sys.exit(msg)
 

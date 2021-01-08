@@ -46,7 +46,6 @@ class OfflineMetrics:
         self.tracking_id_path = "/etc/metrics/tracking-id"
         self.machine_id_path = "/etc/machine-id"
         self.systemd_service = "eos-metrics-event-recorder.service"
-        self.metrics_config_file = "/etc/metrics/eos-metrics-permissions.conf"
         self.metrics_proc_name = "eos-metrics-event-recorder"
         self.storage_root = storage_root
         self.storage_dir = os.path.join(self.storage_root, "eos-metrics-data")

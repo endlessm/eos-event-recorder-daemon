@@ -41,10 +41,11 @@ AM_CFLAGS = @WARN_CFLAGS@
 AM_LDFLAGS = @WARN_LDFLAGS@
 
 # Enable strict compiler flags and install systemd unit files to the specified
-# directory when doing 'make distcheck'.
+# directory when doing 'make distcheck'. Set a dummy default server URL.
 AM_DISTCHECK_CONFIGURE_FLAGS = \
 	--enable-compile-warnings=error \
 	--with-systemdsystemunitdir='$${prefix}/lib/systemd/system' \
+	--with-default-metrics-server=azafea.example \
 	$(NULL)
 if EOS_ENABLE_COVERAGE
 AM_DISTCHECK_CONFIGURE_FLAGS += --enable-coverage --with-coverage-dir=@EOS_COVERAGE_DIR@

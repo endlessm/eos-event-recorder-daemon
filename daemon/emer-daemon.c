@@ -20,6 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "emer-daemon.h"
 
 #include <math.h>
@@ -1044,7 +1045,7 @@ dequeue_and_do_upload (EmerDaemon  *self,
     {
       g_free (priv->server_uri);
       priv->server_uri =
-        g_strconcat ("https://", environment, ".metrics.endlessm.com/"
+        g_strconcat ("https://", environment, "." DEFAULT_METRICS_SERVER "/"
                      CLIENT_VERSION_NUMBER "/", NULL);
     }
 

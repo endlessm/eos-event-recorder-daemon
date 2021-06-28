@@ -92,7 +92,7 @@
 #define AGGREGATE_ARRAY_TYPE G_VARIANT_TYPE (AGGREGATE_ARRAY_TYPE_STRING)
 #define SEQUENCE_ARRAY_TYPE G_VARIANT_TYPE (SEQUENCE_ARRAY_TYPE_STRING)
 
-#define REQUEST_TYPE_STRING "(ixxay" SINGULAR_ARRAY_TYPE_STRING \
+#define REQUEST_TYPE_STRING "(xx" SINGULAR_ARRAY_TYPE_STRING \
   AGGREGATE_ARRAY_TYPE_STRING SEQUENCE_ARRAY_TYPE_STRING ")"
 
 #define RETRY_TYPE_STRING "(ixx@ay@" SINGULAR_ARRAY_TYPE_STRING "@" \
@@ -840,26 +840,6 @@ create_request_body (EmerDaemon *self,
                      gsize      *num_buffer_events,
                      GError    **error)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  uuid_t machine_id;
-  gboolean read_id = emer_machine_id_provider_get_id (priv->machine_id_provider,
-                                                      NULL,
-                                                      machine_id);
-  if (!read_id)
-    {
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
-                   "Could not read machine ID");
-      return NULL;
-    }
-
-  GVariantBuilder machine_id_builder;
-  get_uuid_builder (machine_id, &machine_id_builder);
-
-  gint send_number =
-    emer_network_send_provider_get_send_number (priv->network_send_provider);
-  emer_network_send_provider_increment_send_number (priv->network_send_provider);
-
   GVariantBuilder singulars, aggregates, sequences;
   g_variant_builder_init (&singulars, SINGULAR_ARRAY_TYPE);
   g_variant_builder_init (&aggregates, AGGREGATE_ARRAY_TYPE);
@@ -890,9 +870,8 @@ create_request_body (EmerDaemon *self,
     return NULL;
 
   GVariant *request_body =
-    g_variant_new (REQUEST_TYPE_STRING, send_number,
-                   relative_timestamp, absolute_timestamp,
-                   &machine_id_builder, &singulars, &aggregates, &sequences);
+    g_variant_new (REQUEST_TYPE_STRING, relative_timestamp, absolute_timestamp,
+                   &singulars, &aggregates, &sequences);
 
   g_variant_ref_sink (request_body);
   GVariant *little_endian_request_body =

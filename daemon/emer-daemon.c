@@ -42,6 +42,7 @@
 #include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
+#include "emer-site-id-provider.h"
 #include "emer-types.h"
 #include "shared/metrics-util.h"
 
@@ -93,7 +94,7 @@
 #define AGGREGATE_ARRAY_TYPE G_VARIANT_TYPE (AGGREGATE_ARRAY_TYPE_STRING)
 #define SEQUENCE_ARRAY_TYPE G_VARIANT_TYPE (SEQUENCE_ARRAY_TYPE_STRING)
 
-#define REQUEST_TYPE_STRING "(xxs" SINGULAR_ARRAY_TYPE_STRING \
+#define REQUEST_TYPE_STRING "(xxsa{ss}" SINGULAR_ARRAY_TYPE_STRING \
   AGGREGATE_ARRAY_TYPE_STRING SEQUENCE_ARRAY_TYPE_STRING ")"
 
 #define RETRY_TYPE_STRING "(ixx@ay@" SINGULAR_ARRAY_TYPE_STRING "@" \
@@ -847,6 +848,7 @@ create_request_body (EmerDaemon *self,
   g_variant_builder_init (&sequences, SEQUENCE_ARRAY_TYPE);
 
   g_autofree gchar *image_version = emer_get_image_version ();
+  g_autofree GVariant *site_id = emer_get_site_id ();
 
   gsize num_bytes_read;
   gboolean add_from_buffer =
@@ -874,7 +876,7 @@ create_request_body (EmerDaemon *self,
 
   GVariant *request_body =
     g_variant_new (REQUEST_TYPE_STRING, relative_timestamp, absolute_timestamp,
-                   image_version, &singulars, &aggregates, &sequences);
+                   image_version, site_id, &singulars, &aggregates, &sequences);
 
   g_variant_ref_sink (request_body);
   GVariant *little_endian_request_body =

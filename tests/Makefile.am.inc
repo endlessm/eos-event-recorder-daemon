@@ -80,6 +80,7 @@ tests_daemon_test_daemon_dbusdaemon_SOURCES = \
 	tests/daemon/mock-permissions-provider.h \
 	daemon/emer-permissions-provider.h \
 	tests/daemon/mock-persistent-cache.c tests/daemon/mock-persistent-cache.h \
+	tests/daemon/mock-site-id-provider.c daemon/emer-site-id-provider.h \
 	daemon/emer-types.c daemon/emer-types.h \
 	$(NULL)
 tests_daemon_test_daemon_dbusdaemon_CPPFLAGS = $(DAEMON_TEST_FLAGS)

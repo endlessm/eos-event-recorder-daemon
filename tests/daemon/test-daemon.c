@@ -664,7 +664,7 @@ get_events_from_request (GByteArray    *request,
   g_free (expected_request_path);
 
   const GVariantType *REQUEST_FORMAT =
-    G_VARIANT_TYPE ("(xxsa(uayxmv)a(uayxxmv)a(uaya(xmv)))");
+    G_VARIANT_TYPE ("(xxsa{ss}a(uayxmv)a(uayxxmv)a(uaya(xmv)))");
   GVariant *request_variant =
     g_variant_new_from_bytes (REQUEST_FORMAT, request_bytes, FALSE);
 
@@ -679,10 +679,11 @@ get_events_from_request (GByteArray    *request,
 
   gint64 client_relative_time, client_absolute_time;
   const gchar *image_version;
+  GVariant *site_id;
   g_variant_get (native_endian_request,
-                 "(xx&sa(uayxmv)a(uayxxmv)a(uaya(xmv)))",
+                 "(xx&s@a{ss}a(uayxmv)a(uayxxmv)a(uaya(xmv)))",
                  &client_relative_time, &client_absolute_time, &image_version,
-                 singular_iterator, aggregate_iterator, sequence_iterator);
+                 &site_id, singular_iterator, aggregate_iterator, sequence_iterator);
 
   g_assert_cmpint (client_relative_time, >=, fixture->relative_time);
   g_assert_cmpint (client_relative_time, <=, curr_relative_time);
@@ -691,6 +692,14 @@ get_events_from_request (GByteArray    *request,
   g_assert_cmpint (client_absolute_time, <=, curr_absolute_time);
 
   g_assert_cmpstr (image_version, ==, IMAGE_VERSION);
+
+  const gchar *site_value;
+  g_assert_cmpint (g_variant_n_children (site_id), ==, 2);
+  g_variant_lookup (site_id, "id", "&s", &site_value);
+  g_assert_cmpstr (site_value, ==, "myid");
+  g_variant_lookup (site_id, "country", "&s", &site_value);
+  g_assert_cmpstr (site_value, ==, "Earth");
+  g_variant_unref (site_id);
 
   g_variant_unref (native_endian_request);
 }

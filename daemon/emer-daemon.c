@@ -37,6 +37,7 @@
 #include <eosmetrics/eosmetrics.h>
 
 #include "emer-gzip.h"
+#include "emer-image-id-provider.h"
 #include "emer-machine-id-provider.h"
 #include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
@@ -92,7 +93,7 @@
 #define AGGREGATE_ARRAY_TYPE G_VARIANT_TYPE (AGGREGATE_ARRAY_TYPE_STRING)
 #define SEQUENCE_ARRAY_TYPE G_VARIANT_TYPE (SEQUENCE_ARRAY_TYPE_STRING)
 
-#define REQUEST_TYPE_STRING "(xx" SINGULAR_ARRAY_TYPE_STRING \
+#define REQUEST_TYPE_STRING "(xxs" SINGULAR_ARRAY_TYPE_STRING \
   AGGREGATE_ARRAY_TYPE_STRING SEQUENCE_ARRAY_TYPE_STRING ")"
 
 #define RETRY_TYPE_STRING "(ixx@ay@" SINGULAR_ARRAY_TYPE_STRING "@" \
@@ -845,6 +846,8 @@ create_request_body (EmerDaemon *self,
   g_variant_builder_init (&aggregates, AGGREGATE_ARRAY_TYPE);
   g_variant_builder_init (&sequences, SEQUENCE_ARRAY_TYPE);
 
+  g_autofree gchar *image_version = emer_get_image_version ();
+
   gsize num_bytes_read;
   gboolean add_from_buffer =
     add_stored_events_to_builders (self, max_bytes, num_stored_events,
@@ -871,7 +874,7 @@ create_request_body (EmerDaemon *self,
 
   GVariant *request_body =
     g_variant_new (REQUEST_TYPE_STRING, relative_timestamp, absolute_timestamp,
-                   &singulars, &aggregates, &sequences);
+                   image_version, &singulars, &aggregates, &sequences);
 
   g_variant_ref_sink (request_body);
   GVariant *little_endian_request_body =

@@ -630,8 +630,6 @@ add_events_to_builders (GVariant       **events,
       const GVariantType *event_type = g_variant_get_type (curr_event);
       if (g_variant_type_equal (event_type, SINGULAR_TYPE))
         g_variant_builder_add_value (singulars, curr_event);
-      else if (g_variant_type_equal (event_type, AGGREGATE_TYPE))
-        g_variant_builder_add_value (aggregates, curr_event);
       else
         g_error ("An event has an unexpected variant type.");
     }

@@ -41,15 +41,14 @@ typedef struct _DBusCallbackData
 static gboolean
 on_record_singular_event (EmerEventRecorderServer *server,
                           GDBusMethodInvocation   *invocation,
-                          guint32                  user_id,
                           GVariant                *event_id,
                           gint64                   relative_timestamp,
                           gboolean                 has_payload,
                           GVariant                *payload,
                           EmerDaemon              *daemon)
 {
-  emer_daemon_record_singular_event (daemon, user_id, event_id,
-                                     relative_timestamp, has_payload, payload);
+  emer_daemon_record_singular_event (daemon, event_id, relative_timestamp,
+		                     has_payload, payload);
   emer_event_recorder_server_complete_record_singular_event (server,
                                                              invocation);
   return TRUE;

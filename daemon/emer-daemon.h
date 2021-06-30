@@ -86,7 +86,6 @@ EmerDaemon *             emer_daemon_new_full                 (GRand            
                                                                gulong                   max_bytes_buffered);
 
 void                     emer_daemon_record_singular_event    (EmerDaemon              *self,
-                                                               guint32                  user_id,
                                                                GVariant                *event_id,
                                                                gint64                   relative_timestamp,
                                                                gboolean                 has_payload,

@@ -425,7 +425,7 @@ make_large_singular (void)
     g_variant_new_fixed_array (G_VARIANT_TYPE ("y"), array, ZERO_ARRAY_LENGTH,
                                1);
   GVariant *singular =
-    g_variant_new ("(u@ayxmv)", USER_ID, make_event_id_variant (),
+    g_variant_new ("(ayxmv)", make_event_id_variant (),
                    OFFSET_TIMESTAMP, auxiliary_payload);
 
   gsize singular_cost = emer_persistent_cache_cost (singular);
@@ -535,7 +535,7 @@ assert_singular_matches_variant (GVariant *actual_variant,
                                  GVariant *expected_auxiliary_payload)
 {
   GVariant *expected_variant =
-    g_variant_new ("(u@ayxmv)", USER_ID, make_event_id_variant (),
+    g_variant_new ("(ayxmv)", make_event_id_variant (),
                    OFFSET_TIMESTAMP, expected_auxiliary_payload);
   assert_variants_equal (actual_variant, expected_variant);
 }
@@ -603,7 +603,6 @@ static void
 record_singulars (EmerDaemon *daemon)
 {
   emer_daemon_record_singular_event (daemon,
-                                     USER_ID,
                                      make_event_id_variant (),
                                      RELATIVE_TIMESTAMP,
                                      FALSE,
@@ -611,14 +610,12 @@ record_singulars (EmerDaemon *daemon)
   GVariant *auxiliary_payload = g_variant_new_boolean (FALSE);
   g_variant_ref_sink (auxiliary_payload);
   emer_daemon_record_singular_event (daemon,
-                                     USER_ID,
                                      make_event_id_variant (),
                                      RELATIVE_TIMESTAMP,
                                      FALSE,
                                      auxiliary_payload);
   g_variant_unref (auxiliary_payload);
   emer_daemon_record_singular_event (daemon,
-                                     USER_ID,
                                      make_event_id_variant (),
                                      RELATIVE_TIMESTAMP,
                                      TRUE,

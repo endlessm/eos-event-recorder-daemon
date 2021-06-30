@@ -42,6 +42,7 @@ eos_metrics_event_recorder_SOURCES = \
 	daemon/emer-circular-file.c daemon/emer-circular-file.h \
 	daemon/emer-daemon.c daemon/emer-daemon.h \
 	daemon/emer-gzip.c daemon/emer-gzip.h \
+	daemon/emer-image-id-provider.c daemon/emer-image-id-provider.h \
 	daemon/emer-machine-id-provider.c daemon/emer-machine-id-provider.h \
 	daemon/emer-network-send-provider.c daemon/emer-network-send-provider.h \
 	daemon/emer-permissions-provider.c daemon/emer-permissions-provider.h \

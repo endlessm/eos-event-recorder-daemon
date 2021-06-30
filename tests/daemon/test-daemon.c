@@ -42,6 +42,7 @@
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
 #include "emer-types.h"
+#include "mock-image-id-provider.h"
 #include "mock-permissions-provider.h"
 #include "mock-persistent-cache.h"
 #include "shared/metrics-util.h"
@@ -663,7 +664,7 @@ get_events_from_request (GByteArray    *request,
   g_free (expected_request_path);
 
   const GVariantType *REQUEST_FORMAT =
-    G_VARIANT_TYPE ("(xxa(uayxmv)a(uayxxmv)a(uaya(xmv)))");
+    G_VARIANT_TYPE ("(xxsa(uayxmv)a(uayxxmv)a(uaya(xmv)))");
   GVariant *request_variant =
     g_variant_new_from_bytes (REQUEST_FORMAT, request_bytes, FALSE);
 
@@ -677,16 +678,19 @@ get_events_from_request (GByteArray    *request,
   g_variant_unref (request_variant);
 
   gint64 client_relative_time, client_absolute_time;
+  const gchar *image_version;
   g_variant_get (native_endian_request,
-                 "(xxa(uayxmv)a(uayxxmv)a(uaya(xmv)))",
-                 &client_relative_time, &client_absolute_time,
-		 singular_iterator, aggregate_iterator, sequence_iterator);
+                 "(xx&sa(uayxmv)a(uayxxmv)a(uaya(xmv)))",
+                 &client_relative_time, &client_absolute_time, &image_version,
+                 singular_iterator, aggregate_iterator, sequence_iterator);
 
   g_assert_cmpint (client_relative_time, >=, fixture->relative_time);
   g_assert_cmpint (client_relative_time, <=, curr_relative_time);
 
   g_assert_cmpint (client_absolute_time, >=, fixture->absolute_time);
   g_assert_cmpint (client_absolute_time, <=, curr_absolute_time);
+
+  g_assert_cmpstr (image_version, ==, IMAGE_VERSION);
 
   g_variant_unref (native_endian_request);
 }

@@ -79,7 +79,7 @@
 #define EVENT_VALUE_ARRAY_TYPE G_VARIANT_TYPE (EVENT_VALUE_ARRAY_TYPE_STRING)
 
 #define SINGULAR_TYPE_STRING "(aysxmv)"
-#define AGGREGATE_TYPE_STRING "(uayxxmv)"
+#define AGGREGATE_TYPE_STRING "(ayssxmv)"
 #define SEQUENCE_TYPE_STRING "(uay" EVENT_VALUE_ARRAY_TYPE_STRING ")"
 
 #define SINGULAR_TYPE G_VARIANT_TYPE (SINGULAR_TYPE_STRING)
@@ -1713,35 +1713,6 @@ emer_daemon_record_aggregate_event (EmerDaemon *self,
                                     gboolean    has_payload,
                                     GVariant   *payload)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  if (!priv->recording_enabled)
-    return;
-
-  if (!is_uuid (event_id))
-    {
-      g_warning ("Event ID must be a UUID represented as an array of %"
-                 G_GSIZE_FORMAT " bytes. Dropping event.", UUID_LENGTH);
-      return;
-    }
-
-  gint64 boot_offset;
-  GError *error = NULL;
-  if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
-                                                   &boot_offset, &error))
-    {
-      g_warning ("Unable to correct event's relative timestamp. Dropping "
-                 "event. Error: %s.", error->message);
-      g_error_free (error);
-      return;
-    }
-  relative_timestamp += boot_offset;
-
-  GVariant *nullable_payload = get_nullable_payload (payload, has_payload);
-  GVariant *aggregate =
-    g_variant_new ("(u@ayxxmv)", user_id, event_id, num_events,
-                   relative_timestamp, nullable_payload);
-  buffer_event (self, aggregate);
 }
 
 void

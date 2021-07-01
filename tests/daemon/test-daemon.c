@@ -530,10 +530,8 @@ static void
 assert_aggregate_matches_variant (GVariant *actual_variant,
                                   GVariant *expected_auxiliary_payload)
 {
-  GVariant *expected_variant =
-    g_variant_new ("(u@ayxxmv)", USER_ID, make_event_id_variant (),
-                   NUM_EVENTS, OFFSET_TIMESTAMP, expected_auxiliary_payload);
-  assert_variants_equal (actual_variant, expected_variant);
+  /* Not defined yet */
+  g_assert_null (NULL);
 }
 
 static void
@@ -639,7 +637,7 @@ get_events_from_request (GByteArray    *request,
   g_free (expected_request_path);
 
   const GVariantType *REQUEST_FORMAT =
-    G_VARIANT_TYPE ("(xxsa{ss}ya(aysxmv)a(uayxxmv))");
+    G_VARIANT_TYPE ("(xxsa{ss}ya(aysxmv)a(ayssxmv))");
   GVariant *request_variant =
     g_variant_new_from_bytes (REQUEST_FORMAT, request_bytes, FALSE);
 
@@ -657,7 +655,7 @@ get_events_from_request (GByteArray    *request,
   GVariant *site_id;
   guint8 boot_type;
   g_variant_get (native_endian_request,
-                 "(xx&s@a{ss}ya(aysxmv)a(uayxxmv))",
+                 "(xx&s@a{ss}ya(aysxmv)a(ayssxmv))",
                  &client_relative_time, &client_absolute_time, &image_version,
                  &site_id, &boot_type, singular_iterator, aggregate_iterator);
 
@@ -744,11 +742,17 @@ assert_aggregates_received (GByteArray *request,
   g_assert_cmpuint (g_variant_iter_n_children (singular_iterator), ==, 0u);
   g_variant_iter_free (singular_iterator);
 
-  g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 2u);
-  assert_aggregate_matches_next_value (aggregate_iterator,
-                                       NULL /* auxiliary_payload */);
-  assert_aggregate_matches_next_value (aggregate_iterator,
+  /* The aggregate event has not defined yet. So, the array is empty right now.
+   * Will restore/re-define the test plan here in the future.
+   */
+  g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 0u);
+  if (g_variant_iter_n_children (aggregate_iterator) > 0)
+    {
+      assert_aggregate_matches_next_value (aggregate_iterator,
+                                           NULL /* auxiliary_payload */);
+      assert_aggregate_matches_next_value (aggregate_iterator,
                                        make_auxiliary_payload ());
+    }
   g_variant_iter_free (aggregate_iterator);
 }
 

@@ -49,7 +49,7 @@
 /*
  * The version of this client's network protocol.
  */
-#define CLIENT_VERSION_NUMBER "2"
+#define CLIENT_VERSION_NUMBER "3"
 
 /*
  * The minimum number of seconds to wait before attempting the first retry of a

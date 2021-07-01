@@ -95,10 +95,10 @@
 #define SEQUENCE_ARRAY_TYPE G_VARIANT_TYPE (SEQUENCE_ARRAY_TYPE_STRING)
 
 #define REQUEST_TYPE_STRING "(xxs@a{ss}y" SINGULAR_ARRAY_TYPE_STRING \
-  AGGREGATE_ARRAY_TYPE_STRING SEQUENCE_ARRAY_TYPE_STRING ")"
+  AGGREGATE_ARRAY_TYPE_STRING ")"
 
 #define RETRY_TYPE_STRING "(xxs@a{ss}y@" SINGULAR_ARRAY_TYPE_STRING "@" \
-  AGGREGATE_ARRAY_TYPE_STRING "@" SEQUENCE_ARRAY_TYPE_STRING ")"
+  AGGREGATE_ARRAY_TYPE_STRING ")"
 
 /* This limit only applies to timer-driven uploads, not explicitly
  * requested uploads.
@@ -431,11 +431,11 @@ get_updated_request_body (EmerDaemon *self,
                           GError    **error)
 {
   g_autofree gchar *image_version;
-  GVariant *site_id, *singulars, *aggregates, *sequences;
+  GVariant *site_id, *singulars, *aggregates;
   guint8 boot_type;
   g_variant_get (request_body, RETRY_TYPE_STRING,
                  NULL /* relative time */, NULL /* absolute time */,
-                 &image_version, &site_id, &boot_type, &singulars, &aggregates, &sequences);
+                 &image_version, &site_id, &boot_type, &singulars, &aggregates);
 
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.
@@ -453,7 +453,7 @@ get_updated_request_body (EmerDaemon *self,
                         little_endian_relative_timestamp,
                         little_endian_absolute_timestamp,
                         image_version, site_id, boot_type,
-                        singulars, aggregates, sequences);
+                        singulars, aggregates);
 }
 
 static void
@@ -624,8 +624,7 @@ static void
 add_events_to_builders (GVariant       **events,
                         gsize            num_events,
                         GVariantBuilder *singulars,
-                        GVariantBuilder *aggregates,
-                        GVariantBuilder *sequences)
+                        GVariantBuilder *aggregates)
 {
   for (gsize i = 0; i < num_events; i++)
     {
@@ -635,8 +634,6 @@ add_events_to_builders (GVariant       **events,
         g_variant_builder_add_value (singulars, curr_event);
       else if (g_variant_type_equal (event_type, AGGREGATE_TYPE))
         g_variant_builder_add_value (aggregates, curr_event);
-      else if (g_variant_type_equal (event_type, SEQUENCE_TYPE))
-        g_variant_builder_add_value (sequences, curr_event);
       else
         g_error ("An event has an unexpected variant type.");
     }
@@ -746,8 +743,7 @@ add_stored_events_to_builders (EmerDaemon        *self,
                                gsize             *read_bytes,
                                guint64           *token,
                                GVariantBuilder   *singulars,
-                               GVariantBuilder   *aggregates,
-                               GVariantBuilder   *sequences)
+                               GVariantBuilder   *aggregates)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
@@ -796,7 +792,7 @@ add_stored_events_to_builders (EmerDaemon        *self,
     }
 
   add_events_to_builders (variants, num_variants,
-                          singulars, aggregates, sequences);
+                          singulars, aggregates);
 
   gsize curr_read_bytes = 0;
   for (gsize i = 0; i < num_variants; i++)
@@ -815,8 +811,7 @@ add_buffered_events_to_builders (EmerDaemon      *self,
                                  gsize            num_bytes,
                                  gsize           *num_variants,
                                  GVariantBuilder *singulars,
-                                 GVariantBuilder *aggregates,
-                                 GVariantBuilder *sequences)
+                                 GVariantBuilder *aggregates)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
@@ -831,7 +826,7 @@ add_buffered_events_to_builders (EmerDaemon      *self,
     }
 
   add_events_to_builders ((GVariant **) priv->variant_array->pdata,
-                          curr_num_variants, singulars, aggregates, sequences);
+                          curr_num_variants, singulars, aggregates);
   *num_variants = curr_num_variants;
 }
 
@@ -843,10 +838,9 @@ create_request_body (EmerDaemon *self,
                      gsize      *num_buffer_events,
                      GError    **error)
 {
-  GVariantBuilder singulars, aggregates, sequences;
+  GVariantBuilder singulars, aggregates;
   g_variant_builder_init (&singulars, SINGULAR_ARRAY_TYPE);
   g_variant_builder_init (&aggregates, AGGREGATE_ARRAY_TYPE);
-  g_variant_builder_init (&sequences, SEQUENCE_ARRAY_TYPE);
 
   g_autofree gchar *image_version = emer_image_id_provider_get_version ();
   GVariant *site_id = emer_site_id_provider_get_id ();
@@ -856,13 +850,13 @@ create_request_body (EmerDaemon *self,
   gboolean add_from_buffer =
     add_stored_events_to_builders (self, max_bytes, num_stored_events,
                                    &num_bytes_read, token,
-                                   &singulars, &aggregates, &sequences);
+                                   &singulars, &aggregates);
 
   if (add_from_buffer)
     {
       gsize space_remaining = max_bytes - num_bytes_read;
       add_buffered_events_to_builders (self, space_remaining, num_buffer_events,
-                                       &singulars, &aggregates, &sequences);
+                                       &singulars, &aggregates);
     }
   else
     {
@@ -878,8 +872,7 @@ create_request_body (EmerDaemon *self,
 
   GVariant *request_body =
     g_variant_new (REQUEST_TYPE_STRING, relative_timestamp, absolute_timestamp,
-                   image_version, site_id, boot_type, &singulars, &aggregates,
-                   &sequences);
+                   image_version, site_id, boot_type, &singulars, &aggregates);
 
   g_variant_ref_sink (request_body);
   GVariant *little_endian_request_body =
@@ -1757,52 +1750,6 @@ emer_daemon_record_event_sequence (EmerDaemon *self,
                                    GVariant   *event_id,
                                    GVariant   *event_values)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  if (!priv->recording_enabled)
-    return;
-
-  if (!is_uuid (event_id))
-    {
-      g_warning ("Event ID must be a UUID represented as an array of %"
-                 G_GSIZE_FORMAT " bytes. Dropping event.", UUID_LENGTH);
-      return;
-    }
-
-  gint64 boot_offset;
-  GError *error = NULL;
-  if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
-                                                   &boot_offset, &error))
-    {
-      g_warning ("Unable to correct event's relative timestamp. Dropping "
-                 "event. Error: %s.", error->message);
-      g_error_free (error);
-      return;
-    }
-
-  g_variant_ref_sink (event_values);
-  gsize num_event_values = g_variant_n_children (event_values);
-  GVariantBuilder event_values_builder;
-  g_variant_builder_init (&event_values_builder, EVENT_VALUE_ARRAY_TYPE);
-  for (gsize i = 0; i < num_event_values; i++)
-    {
-      gint64 relative_timestamp;
-      gboolean has_payload;
-      GVariant *payload;
-      g_variant_get_child (event_values, i, "(xbv)", &relative_timestamp,
-                           &has_payload, &payload);
-
-      relative_timestamp += boot_offset;
-      GVariant *nullable_payload = get_nullable_payload (payload, has_payload);
-      g_variant_builder_add (&event_values_builder, EVENT_VALUE_TYPE_STRING,
-                             relative_timestamp, nullable_payload);
-    }
-
-  g_variant_unref (event_values);
-  GVariant *sequence =
-    g_variant_new ("(u@ay" EVENT_VALUE_ARRAY_TYPE_STRING ")", user_id, event_id,
-                   &event_values_builder);
-  buffer_event (self, sequence);
 }
 
 /* emer_daemon_upload_events:

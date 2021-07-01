@@ -95,3 +95,16 @@ emer_image_id_provider_get_version (void)
 
   return image_version;
 }
+
+/*
+ * emer_image_id_provider_get_os_version:
+ *
+ * Retrieves the OS version string from system.
+ *
+ * Returns: a string of the OS version.
+ */
+gchar *
+emer_image_id_provider_get_os_version(void)
+{
+  return g_get_os_info(G_OS_INFO_KEY_VERSION);
+}

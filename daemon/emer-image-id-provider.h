@@ -29,6 +29,8 @@ G_BEGIN_DECLS
 
 gchar *emer_image_id_provider_get_version (void);
 
+gchar *emer_image_id_provider_get_os_version(void);
+
 G_END_DECLS
 
 #endif /* EMER_IMAGE_ID_PROVIDER_H */

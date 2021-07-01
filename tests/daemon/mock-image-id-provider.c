@@ -38,3 +38,9 @@ emer_image_id_provider_get_version (void)
 {
   return g_strdup (IMAGE_VERSION);
 }
+
+gchar *
+emer_image_id_provider_get_os_version(void)
+{
+  return g_strdup (OS_VERSION);
+}

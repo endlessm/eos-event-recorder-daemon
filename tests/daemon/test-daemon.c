@@ -59,9 +59,10 @@
 
 #define MAX_REQUEST_PAYLOAD 100000
 
-/* The non-array portion of the singular in make_large_singular costs 40 bytes.
+/* The non-array portion of the singular in make_large_singular costs 60 bytes,
+ * including some for the OS Version string.
  */
-#define ZERO_ARRAY_LENGTH (MAX_REQUEST_PAYLOAD - 40)
+#define ZERO_ARRAY_LENGTH (MAX_REQUEST_PAYLOAD - 44)
 
 #define TIMEOUT_SEC 5
 
@@ -426,11 +427,12 @@ make_large_singular (void)
     g_variant_new_fixed_array (G_VARIANT_TYPE ("y"), array, ZERO_ARRAY_LENGTH,
                                1);
   GVariant *singular =
-    g_variant_new ("(@ayxmv)", make_event_id_variant (),
+    g_variant_new ("(@aysxmv)", make_event_id_variant (),
+                   emer_image_id_provider_get_os_version(),
                    OFFSET_TIMESTAMP, auxiliary_payload);
 
   gsize singular_cost = emer_persistent_cache_cost (singular);
-  g_assert_cmpuint (singular_cost, <=, MAX_REQUEST_PAYLOAD);
+  g_assert_cmpuint (singular_cost, ==, MAX_REQUEST_PAYLOAD);
 
   return singular;
 }
@@ -509,7 +511,6 @@ assert_variants_equal (GVariant *actual_variant,
       g_error ("variants compared non-equal, but their type-annotated "
                "stringified representations compared equal!");
     }
-
   g_variant_unref (actual_variant);
   g_variant_unref (expected_variant);
 }
@@ -519,7 +520,8 @@ assert_singular_matches_variant (GVariant *actual_variant,
                                  GVariant *expected_auxiliary_payload)
 {
   GVariant *expected_variant =
-    g_variant_new ("(@ayxmv)", make_event_id_variant (),
+    g_variant_new ("(@aysxmv)", make_event_id_variant (),
+                   emer_image_id_provider_get_os_version(),
                    OFFSET_TIMESTAMP, expected_auxiliary_payload);
   assert_variants_equal (actual_variant, expected_variant);
 }
@@ -661,7 +663,7 @@ get_events_from_request (GByteArray    *request,
   g_free (expected_request_path);
 
   const GVariantType *REQUEST_FORMAT =
-    G_VARIANT_TYPE ("(xxsa{ss}ya(ayxmv)a(uayxxmv)a(uaya(xmv)))");
+    G_VARIANT_TYPE ("(xxsa{ss}ya(aysxmv)a(uayxxmv)a(uaya(xmv)))");
   GVariant *request_variant =
     g_variant_new_from_bytes (REQUEST_FORMAT, request_bytes, FALSE);
 
@@ -679,7 +681,7 @@ get_events_from_request (GByteArray    *request,
   GVariant *site_id;
   guint8 boot_type;
   g_variant_get (native_endian_request,
-                 "(xx&s@a{ss}ya(ayxmv)a(uayxxmv)a(uaya(xmv)))",
+                 "(xx&s@a{ss}ya(aysxmv)a(uayxxmv)a(uaya(xmv)))",
                  &client_relative_time, &client_absolute_time, &image_version,
                  &site_id, &boot_type, singular_iterator, aggregate_iterator, sequence_iterator);
 
@@ -1390,7 +1392,7 @@ assert_corrupt_metadata_event_received (GByteArray *request,
   GVariant *event_id;
   GVariant *payload;
 
-  g_variant_get (singular, "(@ayxmv)", &event_id, NULL, &payload);
+  g_variant_get (singular, "(@aysxmv)", &event_id, NULL, NULL, &payload);
 
   GVariant *expected_event_id =
     make_variant_for_event_id (CACHE_METADATA_IS_CORRUPT_EVENT_ID);

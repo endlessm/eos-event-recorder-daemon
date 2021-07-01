@@ -78,7 +78,7 @@
 #define EVENT_VALUE_ARRAY_TYPE_STRING "a" EVENT_VALUE_TYPE_STRING
 #define EVENT_VALUE_ARRAY_TYPE G_VARIANT_TYPE (EVENT_VALUE_ARRAY_TYPE_STRING)
 
-#define SINGULAR_TYPE_STRING "(ayxmv)"
+#define SINGULAR_TYPE_STRING "(aysxmv)"
 #define AGGREGATE_TYPE_STRING "(uayxxmv)"
 #define SEQUENCE_TYPE_STRING "(uay" EVENT_VALUE_ARRAY_TYPE_STRING ")"
 
@@ -1680,6 +1680,7 @@ emer_daemon_record_singular_event (EmerDaemon *self,
                                    GVariant   *payload)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+  g_autofree gchar *os_version = emer_image_id_provider_get_os_version();
 
   if (!priv->recording_enabled)
     return;
@@ -1705,7 +1706,7 @@ emer_daemon_record_singular_event (EmerDaemon *self,
 
   GVariant *nullable_payload = get_nullable_payload (payload, has_payload);
   GVariant *singular =
-    g_variant_new ("(@ayxmv)", event_id, relative_timestamp,
+    g_variant_new ("(@aysxmv)", event_id, os_version, relative_timestamp,
                    nullable_payload);
   buffer_event (self, singular);
 }

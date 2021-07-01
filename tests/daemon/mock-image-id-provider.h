@@ -28,8 +28,11 @@
 G_BEGIN_DECLS
 
 #define IMAGE_VERSION	"eos-eos3.1-amd64-amd64.170115-071322.base"
+#define OS_VERSION	"3.1.0"
 
 gchar *emer_image_id_provider_get_version (void);
+
+gchar *emer_image_id_provider_get_os_version(void);
 
 G_END_DECLS
 

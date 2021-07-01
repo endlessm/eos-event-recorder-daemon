@@ -78,7 +78,7 @@
 #define EVENT_VALUE_ARRAY_TYPE_STRING "a" EVENT_VALUE_TYPE_STRING
 #define EVENT_VALUE_ARRAY_TYPE G_VARIANT_TYPE (EVENT_VALUE_ARRAY_TYPE_STRING)
 
-#define SINGULAR_TYPE_STRING "(uayxmv)"
+#define SINGULAR_TYPE_STRING "(ayxmv)"
 #define AGGREGATE_TYPE_STRING "(uayxxmv)"
 #define SEQUENCE_TYPE_STRING "(uay" EVENT_VALUE_ARRAY_TYPE_STRING ")"
 
@@ -702,7 +702,6 @@ report_invalid_data_in_cache_on_idle (CacheMetricEventData *callback_data)
     }
 
   emer_daemon_record_singular_event (self,
-                                     getuid (),
                                      event_id_variant,
                                      relative_time,
                                      payload != NULL,
@@ -1675,7 +1674,6 @@ emer_daemon_new_full (GRand                   *rand,
 
 void
 emer_daemon_record_singular_event (EmerDaemon *self,
-                                   guint32     user_id,
                                    GVariant   *event_id,
                                    gint64      relative_timestamp,
                                    gboolean    has_payload,
@@ -1707,7 +1705,7 @@ emer_daemon_record_singular_event (EmerDaemon *self,
 
   GVariant *nullable_payload = get_nullable_payload (payload, has_payload);
   GVariant *singular =
-    g_variant_new ("(u@ayxmv)", user_id, event_id, relative_timestamp,
+    g_variant_new ("(@ayxmv)", event_id, relative_timestamp,
                    nullable_payload);
   buffer_event (self, singular);
 }

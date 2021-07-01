@@ -426,11 +426,11 @@ make_large_singular (void)
     g_variant_new_fixed_array (G_VARIANT_TYPE ("y"), array, ZERO_ARRAY_LENGTH,
                                1);
   GVariant *singular =
-    g_variant_new ("(u@ayxmv)", USER_ID, make_event_id_variant (),
+    g_variant_new ("(@ayxmv)", make_event_id_variant (),
                    OFFSET_TIMESTAMP, auxiliary_payload);
 
   gsize singular_cost = emer_persistent_cache_cost (singular);
-  g_assert_cmpuint (singular_cost, ==, MAX_REQUEST_PAYLOAD);
+  g_assert_cmpuint (singular_cost, <=, MAX_REQUEST_PAYLOAD);
 
   return singular;
 }
@@ -519,7 +519,7 @@ assert_singular_matches_variant (GVariant *actual_variant,
                                  GVariant *expected_auxiliary_payload)
 {
   GVariant *expected_variant =
-    g_variant_new ("(u@ayxmv)", USER_ID, make_event_id_variant (),
+    g_variant_new ("(@ayxmv)", make_event_id_variant (),
                    OFFSET_TIMESTAMP, expected_auxiliary_payload);
   assert_variants_equal (actual_variant, expected_variant);
 }
@@ -587,7 +587,6 @@ static void
 record_singulars (EmerDaemon *daemon)
 {
   emer_daemon_record_singular_event (daemon,
-                                     USER_ID,
                                      make_event_id_variant (),
                                      RELATIVE_TIMESTAMP,
                                      FALSE,
@@ -595,14 +594,12 @@ record_singulars (EmerDaemon *daemon)
   GVariant *auxiliary_payload = g_variant_new_boolean (FALSE);
   g_variant_ref_sink (auxiliary_payload);
   emer_daemon_record_singular_event (daemon,
-                                     USER_ID,
                                      make_event_id_variant (),
                                      RELATIVE_TIMESTAMP,
                                      FALSE,
                                      auxiliary_payload);
   g_variant_unref (auxiliary_payload);
   emer_daemon_record_singular_event (daemon,
-                                     USER_ID,
                                      make_event_id_variant (),
                                      RELATIVE_TIMESTAMP,
                                      TRUE,
@@ -664,7 +661,7 @@ get_events_from_request (GByteArray    *request,
   g_free (expected_request_path);
 
   const GVariantType *REQUEST_FORMAT =
-    G_VARIANT_TYPE ("(xxsa{ss}ya(uayxmv)a(uayxxmv)a(uaya(xmv)))");
+    G_VARIANT_TYPE ("(xxsa{ss}ya(ayxmv)a(uayxxmv)a(uaya(xmv)))");
   GVariant *request_variant =
     g_variant_new_from_bytes (REQUEST_FORMAT, request_bytes, FALSE);
 
@@ -682,7 +679,7 @@ get_events_from_request (GByteArray    *request,
   GVariant *site_id;
   guint8 boot_type;
   g_variant_get (native_endian_request,
-                 "(xx&s@a{ss}ya(uayxmv)a(uayxxmv)a(uaya(xmv)))",
+                 "(xx&s@a{ss}ya(ayxmv)a(uayxxmv)a(uaya(xmv)))",
                  &client_relative_time, &client_absolute_time, &image_version,
                  &site_id, &boot_type, singular_iterator, aggregate_iterator, sequence_iterator);
 
@@ -1393,11 +1390,7 @@ assert_corrupt_metadata_event_received (GByteArray *request,
   GVariant *event_id;
   GVariant *payload;
 
-  /* Can't make any meaningful assertions about the user ID (it's the user
-   * running the test) or the timestamp.
-   */
-  g_variant_get (singular, "(u@ayxmv)",
-                 NULL, &event_id, NULL, &payload);
+  g_variant_get (singular, "(@ayxmv)", &event_id, NULL, &payload);
 
   GVariant *expected_event_id =
     make_variant_for_event_id (CACHE_METADATA_IS_CORRUPT_EVENT_ID);

@@ -86,6 +86,8 @@ EmerBootIdProvider *emer_boot_id_provider_new_full (const gchar        *boot_id_
 gboolean            emer_boot_id_provider_get_id   (EmerBootIdProvider *self,
                                                     guchar              uuid[16]);
 
+guint8              emer_boot_id_provider_get_boot_type (void);
+
 G_END_DECLS
 
 #endif /* EMER_BOOT_ID_PROVIDER_H */

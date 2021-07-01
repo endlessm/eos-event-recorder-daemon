@@ -280,3 +280,48 @@ emer_boot_id_provider_get_id (EmerBootIdProvider *self,
   id_is_valid = TRUE;
   return TRUE;
 }
+
+#define KERNEL_CMDLINE_PATH	"/proc/cmdline"
+#define LIVE_BOOT_FLAG_REGEX	"\\bendless\\.live_boot\\b"
+#define DUAL_BOOT_FLAG_REGEX	"\\bendless\\.image\\.device\\b"
+
+#define NORMAL_BOOT	0x0
+#define DUAL_BOOT	0x1
+#define LIVE_BOOT	0x2
+
+/*
+ * emer_boot_id_provider_get_boot_type:
+ *
+ * Get boot type by checking kernel's boot command line.
+ *
+ * Returns: a number 0x0 for normal boot, 0x1 for dual boot, 0x2 for live boot.
+ */
+guint8
+emer_boot_id_provider_get_boot_type (void)
+{
+  g_autofree gchar *cmdline = NULL;
+  g_autoptr(GError) error = NULL;
+  static guint8 boot_type = NORMAL_BOOT;
+  static gboolean boot_type_is_cached = FALSE;
+
+  if (boot_type_is_cached)
+    return boot_type;
+
+  /* Endless OS places the boot type in kernel's boot command line */
+  if (!g_file_get_contents (KERNEL_CMDLINE_PATH, &cmdline, NULL, &error))
+    {
+      g_warning ("Error reading " KERNEL_CMDLINE_PATH ": %s", error->message);
+    }
+  else if (g_regex_match_simple (DUAL_BOOT_FLAG_REGEX, cmdline, 0, 0))
+    {
+      boot_type = DUAL_BOOT;
+    }
+  else if (g_regex_match_simple (LIVE_BOOT_FLAG_REGEX, cmdline, 0, 0))
+    {
+      boot_type = LIVE_BOOT;
+    }
+
+  boot_type_is_cached = TRUE;
+
+  return boot_type;
+}

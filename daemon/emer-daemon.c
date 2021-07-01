@@ -94,10 +94,10 @@
 #define AGGREGATE_ARRAY_TYPE G_VARIANT_TYPE (AGGREGATE_ARRAY_TYPE_STRING)
 #define SEQUENCE_ARRAY_TYPE G_VARIANT_TYPE (SEQUENCE_ARRAY_TYPE_STRING)
 
-#define REQUEST_TYPE_STRING "(xxs@a{ss}" SINGULAR_ARRAY_TYPE_STRING \
+#define REQUEST_TYPE_STRING "(xxs@a{ss}y" SINGULAR_ARRAY_TYPE_STRING \
   AGGREGATE_ARRAY_TYPE_STRING SEQUENCE_ARRAY_TYPE_STRING ")"
 
-#define RETRY_TYPE_STRING "(xxs@a{ss}@" SINGULAR_ARRAY_TYPE_STRING "@" \
+#define RETRY_TYPE_STRING "(xxs@a{ss}y@" SINGULAR_ARRAY_TYPE_STRING "@" \
   AGGREGATE_ARRAY_TYPE_STRING "@" SEQUENCE_ARRAY_TYPE_STRING ")"
 
 /* This limit only applies to timer-driven uploads, not explicitly
@@ -432,9 +432,10 @@ get_updated_request_body (EmerDaemon *self,
 {
   g_autofree gchar *image_version;
   GVariant *site_id, *singulars, *aggregates, *sequences;
+  guint8 boot_type;
   g_variant_get (request_body, RETRY_TYPE_STRING,
                  NULL /* relative time */, NULL /* absolute time */,
-                 &image_version, &site_id, &singulars, &aggregates, &sequences);
+                 &image_version, &site_id, &boot_type, &singulars, &aggregates, &sequences);
 
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.
@@ -451,7 +452,8 @@ get_updated_request_body (EmerDaemon *self,
   return g_variant_new (RETRY_TYPE_STRING,
                         little_endian_relative_timestamp,
                         little_endian_absolute_timestamp,
-                        image_version, site_id, singulars, aggregates, sequences);
+                        image_version, site_id, boot_type,
+                        singulars, aggregates, sequences);
 }
 
 static void
@@ -849,6 +851,7 @@ create_request_body (EmerDaemon *self,
 
   g_autofree gchar *image_version = emer_image_id_provider_get_version ();
   GVariant *site_id = emer_site_id_provider_get_id ();
+  guint8 boot_type = emer_boot_id_provider_get_boot_type ();
 
   gsize num_bytes_read;
   gboolean add_from_buffer =
@@ -876,7 +879,8 @@ create_request_body (EmerDaemon *self,
 
   GVariant *request_body =
     g_variant_new (REQUEST_TYPE_STRING, relative_timestamp, absolute_timestamp,
-                   image_version, site_id, &singulars, &aggregates, &sequences);
+                   image_version, site_id, boot_type, &singulars, &aggregates,
+                   &sequences);
 
   g_variant_ref_sink (request_body);
   GVariant *little_endian_request_body =

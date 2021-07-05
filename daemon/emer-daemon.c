@@ -92,10 +92,10 @@
 #define AGGREGATE_ARRAY_TYPE G_VARIANT_TYPE (AGGREGATE_ARRAY_TYPE_STRING)
 #define SEQUENCE_ARRAY_TYPE G_VARIANT_TYPE (SEQUENCE_ARRAY_TYPE_STRING)
 
-#define REQUEST_TYPE_STRING "(ixxay" SINGULAR_ARRAY_TYPE_STRING \
+#define REQUEST_TYPE_STRING "(xx" SINGULAR_ARRAY_TYPE_STRING \
   AGGREGATE_ARRAY_TYPE_STRING SEQUENCE_ARRAY_TYPE_STRING ")"
 
-#define RETRY_TYPE_STRING "(ixx@ay@" SINGULAR_ARRAY_TYPE_STRING "@" \
+#define RETRY_TYPE_STRING "(xx@" SINGULAR_ARRAY_TYPE_STRING "@" \
   AGGREGATE_ARRAY_TYPE_STRING "@" SEQUENCE_ARRAY_TYPE_STRING ")"
 
 /* This limit only applies to timer-driven uploads, not explicitly
@@ -428,11 +428,10 @@ get_updated_request_body (EmerDaemon *self,
                           GVariant   *request_body,
                           GError    **error)
 {
-  gint32 send_number;
-  GVariant *machine_id, *singulars, *aggregates, *sequences;
-  g_variant_get (request_body, RETRY_TYPE_STRING, &send_number,
+  GVariant *singulars, *aggregates, *sequences;
+  g_variant_get (request_body, RETRY_TYPE_STRING,
                  NULL /* relative time */, NULL /* absolute time */,
-                 &machine_id, &singulars, &aggregates, &sequences);
+                 &singulars, &aggregates, &sequences);
 
   // Wait until the last possible moment to get the time of the network request
   // so that it can be used to measure network latency.
@@ -446,10 +445,10 @@ get_updated_request_body (EmerDaemon *self,
   gint64 little_endian_absolute_timestamp =
     swap_bytes_64_if_big_endian (absolute_timestamp);
 
-  return g_variant_new (RETRY_TYPE_STRING, send_number,
+  return g_variant_new (RETRY_TYPE_STRING,
                         little_endian_relative_timestamp,
                         little_endian_absolute_timestamp,
-                        machine_id, singulars, aggregates, sequences);
+                        singulars, aggregates, sequences);
 }
 
 static void
@@ -840,26 +839,6 @@ create_request_body (EmerDaemon *self,
                      gsize      *num_buffer_events,
                      GError    **error)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  uuid_t machine_id;
-  gboolean read_id = emer_machine_id_provider_get_id (priv->machine_id_provider,
-                                                      NULL,
-                                                      machine_id);
-  if (!read_id)
-    {
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
-                   "Could not read machine ID");
-      return NULL;
-    }
-
-  GVariantBuilder machine_id_builder;
-  get_uuid_builder (machine_id, &machine_id_builder);
-
-  gint send_number =
-    emer_network_send_provider_get_send_number (priv->network_send_provider);
-  emer_network_send_provider_increment_send_number (priv->network_send_provider);
-
   GVariantBuilder singulars, aggregates, sequences;
   g_variant_builder_init (&singulars, SINGULAR_ARRAY_TYPE);
   g_variant_builder_init (&aggregates, AGGREGATE_ARRAY_TYPE);
@@ -890,9 +869,8 @@ create_request_body (EmerDaemon *self,
     return NULL;
 
   GVariant *request_body =
-    g_variant_new (REQUEST_TYPE_STRING, send_number,
-                   relative_timestamp, absolute_timestamp,
-                   &machine_id_builder, &singulars, &aggregates, &sequences);
+    g_variant_new (REQUEST_TYPE_STRING, relative_timestamp, absolute_timestamp,
+                   &singulars, &aggregates, &sequences);
 
   g_variant_ref_sink (request_body);
   GVariant *little_endian_request_body =

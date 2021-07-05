@@ -514,23 +514,6 @@ assert_variants_equal (GVariant *actual_variant,
 }
 
 static void
-assert_machine_id_matches (GVariant              *machine_id_variant,
-                           EmerMachineIdProvider *machine_id_provider)
-{
-  gsize actual_length;
-  const guchar *actual_machine_id =
-    g_variant_get_fixed_array (machine_id_variant, &actual_length,
-                               sizeof (guchar));
-  g_assert_cmpuint (actual_length, ==, UUID_LENGTH);
-
-  uuid_t expected_machine_id;
-  emer_machine_id_provider_get_id (machine_id_provider, NULL, expected_machine_id);
-
-  gint compare_result = uuid_compare (actual_machine_id, expected_machine_id);
-  g_assert_cmpint (compare_result, ==, 0);
-}
-
-static void
 assert_singular_matches_variant (GVariant *actual_variant,
                                  GVariant *expected_auxiliary_payload)
 {
@@ -680,7 +663,7 @@ get_events_from_request (GByteArray    *request,
   g_free (expected_request_path);
 
   const GVariantType *REQUEST_FORMAT =
-    G_VARIANT_TYPE ("(ixxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))");
+    G_VARIANT_TYPE ("(xxa(uayxmv)a(uayxxmv)a(uaya(xmv)))");
   GVariant *request_variant =
     g_variant_new_from_bytes (REQUEST_FORMAT, request_bytes, FALSE);
 
@@ -693,29 +676,17 @@ get_events_from_request (GByteArray    *request,
     swap_bytes_if_big_endian (request_variant);
   g_variant_unref (request_variant);
 
-  gint32 actual_network_send_number;
   gint64 client_relative_time, client_absolute_time;
-  GVariant *machine_id;
   g_variant_get (native_endian_request,
-                 "(ixx@aya(uayxmv)a(uayxxmv)a(uaya(xmv)))",
-                 &actual_network_send_number, &client_relative_time,
-                 &client_absolute_time, &machine_id, singular_iterator,
-                 aggregate_iterator, sequence_iterator);
-
-  gint curr_network_send_number =
-    emer_network_send_provider_get_send_number (fixture->mock_network_send_provider);
-  gint expected_network_send_number = curr_network_send_number - 1;
-  g_assert_cmpint (actual_network_send_number, ==,
-                   expected_network_send_number);
+                 "(xxa(uayxmv)a(uayxxmv)a(uaya(xmv)))",
+                 &client_relative_time, &client_absolute_time,
+		 singular_iterator, aggregate_iterator, sequence_iterator);
 
   g_assert_cmpint (client_relative_time, >=, fixture->relative_time);
   g_assert_cmpint (client_relative_time, <=, curr_relative_time);
 
   g_assert_cmpint (client_absolute_time, >=, fixture->absolute_time);
   g_assert_cmpint (client_absolute_time, <=, curr_absolute_time);
-
-  assert_machine_id_matches (machine_id, fixture->mock_machine_id_provider);
-  g_variant_unref (machine_id);
 
   g_variant_unref (native_endian_request);
 }

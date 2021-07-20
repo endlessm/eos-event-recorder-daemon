@@ -80,7 +80,7 @@ G_DEFINE_TYPE_WITH_CODE (EmerPersistentCache, emer_persistent_cache, G_TYPE_OBJE
  * they will be removed, and the file in which the version number is stored
  * will be updated.
  */
-#define CURRENT_CACHE_VERSION 4
+#define CURRENT_CACHE_VERSION 5
 
 /*
  * The expected size in bytes of the file located at SYSTEM_BOOT_ID_FILE.

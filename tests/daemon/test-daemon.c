@@ -42,6 +42,7 @@
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
 #include "emer-types.h"
+#include "mock-image-id-provider.h"
 #include "mock-permissions-provider.h"
 #include "mock-persistent-cache.h"
 #include "shared/metrics-util.h"
@@ -58,9 +59,10 @@
 
 #define MAX_REQUEST_PAYLOAD 100000
 
-/* The non-array portion of the singular in make_large_singular costs 40 bytes.
+/* The non-array portion of the singular in make_large_singular costs 60 bytes,
+ * including some for the OS Version string.
  */
-#define ZERO_ARRAY_LENGTH (MAX_REQUEST_PAYLOAD - 40)
+#define ZERO_ARRAY_LENGTH (MAX_REQUEST_PAYLOAD - 44)
 
 #define TIMEOUT_SEC 5
 
@@ -425,7 +427,8 @@ make_large_singular (void)
     g_variant_new_fixed_array (G_VARIANT_TYPE ("y"), array, ZERO_ARRAY_LENGTH,
                                1);
   GVariant *singular =
-    g_variant_new ("(u@ayxmv)", USER_ID, make_event_id_variant (),
+    g_variant_new ("(@aysxmv)", make_event_id_variant (),
+                   emer_image_id_provider_get_os_version(),
                    OFFSET_TIMESTAMP, auxiliary_payload);
 
   gsize singular_cost = emer_persistent_cache_cost (singular);
@@ -508,26 +511,8 @@ assert_variants_equal (GVariant *actual_variant,
       g_error ("variants compared non-equal, but their type-annotated "
                "stringified representations compared equal!");
     }
-
   g_variant_unref (actual_variant);
   g_variant_unref (expected_variant);
-}
-
-static void
-assert_machine_id_matches (GVariant              *machine_id_variant,
-                           EmerMachineIdProvider *machine_id_provider)
-{
-  gsize actual_length;
-  const guchar *actual_machine_id =
-    g_variant_get_fixed_array (machine_id_variant, &actual_length,
-                               sizeof (guchar));
-  g_assert_cmpuint (actual_length, ==, UUID_LENGTH);
-
-  uuid_t expected_machine_id;
-  emer_machine_id_provider_get_id (machine_id_provider, NULL, expected_machine_id);
-
-  gint compare_result = uuid_compare (actual_machine_id, expected_machine_id);
-  g_assert_cmpint (compare_result, ==, 0);
 }
 
 static void
@@ -535,7 +520,8 @@ assert_singular_matches_variant (GVariant *actual_variant,
                                  GVariant *expected_auxiliary_payload)
 {
   GVariant *expected_variant =
-    g_variant_new ("(u@ayxmv)", USER_ID, make_event_id_variant (),
+    g_variant_new ("(@aysxmv)", make_event_id_variant (),
+                   emer_image_id_provider_get_os_version(),
                    OFFSET_TIMESTAMP, expected_auxiliary_payload);
   assert_variants_equal (actual_variant, expected_variant);
 }
@@ -544,26 +530,8 @@ static void
 assert_aggregate_matches_variant (GVariant *actual_variant,
                                   GVariant *expected_auxiliary_payload)
 {
-  GVariant *expected_variant =
-    g_variant_new ("(u@ayxxmv)", USER_ID, make_event_id_variant (),
-                   NUM_EVENTS, OFFSET_TIMESTAMP, expected_auxiliary_payload);
-  assert_variants_equal (actual_variant, expected_variant);
-}
-
-static void
-assert_sequence_matches_variant (GVariant *actual_variant)
-{
-  GVariantBuilder event_values_builder;
-  g_variant_builder_init (&event_values_builder, G_VARIANT_TYPE ("a(xmv)"));
-
-  g_variant_builder_add (&event_values_builder, "(xmv)",
-                         OFFSET_TIMESTAMP, NULL);
-  g_variant_builder_add (&event_values_builder, "(xmv)",
-                         OFFSET_TIMESTAMP, g_variant_new_boolean (TRUE));
-  GVariant *expected_variant =
-    g_variant_new ("(u@aya(xmv))", USER_ID, make_event_id_variant (),
-                   &event_values_builder);
-  assert_variants_equal (actual_variant, expected_variant);
+  /* Not defined yet */
+  g_assert_null (NULL);
 }
 
 static void
@@ -583,13 +551,6 @@ assert_aggregate_matches_next_value (GVariantIter *aggregate_iterator,
 }
 
 static void
-assert_sequence_matches_next_value (GVariantIter *sequence_iterator)
-{
-  GVariant *sequence = g_variant_iter_next_value (sequence_iterator);
-  assert_sequence_matches_variant (sequence);
-}
-
-static void
 assert_singulars_match (GVariant **variants,
                         gsize      num_variants)
 {
@@ -603,7 +564,6 @@ static void
 record_singulars (EmerDaemon *daemon)
 {
   emer_daemon_record_singular_event (daemon,
-                                     USER_ID,
                                      make_event_id_variant (),
                                      RELATIVE_TIMESTAMP,
                                      FALSE,
@@ -611,14 +571,12 @@ record_singulars (EmerDaemon *daemon)
   GVariant *auxiliary_payload = g_variant_new_boolean (FALSE);
   g_variant_ref_sink (auxiliary_payload);
   emer_daemon_record_singular_event (daemon,
-                                     USER_ID,
                                      make_event_id_variant (),
                                      RELATIVE_TIMESTAMP,
                                      FALSE,
                                      auxiliary_payload);
   g_variant_unref (auxiliary_payload);
   emer_daemon_record_singular_event (daemon,
-                                     USER_ID,
                                      make_event_id_variant (),
                                      RELATIVE_TIMESTAMP,
                                      TRUE,
@@ -657,8 +615,7 @@ static void
 get_events_from_request (GByteArray    *request,
                          Fixture       *fixture,
                          GVariantIter **singular_iterator,
-                         GVariantIter **aggregate_iterator,
-                         GVariantIter **sequence_iterator)
+                         GVariantIter **aggregate_iterator)
 {
   gint64 curr_relative_time;
   gboolean get_succeeded =
@@ -674,13 +631,13 @@ get_events_from_request (GByteArray    *request,
 
   gchar *checksum =
     g_compute_checksum_for_bytes (G_CHECKSUM_SHA512, request_bytes);
-  gchar *expected_request_path = g_build_filename ("/2/", checksum, NULL);
+  gchar *expected_request_path = g_build_filename ("/3/", checksum, NULL);
   g_free (checksum);
   g_assert_cmpstr (fixture->request_path, ==, expected_request_path);
   g_free (expected_request_path);
 
   const GVariantType *REQUEST_FORMAT =
-    G_VARIANT_TYPE ("(ixxaya(uayxmv)a(uayxxmv)a(uaya(xmv)))");
+    G_VARIANT_TYPE ("(xxsa{ss}ya(aysxmv)a(ayssxmv))");
   GVariant *request_variant =
     g_variant_new_from_bytes (REQUEST_FORMAT, request_bytes, FALSE);
 
@@ -693,20 +650,14 @@ get_events_from_request (GByteArray    *request,
     swap_bytes_if_big_endian (request_variant);
   g_variant_unref (request_variant);
 
-  gint32 actual_network_send_number;
   gint64 client_relative_time, client_absolute_time;
-  GVariant *machine_id;
+  const gchar *image_version;
+  GVariant *site_id;
+  guint8 boot_type;
   g_variant_get (native_endian_request,
-                 "(ixx@aya(uayxmv)a(uayxxmv)a(uaya(xmv)))",
-                 &actual_network_send_number, &client_relative_time,
-                 &client_absolute_time, &machine_id, singular_iterator,
-                 aggregate_iterator, sequence_iterator);
-
-  gint curr_network_send_number =
-    emer_network_send_provider_get_send_number (fixture->mock_network_send_provider);
-  gint expected_network_send_number = curr_network_send_number - 1;
-  g_assert_cmpint (actual_network_send_number, ==,
-                   expected_network_send_number);
+                 "(xx&s@a{ss}ya(aysxmv)a(ayssxmv))",
+                 &client_relative_time, &client_absolute_time, &image_version,
+                 &site_id, &boot_type, singular_iterator, aggregate_iterator);
 
   g_assert_cmpint (client_relative_time, >=, fixture->relative_time);
   g_assert_cmpint (client_relative_time, <=, curr_relative_time);
@@ -714,8 +665,15 @@ get_events_from_request (GByteArray    *request,
   g_assert_cmpint (client_absolute_time, >=, fixture->absolute_time);
   g_assert_cmpint (client_absolute_time, <=, curr_absolute_time);
 
-  assert_machine_id_matches (machine_id, fixture->mock_machine_id_provider);
-  g_variant_unref (machine_id);
+  g_assert_cmpstr (image_version, ==, IMAGE_VERSION);
+
+  const gchar *site_value;
+  g_assert_cmpint (g_variant_n_children (site_id), ==, 2);
+  g_variant_lookup (site_id, "id", "&s", &site_value);
+  g_assert_cmpstr (site_value, ==, "myid");
+  g_variant_lookup (site_id, "country", "&s", &site_value);
+  g_assert_cmpstr (site_value, ==, "Earth");
+  g_variant_unref (site_id);
 
   g_variant_unref (native_endian_request);
 }
@@ -724,27 +682,24 @@ static void
 assert_no_events_received (GByteArray *request,
                            Fixture    *fixture)
 {
-  GVariantIter *singular_iterator, *aggregate_iterator, *sequence_iterator;
+  GVariantIter *singular_iterator, *aggregate_iterator;
   get_events_from_request (request, fixture, &singular_iterator,
-                           &aggregate_iterator, &sequence_iterator);
+                           &aggregate_iterator);
 
   g_assert_cmpuint (g_variant_iter_n_children (singular_iterator), ==, 0u);
   g_variant_iter_free (singular_iterator);
 
   g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 0u);
   g_variant_iter_free (aggregate_iterator);
-
-  g_assert_cmpuint (g_variant_iter_n_children (sequence_iterator), ==, 0u);
-  g_variant_iter_free (sequence_iterator);
 }
 
 static void
 assert_singulars_received (GByteArray *request,
                            Fixture    *fixture)
 {
-  GVariantIter *singular_iterator, *aggregate_iterator, *sequence_iterator;
+  GVariantIter *singular_iterator, *aggregate_iterator;
   get_events_from_request (request, fixture, &singular_iterator,
-                           &aggregate_iterator, &sequence_iterator);
+                           &aggregate_iterator);
 
   g_assert_cmpuint (g_variant_iter_n_children (singular_iterator), ==, 3u);
   assert_singular_matches_next_value (singular_iterator,
@@ -757,18 +712,15 @@ assert_singulars_received (GByteArray *request,
 
   g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 0u);
   g_variant_iter_free (aggregate_iterator);
-
-  g_assert_cmpuint (g_variant_iter_n_children (sequence_iterator), ==, 0u);
-  g_variant_iter_free (sequence_iterator);
 }
 
 static void
 assert_large_singular_received (GByteArray *request,
                                 Fixture    *fixture)
 {
-  GVariantIter *singular_iterator, *aggregate_iterator, *sequence_iterator;
+  GVariantIter *singular_iterator, *aggregate_iterator;
   get_events_from_request (request, fixture, &singular_iterator,
-                           &aggregate_iterator, &sequence_iterator);
+                           &aggregate_iterator);
 
   g_assert_cmpuint (g_variant_iter_n_children (singular_iterator), ==, 1u);
   GVariant *actual_singular = g_variant_iter_next_value (singular_iterator);
@@ -777,50 +729,46 @@ assert_large_singular_received (GByteArray *request,
 
   g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 0u);
   g_variant_iter_free (aggregate_iterator);
-
-  g_assert_cmpuint (g_variant_iter_n_children (sequence_iterator), ==, 0u);
-  g_variant_iter_free (sequence_iterator);
 }
 
 static void
 assert_aggregates_received (GByteArray *request,
                             Fixture    *fixture)
 {
-  GVariantIter *singular_iterator, *aggregate_iterator, *sequence_iterator;
+  GVariantIter *singular_iterator, *aggregate_iterator;
   get_events_from_request (request, fixture, &singular_iterator,
-                           &aggregate_iterator, &sequence_iterator);
+                           &aggregate_iterator);
 
   g_assert_cmpuint (g_variant_iter_n_children (singular_iterator), ==, 0u);
   g_variant_iter_free (singular_iterator);
 
-  g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 2u);
-  assert_aggregate_matches_next_value (aggregate_iterator,
-                                       NULL /* auxiliary_payload */);
-  assert_aggregate_matches_next_value (aggregate_iterator,
+  /* The aggregate event has not defined yet. So, the array is empty right now.
+   * Will restore/re-define the test plan here in the future.
+   */
+  g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 0u);
+  if (g_variant_iter_n_children (aggregate_iterator) > 0)
+    {
+      assert_aggregate_matches_next_value (aggregate_iterator,
+                                           NULL /* auxiliary_payload */);
+      assert_aggregate_matches_next_value (aggregate_iterator,
                                        make_auxiliary_payload ());
+    }
   g_variant_iter_free (aggregate_iterator);
-
-  g_assert_cmpuint (g_variant_iter_n_children (sequence_iterator), ==, 0u);
-  g_variant_iter_free (sequence_iterator);
 }
 
 static void
 assert_sequence_received (GByteArray *request,
                           Fixture    *fixture)
 {
-  GVariantIter *singular_iterator, *aggregate_iterator, *sequence_iterator;
+  GVariantIter *singular_iterator, *aggregate_iterator;
   get_events_from_request (request, fixture, &singular_iterator,
-                           &aggregate_iterator, &sequence_iterator);
+                           &aggregate_iterator);
 
   g_assert_cmpuint (g_variant_iter_n_children (singular_iterator), ==, 0u);
   g_variant_iter_free (singular_iterator);
 
   g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 0u);
   g_variant_iter_free (aggregate_iterator);
-
-  g_assert_cmpuint (g_variant_iter_n_children (sequence_iterator), ==, 1u);
-  assert_sequence_matches_next_value (sequence_iterator);
-  g_variant_iter_free (sequence_iterator);
 }
 
 static void
@@ -1398,9 +1346,9 @@ static void
 assert_corrupt_metadata_event_received (GByteArray *request,
                                         Fixture    *fixture)
 {
-  GVariantIter *singular_iterator, *aggregate_iterator, *sequence_iterator;
+  GVariantIter *singular_iterator, *aggregate_iterator;
   get_events_from_request (request, fixture, &singular_iterator,
-                           &aggregate_iterator, &sequence_iterator);
+                           &aggregate_iterator);
 
   g_assert_cmpuint (g_variant_iter_n_children (singular_iterator), ==, 1u);
 
@@ -1408,11 +1356,7 @@ assert_corrupt_metadata_event_received (GByteArray *request,
   GVariant *event_id;
   GVariant *payload;
 
-  /* Can't make any meaningful assertions about the user ID (it's the user
-   * running the test) or the timestamp.
-   */
-  g_variant_get (singular, "(u@ayxmv)",
-                 NULL, &event_id, NULL, &payload);
+  g_variant_get (singular, "(@aysxmv)", &event_id, NULL, NULL, &payload);
 
   GVariant *expected_event_id =
     make_variant_for_event_id (CACHE_METADATA_IS_CORRUPT_EVENT_ID);
@@ -1424,9 +1368,6 @@ assert_corrupt_metadata_event_received (GByteArray *request,
 
   g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 0u);
   g_variant_iter_free (aggregate_iterator);
-
-  g_assert_cmpuint (g_variant_iter_n_children (sequence_iterator), ==, 0u);
-  g_variant_iter_free (sequence_iterator);
 }
 
 /* If the first attempt to create the EmerPersistentCache fails with a

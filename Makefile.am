@@ -86,7 +86,7 @@ dist_policy_DATA =
 policyrulesdir = $(datadir)/polkit-1/rules.d
 dist_policyrules_DATA =
 
-persistentcachedir=$(localstatedir)/cache/metrics/
+persistentcachedir=$(localstatedir)/cache/metrics/v3
 configdir=$(sysconfdir)/metrics/
 permissions_file=$(configdir)eos-metrics-permissions.conf
 

@@ -1339,37 +1339,6 @@ test_daemon_limits_network_upload_size (Fixture      *fixture,
   wait_for_upload_to_finish (fixture);
 }
 
-/* Asserts that the mock server received a single
- * CACHE_METADATA_IS_CORRUPT_EVENT_ID event.
- */
-static void
-assert_corrupt_metadata_event_received (GByteArray *request,
-                                        Fixture    *fixture)
-{
-  GVariantIter *singular_iterator, *aggregate_iterator;
-  get_events_from_request (request, fixture, &singular_iterator,
-                           &aggregate_iterator);
-
-  g_assert_cmpuint (g_variant_iter_n_children (singular_iterator), ==, 1u);
-
-  GVariant *singular = g_variant_iter_next_value (singular_iterator);
-  GVariant *event_id;
-  GVariant *payload;
-
-  g_variant_get (singular, "(@aysxmv)", &event_id, NULL, NULL, &payload);
-
-  GVariant *expected_event_id =
-    make_variant_for_event_id (CACHE_METADATA_IS_CORRUPT_EVENT_ID);
-  assert_variants_equal (event_id, expected_event_id);
-
-  g_assert_null (payload);
-
-  g_variant_iter_free (singular_iterator);
-
-  g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 0u);
-  g_variant_iter_free (aggregate_iterator);
-}
-
 /* If the first attempt to create the EmerPersistentCache fails with a
  * G_KEY_FILE_ERROR, the daemon should attempt to reset the cache, and log an
  * event indicating that the cache metadata was corrupt.
@@ -1390,10 +1359,6 @@ test_daemon_reinitializes_cache_on_key_file_error (Fixture      *fixture,
                 NULL);
 
   g_assert_true (mock_persistent_cache_get_reinitialize (fixture->mock_persistent_cache));
-
-  read_network_request (fixture,
-                        (ProcessBytesSourceFunc) assert_corrupt_metadata_event_received);
-  wait_for_upload_to_finish (fixture);
 
   g_test_assert_expected_messages ();
 }

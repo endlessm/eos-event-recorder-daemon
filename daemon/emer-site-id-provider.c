@@ -34,15 +34,23 @@
 #define LOCATION_CONF_FILE SYSCONFDIR "/metrics/location.conf"
 #define LOCATION_LABEL_GROUP "Label"
 
-static GVariant *
-emer_read_location_label (GKeyFile *kf)
+static void
+emer_read_location_label (GVariantBuilder *builder)
 {
-  g_auto (GStrv) keys = g_key_file_get_keys (kf, LOCATION_LABEL_GROUP, NULL, NULL);
-  if (keys == NULL || *keys == NULL)
-    return NULL;
+  g_autoptr(GKeyFile) kf = g_key_file_new ();
+  g_autoptr(GError) error = NULL;
 
-  g_auto (GVariantBuilder) builder = G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE_ARRAY);
-  gboolean seen_nonempty_value = FALSE;
+  if (!g_key_file_load_from_file (kf, LOCATION_CONF_FILE, G_KEY_FILE_NONE, &error))
+    {
+      if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
+        g_warning ("Failed to load " LOCATION_CONF_FILE ": %s", error->message);
+      return;
+    }
+
+  g_auto(GStrv) keys = g_key_file_get_keys (kf, LOCATION_LABEL_GROUP, NULL, NULL);
+  if (keys == NULL || *keys == NULL)
+    return;
+
   for (GStrv cur = keys; *cur != NULL; cur++)
     {
       const gchar *key = *cur;
@@ -51,14 +59,8 @@ emer_read_location_label (GKeyFile *kf)
       if (val == NULL || *val == '\0')
         continue;
 
-      seen_nonempty_value = TRUE;
-      g_variant_builder_add (&builder, "{ss}", key, val);
+      g_variant_builder_add (builder, "{ss}", key, val);
     }
-
-  if (!seen_nonempty_value)
-    return NULL;
-
-  return g_variant_builder_end (&builder);
 }
 
 /*
@@ -72,15 +74,9 @@ emer_read_location_label (GKeyFile *kf)
 GVariant *
 emer_site_id_provider_get_id (void)
 {
-  g_autoptr (GError) err = NULL;
-  g_autoptr (GKeyFile) kf = g_key_file_new ();
+  g_auto(GVariantBuilder) builder = G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE("a{ss}"));
 
-  if (!g_key_file_load_from_file (kf, LOCATION_CONF_FILE, G_KEY_FILE_NONE, &err))
-    {
-      g_warning ("Failed to load " LOCATION_CONF_FILE ", unable to record location label: %s",
-                 err->message);
-      return NULL;
-    }
+  emer_read_location_label (&builder);
 
-  return emer_read_location_label(kf);
+  return g_variant_builder_end (&builder);
 }

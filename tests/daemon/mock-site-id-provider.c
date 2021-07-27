@@ -23,19 +23,13 @@
 #include "emer-site-id-provider.h"
 #include <glib.h>
 
-static GVariant *
-emer_read_location_label (void)
+GVariant *
+emer_site_id_provider_get_id (void)
 {
-  g_auto (GVariantBuilder) builder = G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE_ARRAY);
+  g_auto(GVariantBuilder) builder = G_VARIANT_BUILDER_INIT (G_VARIANT_TYPE("a{ss}"));
 
   g_variant_builder_add (&builder, "{ss}", "id", "myid");
   g_variant_builder_add (&builder, "{ss}", "country", "Earth");
 
   return g_variant_builder_end (&builder);
-}
-
-GVariant *
-emer_site_id_provider_get_id (void)
-{
-  return emer_read_location_label();
 }

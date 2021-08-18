@@ -1387,63 +1387,6 @@ test_daemon_crashes_on_non_key_file_error (Fixture      *fixture,
   g_test_trap_assert_stderr ("*oh no*");
 }
 
-static void
-test_daemon_refresh_and_reload_machine_id (Fixture       *fixture,
-                                           gconstpointer  unused)
-{
-  g_autoptr(GError) error = NULL;
-  uuid_t initial_machine_id;
-  uuid_t new_machine_id;
-
-  g_assert_no_error (error);
-
-  /* Get the initial machine-id for comparing against later */
-  emer_machine_id_provider_get_id (fixture->mock_machine_id_provider,
-                                   NULL,
-                                   initial_machine_id);
-
-  /* Overwrite machine-id */
-  emer_daemon_reset_tracking_id (fixture->test_object, &error);
-  g_assert_no_error (error);
-
-  /* New machine id should now be different */
-  emer_machine_id_provider_get_id (fixture->mock_machine_id_provider,
-                                   NULL,
-                                   new_machine_id);
-
-  g_assert (uuid_compare (initial_machine_id, new_machine_id) != 0);
-
-  /* Send some metrics using the newly created daemon. We'll assert
-   * one we receive the metrics that the received metric has the same
-   * machine-id as the one provided by the machine-id provider */
-  record_singulars (fixture->test_object);
-  read_network_request (fixture,
-                        (ProcessBytesSourceFunc) assert_singulars_received);
-  wait_for_upload_to_finish (fixture);
-}
-
-static void
-test_daemon_reload_machine_id_reset_events (Fixture       *fixture,
-                                            gconstpointer  unused)
-{
-  g_autoptr(GError) error = NULL;
-
-  g_assert_no_error (error);
-
-  /* Record a sequence. We will assert later that this did not get received. */
-  record_singulars (fixture->test_object);
-
-  /* Overwrite machine-id */
-  emer_daemon_reset_tracking_id (fixture->test_object, &error);
-  g_assert_no_error (error);
-
-  /* Read network requests, but assert that no events were received, since
-   * the persistent caches and memory buffers should have been emptied. */
-  read_network_request (fixture,
-                        (ProcessBytesSourceFunc) assert_no_events_received);
-  wait_for_upload_to_finish (fixture);
-}
-
 gint
 main (gint                argc,
       const gchar * const argv[])
@@ -1489,10 +1432,6 @@ main (gint                argc,
                    test_daemon_flushes_to_persistent_cache_on_finalize);
   ADD_DAEMON_TEST ("/daemon/limits-network-upload-size",
                    test_daemon_limits_network_upload_size);
-  ADD_DAEMON_TEST ("/daemon/refresh-and-reload-machine-id",
-                   test_daemon_refresh_and_reload_machine_id);
-  ADD_DAEMON_TEST ("/daemon/clear-events-on-reload-machine-id",
-                   test_daemon_reload_machine_id_reset_events);
 
 #undef ADD_DAEMON_TEST
 

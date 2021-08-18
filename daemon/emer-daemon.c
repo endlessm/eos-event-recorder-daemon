@@ -1502,23 +1502,6 @@ emer_daemon_get_tracking_id (EmerDaemon *self)
   return NULL;
 }
 
-gboolean
-emer_daemon_reset_tracking_id (EmerDaemon  *self,
-                               GError     **error)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  /* Clear all events in the persistent cache and in the memory buffers, we
-   * want to start from scratch here with a new machine ID. */
-  g_ptr_array_set_size (priv->variant_array, 0);
-  priv->num_bytes_buffered = 0;
-
-  if (!emer_persistent_cache_remove_all (priv->persistent_cache, error))
-    return FALSE;
-
-  return emer_machine_id_provider_reset_tracking_id (priv->machine_id_provider, error);
-}
-
 /*
  * emer_daemon_new_full:
  * @rand: (allow-none): random number generator to use for randomized

@@ -102,28 +102,6 @@ on_set_enabled (EmerEventRecorderServer *server,
   return TRUE;
 }
 
-static gboolean
-on_reset_tracking_id (EmerEventRecorderServer *server,
-                      GDBusMethodInvocation   *invocation,
-                      EmerDaemon              *daemon)
-{
-  g_autoptr(GError) error = NULL;
-  g_autofree gchar *tracking_id = NULL;
-
-  if (!emer_daemon_reset_tracking_id (daemon, &error))
-    {
-      g_dbus_method_invocation_return_gerror (invocation, error);
-      return TRUE;
-    }
-
-  tracking_id = emer_daemon_get_tracking_id (daemon);
-  emer_event_recorder_server_set_tracking_id (server,
-                                              tracking_id != NULL ? tracking_id : "");
-
-  emer_event_recorder_server_complete_reset_tracking_id (server, invocation);
-  return TRUE;
-}
-
 static void
 handle_upload_finished (EmerDaemon       *daemon,
                         GAsyncResult     *result,
@@ -326,8 +304,6 @@ on_bus_acquired (GDBusConnection *system_bus,
                     G_CALLBACK (on_set_enabled), daemon);
   g_signal_connect (server, "handle-upload-events",
                     G_CALLBACK (on_upload_events), daemon);
-  g_signal_connect (server, "handle-reset-tracking-id",
-                    G_CALLBACK (on_reset_tracking_id), daemon);
   g_signal_connect (server, "g-authorize-method",
                     G_CALLBACK (on_authorize_method_check), daemon);
 

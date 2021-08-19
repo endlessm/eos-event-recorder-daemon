@@ -311,24 +311,9 @@ read_machine_id (EmerMachineIdProvider *self, gchar **machine_id_hex)
     {
       if (g_error_matches (local_error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
         {
-          g_debug ("Tracking id file %s does not exist hence creating one.",
+          g_debug ("Tracking id file %s does not exist.",
                    priv->tracking_id_path);
           g_clear_error (&local_error);
-
-          if (!write_tracking_id_file (priv->tracking_id_path, &local_error))
-            {
-              g_message ("Failed to initialize tracking ID at %s: %s.",
-                         priv->tracking_id_path,
-                         local_error->message);
-              return FALSE;
-            }
-	  else if (!read_one_machine_id (priv->tracking_id_path, machine_id_hex, id, &local_error))
-            {
-              g_message ("Failed to read tracking id %s: %s",
-                         priv->tracking_id_path,
-                         local_error->message);
-              return FALSE;
-            }
         }
       else if (g_error_matches (local_error,
                                 EMER_ERROR,
@@ -337,14 +322,13 @@ read_machine_id (EmerMachineIdProvider *self, gchar **machine_id_hex)
           g_message ("Failed to read tracking id %s: %s",
                      priv->tracking_id_path,
                      local_error->message);
-          return FALSE;
         }
       else
         {
           g_message ("Error occured while reading tracking id at %s: %s",
                      priv->tracking_id_path, local_error->message);
-          return FALSE;
         }
+      return FALSE;
     }
 
   uuid_copy (priv->id, id);

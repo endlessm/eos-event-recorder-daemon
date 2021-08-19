@@ -116,30 +116,19 @@ teardown (MachineIdTestFixture *fixture,
 // Testing Cases
 
 static void
-test_machine_id_provider_create_tracking_id_if_unavailable (MachineIdTestFixture *fixture,
-                                                            gconstpointer         tdata)
+test_machine_id_provider_have_no_tracking_id_if_unavailable (MachineIdTestFixture *fixture,
+                                                             gconstpointer         tdata)
 {
-  g_autoptr(GError) error = NULL;
-  g_autofree gchar *contents = NULL;
-
   g_assert_false (g_file_test (fixture->tracking_id_file_path, G_FILE_TEST_EXISTS));
 
   g_autoptr(EmerMachineIdProvider) id_provider =
     emer_machine_id_provider_new_full (fixture->tracking_id_file_path);
 
   uuid_t id;
-  // id_provider_get_id will write a new tracking ID, if no ID is found.
-  g_assert (emer_machine_id_provider_get_id (id_provider, NULL, id));
+  // id_provider_get_id will "not" write a new tracking ID, if no ID is found.
+  g_assert_false (emer_machine_id_provider_get_id (id_provider, NULL, id));
 
-  g_assert (g_file_test (fixture->tracking_id_file_path, G_FILE_TEST_EXISTS));
-
-  /* Read the tracking_id_file_path using g_file_get_contents
-   * and check that its size matches what we would normally write to the
-   * file */
-  g_file_get_contents (fixture->tracking_id_file_path, &contents, NULL, &error);
-  g_assert_no_error (error);
-
-  g_assert_cmpint (strlen (contents), ==, strlen (TESTING_TRACKING_ID));
+  g_assert_false (g_file_test (fixture->tracking_id_file_path, G_FILE_TEST_EXISTS));
 }
 
 static void
@@ -242,7 +231,7 @@ main (gint                argc,
                        test_machine_id_provider_read_malformed_tracking_id,
                        WRITE_TRACKING_ID_FILE);
   ADD_CACHE_TEST_FUNC ("/machine-id-provider/create-tracking-id-if-unavailable",
-                       test_machine_id_provider_create_tracking_id_if_unavailable,
+                       test_machine_id_provider_have_no_tracking_id_if_unavailable,
                        DONT_WRITE_TRACKING_ID_FILE);
 #undef ADD_CACHE_TEST_FUNC
   return g_test_run ();

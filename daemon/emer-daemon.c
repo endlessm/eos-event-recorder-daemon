@@ -79,20 +79,16 @@
 #define EVENT_VALUE_ARRAY_TYPE G_VARIANT_TYPE (EVENT_VALUE_ARRAY_TYPE_STRING)
 
 #define SINGULAR_TYPE_STRING "(aysxmv)"
-#define AGGREGATE_TYPE_STRING "(ayssxmv)"
-#define SEQUENCE_TYPE_STRING "(uay" EVENT_VALUE_ARRAY_TYPE_STRING ")"
+#define AGGREGATE_TYPE_STRING "(ayssumv)"
 
 #define SINGULAR_TYPE G_VARIANT_TYPE (SINGULAR_TYPE_STRING)
 #define AGGREGATE_TYPE G_VARIANT_TYPE (AGGREGATE_TYPE_STRING)
-#define SEQUENCE_TYPE G_VARIANT_TYPE (SEQUENCE_TYPE_STRING)
 
 #define SINGULAR_ARRAY_TYPE_STRING "a" SINGULAR_TYPE_STRING
 #define AGGREGATE_ARRAY_TYPE_STRING "a" AGGREGATE_TYPE_STRING
-#define SEQUENCE_ARRAY_TYPE_STRING "a" SEQUENCE_TYPE_STRING
 
 #define SINGULAR_ARRAY_TYPE G_VARIANT_TYPE (SINGULAR_ARRAY_TYPE_STRING)
 #define AGGREGATE_ARRAY_TYPE G_VARIANT_TYPE (AGGREGATE_ARRAY_TYPE_STRING)
-#define SEQUENCE_ARRAY_TYPE G_VARIANT_TYPE (SEQUENCE_ARRAY_TYPE_STRING)
 
 #define REQUEST_TYPE_STRING "(xxs@a{ss}y" SINGULAR_ARRAY_TYPE_STRING \
   AGGREGATE_ARRAY_TYPE_STRING ")"
@@ -113,21 +109,6 @@
   "uploading is disabled. You may enable uploading by setting " \
   "uploading_enabled to true in " PERMISSIONS_FILE
 
-/* Event ID to send a metric event when the cache has been found to be corrupt
- * resulting in the removal of all its data to get it back to a clear state.
- * This event will not include any useful payload (just an empty one). */
-#define CACHE_IS_CORRUPT_EVENT_ID "d84b9a19-9353-73eb-70bf-f91a584abcbd"
-
-/* Event ID to send a metric event when some elements in the cache are invalid.
- * The payload for this event will be formated as a '(tt)' GVariant containing
- * the number of valid elements found and the number of bytes read.
- */
-#define CACHE_HAS_INVALID_ELEMENTS_EVENT_ID "cbfbcbdb-6af2-f1db-9e11-6cc25846e296"
-
-/* The persistent cache metadata was corrupt, so the cache was re-initialized
- * (discarding all events). The event has no (meaningful) payload.
- */
-#define CACHE_METADATA_IS_CORRUPT_EVENT_ID "f0e8a206-3bc2-405e-90d0-ef6fe6dd7edc"
 
 typedef struct _NetworkCallbackData
 {
@@ -1591,13 +1572,30 @@ emer_daemon_record_singular_event (EmerDaemon *self,
 
 void
 emer_daemon_record_aggregate_event (EmerDaemon *self,
-                                    guint32     user_id,
                                     GVariant   *event_id,
-                                    gint64      num_events,
-                                    gint64      relative_timestamp,
+                                    const char *period_start,
+                                    guint32     count,
                                     gboolean    has_payload,
                                     GVariant   *payload)
 {
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+  g_autofree gchar *os_version = emer_image_id_provider_get_os_version();
+
+  if (!priv->recording_enabled)
+    return;
+
+  if (!is_uuid (event_id))
+    {
+      g_warning ("Event ID must be a UUID represented as an array of %"
+                 G_GSIZE_FORMAT " bytes. Dropping event.", UUID_LENGTH);
+      return;
+    }
+
+  GVariant *nullable_payload = get_nullable_payload (payload, has_payload);
+  GVariant *aggregate =
+    g_variant_new ("(@ayssumv)", event_id, os_version, period_start, count,
+                   nullable_payload);
+  buffer_event (self, aggregate);
 }
 
 void

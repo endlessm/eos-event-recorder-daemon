@@ -66,8 +66,6 @@ on_record_aggregate_event (EmerEventRecorderServer *server,
                            GVariant                *payload,
                            EmerDaemon              *daemon)
 {
-  emer_daemon_record_aggregate_event (daemon, user_id, event_id, count,
-                                      relative_timestamp, has_payload, payload);
   emer_event_recorder_server_complete_record_aggregate_event (server,
                                                               invocation);
   return TRUE;

@@ -1203,9 +1203,9 @@ test_daemon_discards_in_flight_singulars_when_daemon_disabled (Fixture      *fix
   wait_for_upload_to_finish (fixture);
 
   /* Record some different events, and ensure they're submitted correctly */
-  record_sequence (fixture->test_object);
+  record_aggregates (fixture->test_object);
   read_network_request (fixture,
-                        (ProcessBytesSourceFunc) assert_sequence_received);
+                        (ProcessBytesSourceFunc) assert_aggregates_received);
   wait_for_upload_to_finish (fixture);
 }
 
@@ -1227,7 +1227,7 @@ test_daemon_discards_failed_in_flight_singulars_when_daemon_disabled (Fixture   
   /* Re-enable the daemon, and send some different events */
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 TRUE);
-  record_sequence (fixture->test_object);
+  record_aggregates (fixture->test_object);
 
   /* Now send back an error to the first batch  */
   send_http_response (fixture->mock_server, SOUP_STATUS_INTERNAL_SERVER_ERROR);
@@ -1240,7 +1240,7 @@ test_daemon_discards_failed_in_flight_singulars_when_daemon_disabled (Fixture   
    * have been discarded; the new batch should be sent.
    */
   read_network_request (fixture,
-                        (ProcessBytesSourceFunc) assert_sequence_received);
+                        (ProcessBytesSourceFunc) assert_aggregates_received);
   /* By now it should have warned about the first attempt */
   g_test_assert_expected_messages ();
   wait_for_upload_to_finish (fixture);

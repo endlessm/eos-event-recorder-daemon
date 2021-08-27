@@ -52,7 +52,7 @@
 #define MEANINGLESS_EVENT "350ac4ff-3026-4c25-9e7e-e8103b4fd5d8"
 
 #define USER_ID 4200u
-#define NUM_EVENTS G_GINT64_CONSTANT (101)
+#define NUM_EVENTS 101u
 #define RELATIVE_TIMESTAMP G_GINT64_CONSTANT (123456789)
 #define OFFSET_TIMESTAMP (RELATIVE_TIMESTAMP + BOOT_TIME_OFFSET)
 
@@ -526,11 +526,16 @@ assert_singular_matches_variant (GVariant *actual_variant,
 }
 
 static void
-assert_aggregate_matches_variant (GVariant *actual_variant,
-                                  GVariant *expected_auxiliary_payload)
+assert_aggregate_matches_variant (GVariant   *actual_variant,
+                                  const char *expected_period_start,
+                                  GVariant   *expected_auxiliary_payload)
 {
-  /* Not defined yet */
-  g_assert_null (NULL);
+  GVariant *expected_variant =
+    g_variant_new ("(@ayssumv)", make_event_id_variant (),
+                   emer_image_id_provider_get_os_version(),
+                   expected_period_start,
+                   NUM_EVENTS, expected_auxiliary_payload);
+  assert_variants_equal (actual_variant, expected_variant);
 }
 
 static void
@@ -543,10 +548,11 @@ assert_singular_matches_next_value (GVariantIter *singular_iterator,
 
 static void
 assert_aggregate_matches_next_value (GVariantIter *aggregate_iterator,
+                                     const gchar  *expected_period_start,
                                      GVariant     *expected_auxiliary_payload)
 {
   GVariant *aggregate = g_variant_iter_next_value (aggregate_iterator);
-  assert_aggregate_matches_variant (aggregate, expected_auxiliary_payload);
+  assert_aggregate_matches_variant (aggregate, expected_period_start, expected_auxiliary_payload);
 }
 
 static void
@@ -586,17 +592,15 @@ static void
 record_aggregates (EmerDaemon *daemon)
 {
   emer_daemon_record_aggregate_event (daemon,
-                                      USER_ID,
                                       make_event_id_variant (),
+                                      "2021-08-27",
                                       NUM_EVENTS,
-                                      RELATIVE_TIMESTAMP,
                                       FALSE,
                                       g_variant_new_string ("This must be ignored."));
   emer_daemon_record_aggregate_event (daemon,
-                                      USER_ID,
                                       make_event_id_variant (),
+                                      "2021-08",
                                       NUM_EVENTS,
-                                      RELATIVE_TIMESTAMP,
                                       TRUE,
                                       make_auxiliary_payload ());
 }
@@ -741,17 +745,13 @@ assert_aggregates_received (GByteArray *request,
   g_assert_cmpuint (g_variant_iter_n_children (singular_iterator), ==, 0u);
   g_variant_iter_free (singular_iterator);
 
-  /* The aggregate event has not defined yet. So, the array is empty right now.
-   * Will restore/re-define the test plan here in the future.
-   */
-  g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 0u);
-  if (g_variant_iter_n_children (aggregate_iterator) > 0)
-    {
-      assert_aggregate_matches_next_value (aggregate_iterator,
-                                           NULL /* auxiliary_payload */);
-      assert_aggregate_matches_next_value (aggregate_iterator,
+  g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 2u);
+  assert_aggregate_matches_next_value (aggregate_iterator,
+                                       "2021-08-27",
+                                       NULL /* auxiliary_payload */);
+  assert_aggregate_matches_next_value (aggregate_iterator,
+                                       "2021-08",
                                        make_auxiliary_payload ());
-    }
   g_variant_iter_free (aggregate_iterator);
 }
 

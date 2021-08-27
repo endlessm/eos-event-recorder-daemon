@@ -1572,13 +1572,30 @@ emer_daemon_record_singular_event (EmerDaemon *self,
 
 void
 emer_daemon_record_aggregate_event (EmerDaemon *self,
-                                    guint32     user_id,
                                     GVariant   *event_id,
-                                    gint64      num_events,
-                                    gint64      relative_timestamp,
+                                    const char *period_start,
+                                    guint32     count,
                                     gboolean    has_payload,
                                     GVariant   *payload)
 {
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+  g_autofree gchar *os_version = emer_image_id_provider_get_os_version();
+
+  if (!priv->recording_enabled)
+    return;
+
+  if (!is_uuid (event_id))
+    {
+      g_warning ("Event ID must be a UUID represented as an array of %"
+                 G_GSIZE_FORMAT " bytes. Dropping event.", UUID_LENGTH);
+      return;
+    }
+
+  GVariant *nullable_payload = get_nullable_payload (payload, has_payload);
+  GVariant *aggregate =
+    g_variant_new ("(@ayssumv)", event_id, os_version, period_start, count,
+                   nullable_payload);
+  buffer_event (self, aggregate);
 }
 
 void

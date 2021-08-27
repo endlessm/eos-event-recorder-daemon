@@ -92,14 +92,14 @@ void                     emer_daemon_record_singular_event    (EmerDaemon       
                                                                GVariant                *payload);
 
 void                     emer_daemon_record_aggregate_event   (EmerDaemon              *self,
-                                                               guint32                  user_id,
                                                                GVariant                *event_id,
-                                                               gint64                   count,
-                                                               gint64                   relative_timestamp,
+                                                               const char              *period_start,
+                                                               guint32                  count,
                                                                gboolean                 has_payload,
                                                                GVariant                *payload);
 
 void                     emer_daemon_record_event_sequence    (EmerDaemon              *self,
+
                                                                guint32                  user_id,
                                                                GVariant                *event_id,
                                                                GVariant                *events);

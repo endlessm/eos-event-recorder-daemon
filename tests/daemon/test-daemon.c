@@ -51,7 +51,6 @@
 
 #define MEANINGLESS_EVENT "350ac4ff-3026-4c25-9e7e-e8103b4fd5d8"
 
-#define USER_ID 4200u
 #define NUM_EVENTS 101u
 #define RELATIVE_TIMESTAMP G_GINT64_CONSTANT (123456789)
 #define OFFSET_TIMESTAMP (RELATIVE_TIMESTAMP + BOOT_TIME_OFFSET)
@@ -401,24 +400,6 @@ make_auxiliary_payload (void)
 }
 
 static GVariant *
-make_event_values_variant (void)
-{
-  GVariantBuilder builder;
-  g_variant_builder_init (&builder, G_VARIANT_TYPE ("a(xbv)"));
-  g_variant_builder_add (&builder,
-                         "(xbv)",
-                         RELATIVE_TIMESTAMP,
-                         FALSE,
-                         g_variant_new_boolean (FALSE));
-  g_variant_builder_add (&builder,
-                         "(xbv)",
-                         RELATIVE_TIMESTAMP,
-                         TRUE,
-                         g_variant_new_boolean (TRUE));
-  return g_variant_builder_end (&builder);
-}
-
-static GVariant *
 make_large_singular (void)
 {
   static guchar array[ZERO_ARRAY_LENGTH];
@@ -606,15 +587,6 @@ record_aggregates (EmerDaemon *daemon)
 }
 
 static void
-record_sequence (EmerDaemon *daemon)
-{
-  emer_daemon_record_event_sequence (daemon,
-                                     USER_ID,
-                                     make_event_id_variant (),
-                                     make_event_values_variant ());
-}
-
-static void
 get_events_from_request (GByteArray    *request,
                          Fixture       *fixture,
                          GVariantIter **singular_iterator,
@@ -752,21 +724,6 @@ assert_aggregates_received (GByteArray *request,
   assert_aggregate_matches_next_value (aggregate_iterator,
                                        "2021-08",
                                        make_auxiliary_payload ());
-  g_variant_iter_free (aggregate_iterator);
-}
-
-static void
-assert_sequence_received (GByteArray *request,
-                          Fixture    *fixture)
-{
-  GVariantIter *singular_iterator, *aggregate_iterator;
-  get_events_from_request (request, fixture, &singular_iterator,
-                           &aggregate_iterator);
-
-  g_assert_cmpuint (g_variant_iter_n_children (singular_iterator), ==, 0u);
-  g_variant_iter_free (singular_iterator);
-
-  g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 0u);
   g_variant_iter_free (aggregate_iterator);
 }
 
@@ -995,16 +952,6 @@ test_daemon_records_aggregates (Fixture      *fixture,
 }
 
 static void
-test_daemon_records_sequence (Fixture      *fixture,
-                              gconstpointer unused)
-{
-  record_sequence (fixture->test_object);
-  read_network_request (fixture,
-                        (ProcessBytesSourceFunc) assert_sequence_received);
-  wait_for_upload_to_finish (fixture);
-}
-
-static void
 test_daemon_retries_singular_uploads (Fixture      *fixture,
                                       gconstpointer unused)
 {
@@ -1043,25 +990,6 @@ test_daemon_retries_aggregate_uploads (Fixture      *fixture,
 }
 
 static void
-test_daemon_retries_sequence_uploads (Fixture      *fixture,
-                                      gconstpointer unused)
-{
-  record_sequence (fixture->test_object);
-
-  read_network_request (fixture,
-                        (ProcessBytesSourceFunc) assert_sequence_received);
-  send_http_response (fixture->mock_server, SOUP_STATUS_INTERNAL_SERVER_ERROR);
-
-  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
-                         "Attempt to upload metrics failed: Internal Server "
-                         "Error.");
-  read_network_request (fixture,
-                        (ProcessBytesSourceFunc) assert_sequence_received);
-  wait_for_upload_to_finish (fixture);
-  g_test_assert_expected_messages ();
-}
-
-static void
 test_daemon_only_reports_singulars_when_uploading_enabled (Fixture      *fixture,
                                                            gconstpointer unused)
 {
@@ -1094,22 +1022,6 @@ test_daemon_only_reports_aggregates_when_uploading_enabled (Fixture      *fixtur
 }
 
 static void
-test_daemon_only_reports_sequences_when_uploading_enabled (Fixture      *fixture,
-                                                           gconstpointer unused)
-{
-  emer_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
-                                                   FALSE);
-  record_sequence (fixture->test_object);
-  assert_uploading_disabled (fixture);
-
-  emer_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
-                                                   TRUE);
-  read_network_request (fixture,
-                        (ProcessBytesSourceFunc) assert_sequence_received);
-  wait_for_upload_to_finish (fixture);
-}
-
-static void
 test_daemon_does_not_record_singulars_when_daemon_disabled (Fixture      *fixture,
                                                             gconstpointer unused)
 {
@@ -1132,22 +1044,6 @@ test_daemon_does_not_record_aggregates_when_daemon_disabled (Fixture      *fixtu
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 FALSE);
   record_aggregates (fixture->test_object);
-  assert_metrics_disabled (fixture);
-
-  emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
-                                                TRUE);
-  read_network_request (fixture,
-                        (ProcessBytesSourceFunc) assert_no_events_received);
-  wait_for_upload_to_finish (fixture);
-}
-
-static void
-test_daemon_does_not_record_sequences_when_daemon_disabled (Fixture      *fixture,
-                                                            gconstpointer unused)
-{
-  emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
-                                                FALSE);
-  record_sequence (fixture->test_object);
   assert_metrics_disabled (fixture);
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
@@ -1400,25 +1296,18 @@ main (gint                argc,
   ADD_DAEMON_TEST ("/daemon/records-singulars", test_daemon_records_singulars);
   ADD_DAEMON_TEST ("/daemon/records-aggregates",
                    test_daemon_records_aggregates);
-  ADD_DAEMON_TEST ("/daemon/records-sequence", test_daemon_records_sequence);
   ADD_DAEMON_TEST ("/daemon/retries-singular-uploads",
                    test_daemon_retries_singular_uploads);
   ADD_DAEMON_TEST ("/daemon/retries-aggregate-uploads",
                    test_daemon_retries_aggregate_uploads);
-  ADD_DAEMON_TEST ("/daemon/retries-sequence-uploads",
-                   test_daemon_retries_sequence_uploads);
   ADD_DAEMON_TEST ("/daemon/only-reports-singulars-when-uploading-enabled",
                    test_daemon_only_reports_singulars_when_uploading_enabled);
   ADD_DAEMON_TEST ("/daemon/only-reports-aggregates-when-uploading-enabled",
                    test_daemon_only_reports_aggregates_when_uploading_enabled);
-  ADD_DAEMON_TEST ("/daemon/only-reports-sequences-when-uploading-enabled",
-                   test_daemon_only_reports_sequences_when_uploading_enabled);
   ADD_DAEMON_TEST ("/daemon/does-not-record-singulars-when-daemon-disabled",
                    test_daemon_does_not_record_singulars_when_daemon_disabled);
   ADD_DAEMON_TEST ("/daemon/does-not-record-aggregates-when-daemon-disabled",
                    test_daemon_does_not_record_aggregates_when_daemon_disabled);
-  ADD_DAEMON_TEST ("/daemon/does-not-record-sequences-when-daemon-disabled",
-                   test_daemon_does_not_record_sequences_when_daemon_disabled);
   ADD_DAEMON_TEST ("/daemon/discards/in-memory-singulars-when-daemon-disabled",
                    test_daemon_discards_in_memory_singulars_when_daemon_disabled);
   ADD_DAEMON_TEST ("/daemon/discards/in-flight-singulars-when-daemon-disabled",

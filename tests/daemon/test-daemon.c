@@ -636,7 +636,7 @@ get_events_from_request (GByteArray    *request,
   g_free (expected_request_path);
 
   const GVariantType *REQUEST_FORMAT =
-    G_VARIANT_TYPE ("(xxsa{ss}ya(aysxmv)a(ayssxmv))");
+    G_VARIANT_TYPE ("(xxsa{ss}ya(aysxmv)a(ayssumv))");
   GVariant *request_variant =
     g_variant_new_from_bytes (REQUEST_FORMAT, request_bytes, FALSE);
 
@@ -654,7 +654,7 @@ get_events_from_request (GByteArray    *request,
   GVariant *site_id;
   guint8 boot_type;
   g_variant_get (native_endian_request,
-                 "(xx&s@a{ss}ya(aysxmv)a(ayssxmv))",
+                 "(xx&s@a{ss}ya(aysxmv)a(ayssumv))",
                  &client_relative_time, &client_absolute_time, &image_version,
                  &site_id, &boot_type, singular_iterator, aggregate_iterator);
 

@@ -50,7 +50,6 @@
 #define MOCK_SERVER_PATH TEST_DIR "daemon/mock-server.py"
 
 #define MEANINGLESS_EVENT "350ac4ff-3026-4c25-9e7e-e8103b4fd5d8"
-#define CACHE_METADATA_IS_CORRUPT_EVENT_ID "f0e8a206-3bc2-405e-90d0-ef6fe6dd7edc"
 
 #define USER_ID 4200u
 #define NUM_EVENTS G_GINT64_CONSTANT (101)

@@ -109,21 +109,6 @@
   "uploading is disabled. You may enable uploading by setting " \
   "uploading_enabled to true in " PERMISSIONS_FILE
 
-/* Event ID to send a metric event when the cache has been found to be corrupt
- * resulting in the removal of all its data to get it back to a clear state.
- * This event will not include any useful payload (just an empty one). */
-#define CACHE_IS_CORRUPT_EVENT_ID "d84b9a19-9353-73eb-70bf-f91a584abcbd"
-
-/* Event ID to send a metric event when some elements in the cache are invalid.
- * The payload for this event will be formated as a '(tt)' GVariant containing
- * the number of valid elements found and the number of bytes read.
- */
-#define CACHE_HAS_INVALID_ELEMENTS_EVENT_ID "cbfbcbdb-6af2-f1db-9e11-6cc25846e296"
-
-/* The persistent cache metadata was corrupt, so the cache was re-initialized
- * (discarding all events). The event has no (meaningful) payload.
- */
-#define CACHE_METADATA_IS_CORRUPT_EVENT_ID "f0e8a206-3bc2-405e-90d0-ef6fe6dd7edc"
 
 typedef struct _NetworkCallbackData
 {

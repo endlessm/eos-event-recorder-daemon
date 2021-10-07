@@ -35,6 +35,7 @@ $(daemon_dbus_sources): $(EVENT_RECORDER_SERVER_XML)
 CLEANFILES += $(daemon_dbus_sources)
 
 eos_metrics_event_recorder_SOURCES = \
+	daemon/eins-boottime-source.c daemon/eins-boottime-source.h \
 	daemon/emer-main.c \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
 	daemon/emer-cache-size-provider.c daemon/emer-cache-size-provider.h \

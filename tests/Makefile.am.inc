@@ -37,6 +37,14 @@ DAEMON_TEST_LIBS = \
 	$(top_builddir)/shared/libeos-metrics-event-recorder-shared.la \
 	-lm
 
+tests_daemon_test_aggregate_tally_SOURCES = \
+	daemon/emer-aggregate-tally.c daemon/emer-aggregate-tally.h \
+	shared/metrics-util.c shared/metrics-util.h \
+	tests/daemon/test-aggregate-tally.c \
+	$(NULL)
+tests_daemon_test_aggregate_tally_CPPFLAGS = $(DAEMON_TEST_FLAGS)
+tests_daemon_test_aggregate_tally_LDADD = $(DAEMON_TEST_LIBS)
+
 tests_daemon_test_boot_id_provider_SOURCES = \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
 	tests/daemon/test-boot-id-provider.c \
@@ -67,6 +75,10 @@ tests_daemon_test_circular_file_CPPFLAGS = $(DAEMON_TEST_FLAGS)
 tests_daemon_test_circular_file_LDADD = $(DAEMON_TEST_LIBS)
 
 tests_daemon_test_daemon_dbusdaemon_SOURCES = \
+	emer-event-recorder-server.c emer-event-recorder-server.h \
+	daemon/eins-boottime-source.c daemon/eins-boottime-source.h \
+	daemon/emer-aggregate-tally.c daemon/emer-aggregate-tally.h \
+	daemon/emer-aggregate-timer-impl.c daemon/emer-aggregate-timer-impl.h \
 	daemon/emer-daemon.c daemon/emer-daemon.h \
 	tests/daemon/test-daemon.c \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \

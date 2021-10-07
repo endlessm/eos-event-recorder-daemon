@@ -26,6 +26,7 @@
 #include <gio/gio.h>
 #include <glib-object.h>
 
+#include "emer-event-recorder-server.h"
 #include "emer-machine-id-provider.h"
 #include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
@@ -114,6 +115,15 @@ gboolean                 emer_daemon_upload_events_finish     (EmerDaemon       
 gchar *                  emer_daemon_get_tracking_id          (EmerDaemon              *self);
 
 EmerPermissionsProvider *emer_daemon_get_permissions_provider (EmerDaemon              *self);
+
+gboolean                 emer_daemon_start_aggregate_timer    (EmerDaemon              *self,
+                                                               EmerAggregateTimer      *timer,
+                                                               guint32                  unix_user_id,
+                                                               GVariant                *event_id,
+                                                               GVariant                *aggregate_key,
+                                                               gboolean                 has_payload,
+                                                               GVariant                *payload,
+                                                               GError                 **error);
 
 G_END_DECLS
 

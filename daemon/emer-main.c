@@ -100,6 +100,90 @@ on_set_enabled (EmerEventRecorderServer *server,
   return TRUE;
 }
 
+static gboolean
+on_start_aggregate_timer (EmerEventRecorderServer *object,
+                          GDBusMethodInvocation   *invocation,
+                          GVariant                *event_id,
+                          GVariant                *aggregate_key,
+                          gboolean                 has_payload,
+                          GVariant                *payload,
+                          EmerDaemon              *daemon)
+{
+  g_autofree gchar *timer_object_path = NULL;
+  g_autoptr(EmerAggregateTimer) timer = NULL;
+  g_autoptr(GVariant) result = NULL;
+  g_autoptr(GError) error = NULL;
+  GDBusConnection *system_bus;
+  static guint64 timer_id = 0;
+  const gchar *sender;
+  guint32 unix_user_id;
+
+  system_bus = g_dbus_method_invocation_get_connection (invocation);
+  timer_object_path = g_strdup_printf ("/com/endlessm/Metrics/AggregateTimer%lu",
+                                       timer_id);
+
+  timer = emer_aggregate_timer_skeleton_new ();
+
+  g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (timer),
+                                    system_bus,
+                                    timer_object_path,
+                                    &error);
+  if (error)
+    {
+      g_warning ("Could not export aggregate timer interface on system bus: %s.",
+                 error->message);
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return FALSE;
+    }
+
+  sender = g_dbus_method_invocation_get_sender (invocation);
+  result = g_dbus_connection_call_sync (system_bus,
+                                        "org.freedesktop.DBus",
+                                        "/org/freedesktop/DBus",
+                                        "org.freedesktop.DBus",
+                                        "GetConnectionUnixUser",
+                                        g_variant_new ("(s)", sender),
+                                        G_VARIANT_TYPE ("(u)"),
+                                        G_DBUS_CALL_FLAGS_NONE,
+                                        -1, NULL, &error);
+  if (error)
+    {
+      g_warning ("Could not get unix user for bus name '%s': %s.",
+                 sender, error->message);
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (timer));
+      return FALSE;
+    }
+
+  g_variant_get (result, "(u)", &unix_user_id);
+
+  emer_daemon_start_aggregate_timer (daemon,
+                                     g_steal_pointer (&timer),
+                                     unix_user_id,
+                                     event_id,
+                                     aggregate_key,
+                                     has_payload,
+                                     payload,
+                                     &error);
+
+  if (error)
+    {
+      g_warning ("Could not start aggregate timer '%s': %s.",
+                 sender, error->message);
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return FALSE;
+    }
+
+  // Only increment on success, otherwise we waste ids for nothing
+  timer_id++;
+
+  emer_event_recorder_server_complete_start_aggregate_timer (object,
+                                                             invocation,
+                                                             timer_object_path);
+
+  return TRUE;
+}
+
 static void
 handle_upload_finished (EmerDaemon       *daemon,
                         GAsyncResult     *result,
@@ -297,6 +381,8 @@ on_bus_acquired (GDBusConnection *system_bus,
                     G_CALLBACK (on_set_enabled), daemon);
   g_signal_connect (server, "handle-upload-events",
                     G_CALLBACK (on_upload_events), daemon);
+  g_signal_connect (server, "handle-start-aggregate-timer",
+                    G_CALLBACK (on_start_aggregate_timer), daemon);
   g_signal_connect (server, "g-authorize-method",
                     G_CALLBACK (on_authorize_method_check), daemon);
 

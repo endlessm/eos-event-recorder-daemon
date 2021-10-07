@@ -37,6 +37,8 @@ CLEANFILES += $(daemon_dbus_sources)
 eos_metrics_event_recorder_SOURCES = \
 	daemon/eins-boottime-source.c daemon/eins-boottime-source.h \
 	daemon/emer-main.c \
+	daemon/emer-aggregate-tally.c daemon/emer-aggregate-tally.h \
+	daemon/emer-aggregate-timer-impl.c daemon/emer-aggregate-timer-impl.h \
 	daemon/emer-boot-id-provider.c daemon/emer-boot-id-provider.h \
 	daemon/emer-cache-size-provider.c daemon/emer-cache-size-provider.h \
 	daemon/emer-cache-version-provider.c daemon/emer-cache-version-provider.h \

@@ -256,7 +256,7 @@ buffer_event (EmerDaemon *self,
       if (event_cost > MAX_REQUEST_PAYLOAD)
         {
           g_warning ("Dropping %" G_GSIZE_FORMAT "-byte event. The maximum "
-                     "permissable event size (including type string with "
+                     "permissible event size (including type string with "
                      "null-terminating byte) is %d bytes.",
                      event_cost, MAX_REQUEST_PAYLOAD);
         }

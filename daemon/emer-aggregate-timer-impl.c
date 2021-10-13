@@ -37,6 +37,7 @@ struct _EmerAggregateTimerImpl
   GVariant *aggregate_key; /* owned */
   GVariant *payload; /* owned */
   gchar *cache_key_string; /* owned */
+  gchar *sender_name; /* owned */
 };
 
 G_DEFINE_TYPE (EmerAggregateTimerImpl, emer_aggregate_timer_impl, G_TYPE_OBJECT)
@@ -52,6 +53,7 @@ emer_aggregate_timer_impl_finalize (GObject *object)
   g_clear_pointer (&self->aggregate_key, g_variant_unref);
   g_clear_pointer (&self->payload, g_variant_unref);
   g_clear_pointer (&self->cache_key_string, g_free);
+  g_clear_pointer (&self->sender_name, g_free);
   g_clear_object (&self->timer);
 
   G_OBJECT_CLASS (emer_aggregate_timer_impl_parent_class)->finalize (object);
@@ -73,6 +75,7 @@ emer_aggregate_timer_impl_init (EmerAggregateTimerImpl *self)
 EmerAggregateTimerImpl *
 emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
                                EmerAggregateTimer *timer,
+                               const gchar        *sender_name,
                                guint32             unix_user_id,
                                GVariant           *event_id,
                                GVariant           *aggregate_key,
@@ -95,6 +98,7 @@ emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
 
   self = g_object_new (EMER_TYPE_AGGREGATE_TIMER_IMPL, NULL);
   self->timer = timer;
+  self->sender_name = g_strdup (sender_name);
   self->tally = tally;
   self->unix_user_id = unix_user_id;
   self->event_id = g_variant_ref (event_id);
@@ -187,6 +191,14 @@ emer_aggregate_timer_impl_stop (EmerAggregateTimerImpl  *self,
     }
 
   return TRUE;
+}
+
+const gchar *
+emer_aggregate_timer_impl_get_sender_name (EmerAggregateTimerImpl *self)
+{
+  g_return_val_if_fail (EMER_IS_AGGREGATE_TIMER_IMPL (self), NULL);
+
+  return self->sender_name;
 }
 
 guint

@@ -1870,6 +1870,7 @@ emer_daemon_get_permissions_provider (EmerDaemon *self)
 gboolean
 emer_daemon_start_aggregate_timer (EmerDaemon          *self,
                                    EmerAggregateTimer  *timer,
+                                   const gchar         *sender_name,
                                    guint32              unix_user_id,
                                    GVariant            *event_id,
                                    GVariant            *aggregate_key,
@@ -1908,6 +1909,7 @@ emer_daemon_start_aggregate_timer (EmerDaemon          *self,
   nullable_payload = get_nullable_payload (payload, has_payload);
   timer_impl = emer_aggregate_timer_impl_new (priv->aggregate_tally,
                                               timer,
+                                              sender_name,
                                               unix_user_id,
                                               event_id,
                                               aggregate_key,

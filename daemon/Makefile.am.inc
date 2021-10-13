@@ -30,6 +30,7 @@ $(daemon_dbus_sources): $(EVENT_RECORDER_SERVER_XML)
 	$(AM_V_GEN)$(GDBUS_CODEGEN) --generate-c-code $(daemon_dbus_name) \
 		--c-namespace Emer \
 		--interface-prefix com.endlessm.Metrics. \
+		--c-generate-autocleanup all \
 		$<
 
 CLEANFILES += $(daemon_dbus_sources)

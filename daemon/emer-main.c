@@ -168,7 +168,7 @@ on_start_aggregate_timer (EmerEventRecorderServer *object,
 
   if (error)
     {
-      g_warning ("Could not start aggregate timer '%s': %s.",
+      g_warning ("Could not start aggregate timer for '%s': %s.",
                  sender, error->message);
       g_dbus_method_invocation_return_gerror (invocation, error);
       return TRUE;

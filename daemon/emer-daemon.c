@@ -1920,9 +1920,16 @@ emer_daemon_start_aggregate_timer (EmerDaemon          *self,
 
   if (g_hash_table_contains (priv->aggregate_timers, timer_impl))
     {
+      g_autofree gchar *event_id_str = g_variant_print (event_id, FALSE);
+      g_autofree gchar *aggregate_key_str = g_variant_print (aggregate_key, FALSE);
+      g_autofree gchar *payload_str = nullable_payload ? g_variant_print (nullable_payload, FALSE) : NULL;
       g_set_error (error, G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
-                   "There already is a timer for this event, user, aggregate "
-                   "key, and payload");
+                   "There already is a timer for event %s, user %u, "
+                   "aggregate key %s and payload %s",
+                   event_id_str,
+                   unix_user_id,
+                   aggregate_key_str,
+                   payload_str);
       return FALSE;
     }
 

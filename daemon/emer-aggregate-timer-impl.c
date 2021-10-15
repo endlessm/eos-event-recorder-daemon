@@ -204,8 +204,7 @@ emer_aggregate_timer_impl_get_sender_name (EmerAggregateTimerImpl *self)
 guint
 emer_aggregate_timer_impl_hash (gconstpointer timer_impl)
 {
-  const EmerAggregateTimerImpl *self =
-    (EmerAggregateTimerImpl *)timer_impl;
+  const EmerAggregateTimerImpl *self = EMER_AGGREGATE_TIMER_IMPL ((gpointer)timer_impl);
 
   return g_str_hash (self->cache_key_string);
 }
@@ -214,8 +213,8 @@ gboolean
 emer_aggregate_timer_impl_equal (gconstpointer a,
                                  gconstpointer b)
 {
-  const EmerAggregateTimerImpl *timer_impl_a = (EmerAggregateTimerImpl *)a;
-  const EmerAggregateTimerImpl *timer_impl_b = (EmerAggregateTimerImpl *)b;
+  const EmerAggregateTimerImpl *timer_impl_a = EMER_AGGREGATE_TIMER_IMPL ((gpointer)a);
+  const EmerAggregateTimerImpl *timer_impl_b = EMER_AGGREGATE_TIMER_IMPL ((gpointer)b);
 
   return g_str_equal (timer_impl_a->cache_key_string,
                       timer_impl_b->cache_key_string);

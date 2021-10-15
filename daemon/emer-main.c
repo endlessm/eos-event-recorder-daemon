@@ -133,7 +133,7 @@ on_start_aggregate_timer (EmerEventRecorderServer *object,
       g_warning ("Could not export aggregate timer interface on system bus: %s.",
                  error->message);
       g_dbus_method_invocation_return_gerror (invocation, error);
-      return FALSE;
+      return TRUE;
     }
 
   sender = g_dbus_method_invocation_get_sender (invocation);
@@ -152,7 +152,7 @@ on_start_aggregate_timer (EmerEventRecorderServer *object,
                  sender, error->message);
       g_dbus_method_invocation_return_gerror (invocation, error);
       g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (timer));
-      return FALSE;
+      return TRUE;
     }
 
   g_variant_get (result, "(u)", &unix_user_id);
@@ -171,7 +171,7 @@ on_start_aggregate_timer (EmerEventRecorderServer *object,
       g_warning ("Could not start aggregate timer '%s': %s.",
                  sender, error->message);
       g_dbus_method_invocation_return_gerror (invocation, error);
-      return FALSE;
+      return TRUE;
     }
 
   // Only increment on success, otherwise we waste ids for nothing

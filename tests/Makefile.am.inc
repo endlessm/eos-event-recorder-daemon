@@ -148,6 +148,7 @@ dist_test_data = \
 
 # Run tests when running 'make check'
 test_programs = \
+	tests/daemon/test-aggregate-tally \
 	tests/daemon/test-boot-id-provider \
 	tests/daemon/test-cache-size-provider \
 	tests/daemon/test-cache-version-provider \

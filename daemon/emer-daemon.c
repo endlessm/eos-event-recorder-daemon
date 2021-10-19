@@ -1441,7 +1441,7 @@ emer_daemon_constructed (GObject *object)
   g_free (environment);
 
   priv->aggregate_tally =
-    emer_aggregate_tally_new (priv->persistent_cache_directory);
+    emer_aggregate_tally_new (priv->persistent_cache_directory ?: g_get_user_cache_dir ());
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->constructed (object);
 }

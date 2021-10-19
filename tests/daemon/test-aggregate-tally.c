@@ -127,7 +127,7 @@ test_aggregate_tally_store_events (struct Fixture *fixture,
   struct AggregateEvent *event;
 
   datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
-  event = create_aggregate_event (0, uuids[0],
+  event = create_aggregate_event (1001, uuids[0],
                                   g_variant_new_string (""),
                                   g_variant_new_string (""));
 
@@ -198,7 +198,7 @@ test_aggregate_tally_iter (struct Fixture *fixture,
       g_autoptr(GError) error = NULL;
       struct AggregateEvent *event;
 
-      event = create_aggregate_event (0, uuids[0],
+      event = create_aggregate_event (1001, uuids[0],
                                       g_variant_new_string (""),
                                       g_variant_new_string (""));
 

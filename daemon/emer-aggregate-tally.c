@@ -21,16 +21,17 @@
  */
 
 #include "emer-aggregate-tally.h"
+#include "shared/metrics-util.h"
 
 #include <gio/gio.h>
-
-#define AGGREGATE_TIMER_VARIANT_TYPE "(vvuumv)"
+#include <sqlite3.h>
 
 struct _EmerAggregateTally
 {
   GObject parent_instance;
 
   gchar *persistent_cache_directory;
+  sqlite3 *db;
 };
 
 G_DEFINE_TYPE (EmerAggregateTally, emer_aggregate_tally, G_TYPE_OBJECT)
@@ -41,6 +42,9 @@ enum {
 };
 
 static GParamSpec *properties[N_PROPS] = { NULL, };
+
+#define INT_TO_UINT32(n) (*((guint32*)&n))
+#define UINT32_TO_INT(n) (*((int*)&n))
 
 static gchar *
 format_datetime_for_tally_type (GDateTime     *datetime,
@@ -76,112 +80,132 @@ ensure_folder_exists (EmerAggregateTally  *self,
     g_propagate_error (error, g_steal_pointer (&local_error));
 }
 
-static inline GVariant *
-aggregate_timer_to_variant (guint32    unix_user_id,
-                            GVariant  *event_id,
-                            GVariant  *aggregate_key,
-                            GVariant  *payload,
-                            guint32    counter,
-                            gint64     monotonic_time_us)
+static void
+tally_exec_or_die (EmerAggregateTally *self,
+                   const char         *sql)
 {
-  return g_variant_new (AGGREGATE_TIMER_VARIANT_TYPE,
-                        event_id,
-                        aggregate_key,
-                        unix_user_id,
-                        counter,
-                        payload);
+  int ret;
+  char *errmsg = NULL;
+
+  ret = sqlite3_exec (self->db, sql, NULL, NULL, &errmsg);
+  if (ret != SQLITE_OK)
+    g_error ("Failed to execute SQL '%s': (%d) %s", sql, ret, errmsg);
 }
 
-static gchar *
-get_tally_path_from_aggregate_timer (EmerAggregateTally *self,
-                                     guint32             unix_user_id,
-                                     GVariant           *event_id,
-                                     GVariant           *aggregate_key,
-                                     const char         *date)
+static void
+check_sqlite_error (EmerAggregateTally *self,
+                    const char         *tag,
+                    int                 ret)
 {
-  g_autoptr(GChecksum) checksum = NULL;
-  g_autofree gchar *aggregate_key_str = NULL;
-  g_autofree gchar *event_id_str = NULL;
+  if (ret == SQLITE_OK || ret == SQLITE_DONE)
+    return;
 
-  aggregate_key_str = g_variant_print (aggregate_key, FALSE);
-  event_id_str = g_variant_print (event_id, FALSE);
-
-  checksum = g_checksum_new (G_CHECKSUM_SHA256);
-  g_checksum_update (checksum,
-                     (const guchar*) event_id_str,
-                     strlen (event_id_str));
-  g_checksum_update (checksum,
-                     (const guchar*) &unix_user_id,
-                     sizeof (guint32));
-  g_checksum_update (checksum,
-                     (const guchar*) aggregate_key_str,
-                     strlen (aggregate_key_str));
-
-  return g_build_filename (self->persistent_cache_directory,
-                           "aggregate-timers",
-                           date,
-                           g_checksum_get_string (checksum),
-                           NULL);
+  g_error ("%s: (%d) %s",
+           tag,
+           sqlite3_extended_errcode (self->db),
+           sqlite3_errmsg (self->db));
 }
 
-static GVariant*
-load_aggregate_timer_from_path (const char *path)
+#define CHECK(x) \
+  check_sqlite_error (self, (G_STRLOC), (x))
+
+static GVariant *
+text_to_variant (sqlite3_stmt *stmt,
+                 int           i)
 {
-  g_autoptr(GMappedFile) mapped_file = NULL;
+  const gchar *text = (const gchar *)sqlite3_column_text (stmt, i);
+  return g_variant_parse (NULL, text, NULL, NULL, NULL);
+}
+
+static GVariant *
+column_to_variant (sqlite3_stmt *stmt,
+                   const gchar  *type,
+                   int           i)
+{
   g_autoptr(GVariant) variant = NULL;
-  g_autoptr(GBytes) bytes = NULL;
-  g_autoptr(GError) error = NULL;
+  gconstpointer sqlite_data;
+  gint size;
 
-  mapped_file = g_mapped_file_new (path, FALSE, &error);
-  if (error)
-    {
-      if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
-        g_warning ("Error loading aggregate timer: %s", error->message);
-      return NULL;
-    }
+  sqlite_data = sqlite3_column_blob (stmt, i);
+  if (!sqlite_data)
+    return NULL;
 
-  bytes = g_mapped_file_get_bytes (mapped_file);
-  variant = g_variant_new_from_bytes (G_VARIANT_TYPE (AGGREGATE_TIMER_VARIANT_TYPE),
-                                      bytes,
-                                      FALSE);
+  size = sqlite3_column_bytes (stmt, i);
+  gpointer data = g_memdup (sqlite_data, size);
 
-  if (!g_variant_is_normal_form (variant))
-    {
-      g_autoptr(GError) deletion_error = NULL;
-      g_autoptr(GFile) file = NULL;
-
-      g_warning ("Corrupted aggregate timer at %s, deleting...", path);
-
-      file = g_file_new_for_path (path);
-      g_file_delete (file, NULL, &deletion_error);
-      if (deletion_error)
-        g_warning ("Error deleting corrupted tally file %s: %s",
-                   path, deletion_error->message);
-      return NULL;
-    }
-
-  return g_steal_pointer (&variant);
+  variant = g_variant_new_from_data (G_VARIANT_TYPE (type),
+                                     data, size, FALSE,
+                                     g_free, data);
+  return swap_bytes_if_big_endian (g_variant_ref_sink (variant));
 }
 
 static guint32
-find_previous_aggregate_timer_counter (EmerAggregateTally *self,
-                                       const char         *aggregate_counter_path)
+column_to_uint32 (sqlite3_stmt *stmt,
+                  int           i)
 {
-  g_autoptr(GVariant) variant = NULL;
-  guint32 previous_counter = 0;
+  int number = sqlite3_column_int (stmt, i);
+  return INT_TO_UINT32 (number);
+}
 
-  variant = load_aggregate_timer_from_path (aggregate_counter_path);
+static void
+emer_aggregate_tally_constructed (GObject *object)
+{
+  EmerAggregateTally *self = EMER_AGGREGATE_TALLY (object);
+  g_autofree gchar *path = NULL;
+  int ret;
 
-  if (variant)
-    g_variant_get_child (variant, 3, "u", &previous_counter);
+  G_OBJECT_CLASS (emer_aggregate_tally_parent_class)->constructed (object);
 
-  return previous_counter;
+  g_assert (self->persistent_cache_directory != NULL);
+  ensure_folder_exists (self, self->persistent_cache_directory, NULL);
+  path = g_build_filename (self->persistent_cache_directory,
+                           "aggregate-events.db",
+                           NULL);
+  ret = sqlite3_open (path, &self->db);
+  if (ret != SQLITE_OK)
+    g_error ("Failed to open %s: %d", path, ret);
+
+  g_assert (self->db);
+
+  /* Use write-ahead logging rather than the default rollback journal. WAL
+   * reduces the number of writes to disk, and crucially only calls fsync()
+   * intermittently.
+   *
+   * TODO: should we force a checkpoint/fsync() to disk periodically, e.g.
+   * whenever we try to submit to the server?
+   *
+   * https://sqlite.org/wal.html
+   */
+  tally_exec_or_die (self, "PRAGMA journal_mode = WAL");
+  /* Magic number is "emer" in ASCII */
+  tally_exec_or_die (self, "PRAGMA application_id = 0x656d6572");
+  tally_exec_or_die (self, "PRAGMA user_version = 1");
+  tally_exec_or_die (self, "CREATE TABLE IF NOT EXISTS tally (id INTEGER PRIMARY KEY ASC,"
+                           "                                  date TEXT NOT NULL,"
+                           "                                  event_id TEXT NOT NULL,"
+                           "                                  unix_user_id INT NOT NULL,"
+                           "                                  aggregate_key_type TEXT NOT NULL,"
+                           "                                  aggregate_key BLOB NOT NULL,"
+                           "                                  payload_type TEXT,"
+                           "                                  payload BLOB,"
+                           "                                  counter INT NOT NULL);");
+  tally_exec_or_die (self,
+                     "CREATE UNIQUE INDEX IF NOT EXISTS "
+                     "ix_tally_unique_fields ON tally (date, event_id, unix_user_id, "
+                     "                                 aggregate_key_type, aggregate_key, "
+                     "                                 payload_type, payload)");
 }
 
 static void
 emer_aggregate_tally_finalize (GObject *object)
 {
   EmerAggregateTally *self = (EmerAggregateTally *)object;
+
+  if (self->db)
+    {
+      CHECK (sqlite3_close (self->db));
+      self->db = NULL;
+    }
 
   g_clear_pointer (&self->persistent_cache_directory, g_free);
 
@@ -213,6 +237,7 @@ emer_aggregate_tally_class_init (EmerAggregateTallyClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
+  object_class->constructed = emer_aggregate_tally_constructed;
   object_class->finalize = emer_aggregate_tally_finalize;
   object_class->set_property = emer_aggregate_tally_set_property;
 
@@ -259,50 +284,45 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
                                   gint64               monotonic_time_us,
                                   GError             **error)
 {
-  g_autofree gchar *tally_path = NULL;
-  g_autofree gchar *dirname = NULL;
+  const char *UPSERT_SQL =
+    "INSERT INTO tally (date, event_id, unix_user_id, "
+    "                   aggregate_key_type, aggregate_key, "
+    "                   payload_type, payload, counter) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+    "ON CONFLICT (date, event_id, unix_user_id, "
+    "             aggregate_key_type, aggregate_key, "
+    "             payload_type, payload) "
+    "DO UPDATE SET counter = tally.counter + excluded.counter;";
+
   g_autofree gchar *date = NULL;
-  g_autoptr(GVariant) timer_variant = NULL;
-  g_autoptr(GError) local_error = NULL;
-  guint32 previous_counter;
+  sqlite3_stmt *stmt = NULL;
 
   date = format_datetime_for_tally_type (datetime, tally_type);
-  tally_path = get_tally_path_from_aggregate_timer (self, unix_user_id,
-                                                    event_id, aggregate_key,
-                                                    date);
 
-  /* It might happen that the same application was opened and closed
-   * multiple times at the same day by the same user. In this case,
-   * we want to increase the day's counter instead of simply override
-   * it.
-   */
-  previous_counter = find_previous_aggregate_timer_counter (self, tally_path);
+  CHECK (sqlite3_prepare_v2 (self->db, UPSERT_SQL, -1, &stmt, NULL));
 
-  dirname = g_path_get_dirname (tally_path);
-  ensure_folder_exists (self, dirname, &local_error);
-  if (local_error)
-    {
-      g_propagate_error (error, g_steal_pointer (&local_error));
-      g_prefix_error (error, "Error saving aggregate timer to tally: ");
-      return FALSE;
-    }
+  CHECK (sqlite3_bind_text (stmt, 1, date, -1, SQLITE_TRANSIENT));
+  CHECK (sqlite3_bind_text (stmt, 2, g_variant_print (event_id, TRUE), -1, g_free));
+  CHECK (sqlite3_bind_int (stmt, 3, UINT32_TO_INT (unix_user_id)));
+  CHECK (sqlite3_bind_text (stmt, 4,
+                            g_variant_get_type_string (aggregate_key),
+                            -1, SQLITE_TRANSIENT));
+  CHECK (sqlite3_bind_blob (stmt, 5,
+                            g_variant_get_data (aggregate_key),
+                            g_variant_get_size (aggregate_key),
+                            SQLITE_TRANSIENT));
+  CHECK (sqlite3_bind_text (stmt, 6,
+                            payload ? g_variant_get_type_string (aggregate_key) : NULL,
+                            -1, SQLITE_TRANSIENT));
+  CHECK (sqlite3_bind_blob (stmt, 7,
+                            payload ? g_variant_get_data (payload) : NULL,
+                            payload ? g_variant_get_size (payload) : 0,
+                            SQLITE_TRANSIENT));
+  CHECK (sqlite3_bind_int (stmt, 8, counter));
 
-  timer_variant = aggregate_timer_to_variant (unix_user_id, event_id,
-                                              aggregate_key, payload,
-                                              counter + previous_counter,
-                                              monotonic_time_us);
+  CHECK (sqlite3_step (stmt));
 
-  g_file_set_contents (tally_path,
-                       g_variant_get_data (timer_variant),
-                       g_variant_get_size (timer_variant),
-                       &local_error);
-
-  if (local_error)
-    {
-      g_propagate_error (error, g_steal_pointer (&local_error));
-      g_prefix_error (error, "Error saving aggregate timer to tally: ");
-      return FALSE;
-    }
+  CHECK (sqlite3_finalize (stmt));
 
   return TRUE;
 }
@@ -315,77 +335,39 @@ emer_aggregate_tally_iter (EmerAggregateTally *self,
                            EmerTallyIterFunc   func,
                            gpointer            user_data)
 {
-  g_autoptr(GFileEnumerator) enumerator = NULL;
-  g_autoptr(GError) error = NULL;
-  g_autoptr(GFile) tallies_folder = NULL;
-  g_autofree gchar *tallies_path = NULL;
+  const char *SELECT_SQL =
+    "SELECT id, event_id, unix_user_id, "
+    "       aggregate_key_type, aggregate_key, "
+    "       payload_type, payload, counter "
+    "FROM tally "
+    "WHERE date = ?";
+
+  g_autoptr(GArray) rows_to_delete = NULL;
   g_autofree gchar *date = NULL;
+  sqlite3_stmt *stmt = NULL;
+  int ret;
 
   date = format_datetime_for_tally_type (datetime, tally_type);
-  tallies_path = g_build_filename (self->persistent_cache_directory,
-                                   "aggregate-timers",
-                                   date,
-                                   NULL);
+  rows_to_delete = g_array_new (FALSE, FALSE, sizeof (gint));
 
-  tallies_folder = g_file_new_for_path (tallies_path);
+  CHECK (sqlite3_prepare_v2 (self->db, SELECT_SQL, -1, &stmt, NULL));
+  CHECK (sqlite3_bind_text (stmt, 1, date, -1, SQLITE_TRANSIENT));
 
-  enumerator = g_file_enumerate_children (tallies_folder,
-                                          "standard::*",
-                                          G_FILE_QUERY_INFO_NONE,
-                                          NULL,
-                                          &error);
-
-  if (error)
+  while ((ret = sqlite3_step (stmt)) == SQLITE_ROW)
     {
-      if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
-        g_warning ("Error listing tallies from %s: %s",
-                   tallies_path, error->message);
-      return;
-    }
-
-  while (TRUE)
-    {
-      g_autoptr(GVariant) variant = NULL;
-      g_autoptr(GVariant) event_id = NULL;
-      g_autoptr(GVariant) aggregate_key = NULL;
-      g_autoptr(GVariant) payload = NULL;
-      g_autoptr(GError) local_error = NULL;
-      g_autofree gchar *path = NULL;
+      g_autoptr(GVariant) event_id =
+        text_to_variant (stmt, 1);
+      guint32 unix_user_id = column_to_uint32 (stmt, 2);
+      const gchar *aggregate_key_type =
+        (const gchar *) sqlite3_column_text (stmt, 3);
+      g_autoptr(GVariant) aggregate_key =
+        column_to_variant (stmt, aggregate_key_type, 4);
+      const gchar *payload_type =
+        (const gchar *)sqlite3_column_text (stmt, 5);
+      g_autoptr(GVariant) payload =
+        column_to_variant (stmt, payload_type, 6);
+      guint32 counter = column_to_uint32 (stmt, 7);
       EmerTallyIterResult result;
-      GFileInfo *info;
-      GFile *file;
-      guint32 counter = 0;
-      guint32 unix_user_id = 0;
-
-      g_file_enumerator_iterate (enumerator, &info, &file, NULL, &local_error);
-
-      if (local_error)
-        {
-          if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
-            g_warning ("Error listing tallies from %s: %s",
-                       tallies_path, local_error->message);
-          return;
-        }
-
-      if (!file || !info)
-        break;
-
-      if (g_file_info_get_file_type (info) != G_FILE_TYPE_REGULAR)
-        continue;
-
-      path = g_file_get_path (file);
-
-      variant = load_aggregate_timer_from_path (path);
-      if (!variant)
-        continue;
-
-      g_variant_get (variant,
-                     AGGREGATE_TIMER_VARIANT_TYPE,
-                     &event_id,
-                     &aggregate_key,
-                     &unix_user_id,
-                     &counter,
-                     &payload);
 
       result = func (unix_user_id, event_id,
                      aggregate_key, payload,
@@ -393,23 +375,36 @@ emer_aggregate_tally_iter (EmerAggregateTally *self,
 
       if (flags & EMER_TALLY_ITER_FLAG_DELETE)
         {
-          g_autoptr(GError) deletion_error = NULL;
-
-          if (!g_file_delete (file, NULL, &deletion_error))
-            g_warning ("Error deleting tally file %s: %s",
-                       path, deletion_error->message);
+          const gint row_id = sqlite3_column_int (stmt, 0);
+          g_array_append_val (rows_to_delete, row_id);
         }
 
       if (result & EMER_TALLY_ITER_STOP)
         break;
     }
 
-  if (flags & EMER_TALLY_ITER_FLAG_DELETE)
-    {
-      g_autoptr(GError) deletion_error = NULL;
+  CHECK (sqlite3_finalize (stmt));
 
-      if (!g_file_delete (tallies_folder, NULL, &deletion_error))
-        g_warning ("Error deleting tally file %s: %s",
-                   tallies_path, deletion_error->message);
+  if (rows_to_delete->len > 0)
+    {
+      const char *DELETE_SQL = "DELETE FROM tally WHERE id IN ";
+      g_autoptr(GString) query = NULL;
+      size_t i;
+
+      g_assert (flags & EMER_TALLY_ITER_FLAG_DELETE);
+
+      query = g_string_new (DELETE_SQL);
+      g_string_append (query, "(");
+      for (i = 0; i < rows_to_delete->len; i++)
+        {
+          gint row_id = g_array_index (rows_to_delete, gint, i);
+          g_string_append_printf (query, i == 0 ? "%d" : ", %d", row_id);
+        }
+      g_string_append (query, ");");
+
+      CHECK (sqlite3_prepare_v2 (self->db, query->str, -1, &stmt, NULL));
+      CHECK (sqlite3_step (stmt));
+      CHECK (sqlite3_reset (stmt));
+      CHECK (sqlite3_finalize (stmt));
     }
 }

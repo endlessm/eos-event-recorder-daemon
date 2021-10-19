@@ -1286,7 +1286,10 @@ gint
 main (gint                argc,
       const gchar * const argv[])
 {
-  g_test_init (&argc, (gchar ***) &argv, NULL);
+  /* TODO: without this, when the daemon uses GNetworkMonitor, Gio tries to load a module. But it fails to load because G_TEST_OPTION_ISOLATE_DIRS overwrites $XDG_DATA_DIRS, so the module cannot find the schemas installed in /usr.
+   */
+  g_setenv ("GIO_MODULE_DIR", "/dev/null", TRUE);
+  g_test_init (&argc, (gchar ***) &argv, G_TEST_OPTION_ISOLATE_DIRS, NULL);
 
 #define ADD_DAEMON_TEST(path, test_func) \
   g_test_add ((path), Fixture, NULL, setup, (test_func), teardown)

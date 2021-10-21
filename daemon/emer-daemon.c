@@ -1155,9 +1155,10 @@ set_max_bytes_buffered (EmerDaemon *self,
 static void schedule_next_midnight_tick (EmerDaemon *self);
 
 static void
-save_aggregate_timers_to_tally (EmerDaemon *self,
-                                const char *date,
-                                gint64      monotonic_time_us)
+save_aggregate_timers_to_tally (EmerDaemon    *self,
+                                EmerTallyType  tally_type,
+                                const char    *date,
+                                gint64         monotonic_time_us)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   EmerAggregateTimerImpl *timer_impl;
@@ -1169,6 +1170,7 @@ save_aggregate_timers_to_tally (EmerDaemon *self,
       g_autoptr(GError) error = NULL;
 
       emer_aggregate_timer_impl_store (timer_impl,
+                                       tally_type,
                                        date,
                                        monotonic_time_us,
                                        &error);
@@ -1239,7 +1241,11 @@ clock_ticked_midnight_cb (gpointer user_data)
   g_message ("Buffering daily aggregate events from %s to submission queue",
              date);
 
-  save_aggregate_timers_to_tally (self, date, now_monotonic_us);
+  save_aggregate_timers_to_tally (self,
+                                  EMER_TALLY_DAILY_EVENTS,
+                                  date,
+                                  now_monotonic_us);
+
   emer_aggregate_tally_iter (priv->aggregate_tally,
                              date,
                              EMER_TALLY_ITER_FLAG_DELETE,
@@ -1258,7 +1264,11 @@ clock_ticked_midnight_cb (gpointer user_data)
       g_message ("Buffering monthly aggregate events from %s to submission queue",
                  month_date);
 
-      save_aggregate_timers_to_tally (self, month_date, now_monotonic_us);
+      save_aggregate_timers_to_tally (self,
+                                      EMER_TALLY_MONTHLY_EVENTS,
+                                      month_date,
+                                      now_monotonic_us);
+
       emer_aggregate_tally_iter (priv->aggregate_tally,
                                  month_date,
                                  EMER_TALLY_ITER_FLAG_DELETE,

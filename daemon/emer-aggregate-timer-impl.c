@@ -137,10 +137,12 @@ emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
 
 gboolean
 emer_aggregate_timer_impl_store (EmerAggregateTimerImpl  *self,
+                                 EmerTallyType            tally_type,
                                  const gchar             *date,
                                  gint64                   monotonic_time_us,
                                  GError                 **error)
 {
+  GVariant *event_id;
   guint32 counter;
   gint64 difference;
 
@@ -150,9 +152,23 @@ emer_aggregate_timer_impl_store (EmerAggregateTimerImpl  *self,
   difference = monotonic_time_us - self->start_monotonic_us;
   counter = CLAMP (difference / G_USEC_PER_SEC, 0, G_MAXUINT32);
 
+  switch (tally_type)
+    {
+    case EMER_TALLY_DAILY_EVENTS:
+      event_id = self->event_id;
+      break;
+
+    case EMER_TALLY_MONTHLY_EVENTS:
+      event_id = self->monthly_event_id;
+      break;
+
+    default:
+      g_assert_not_reached ();
+    }
+
   return emer_aggregate_tally_store_event (self->tally,
                                            self->unix_user_id,
-                                           self->event_id,
+                                           event_id,
                                            self->aggregate_key,
                                            self->payload,
                                            counter,
@@ -207,7 +223,7 @@ emer_aggregate_timer_impl_stop (EmerAggregateTimerImpl  *self,
   month_date = g_date_time_format (datetime, "%Y-%m");
   emer_aggregate_tally_store_event (self->tally,
                                     self->unix_user_id,
-                                    self->event_id,
+                                    self->monthly_event_id,
                                     self->aggregate_key,
                                     self->payload,
                                     counter,

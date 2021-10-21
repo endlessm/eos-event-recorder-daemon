@@ -36,6 +36,12 @@ typedef enum {
   EMER_TALLY_ITER_STOP = 1,
 } EmerTallyIterResult;
 
+typedef enum
+{
+  EMER_TALLY_DAILY_EVENTS,
+  EMER_TALLY_MONTHLY_EVENTS,
+} EmerTallyType;
+
 typedef EmerTallyIterResult (*EmerTallyIterFunc) (guint32     unix_user_id,
                                                   GVariant   *event_id,
                                                   GVariant   *aggregate_key,

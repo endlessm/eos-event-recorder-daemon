@@ -112,12 +112,15 @@ emer_aggregate_timer_impl_store (EmerAggregateTimerImpl  *self,
                                  gint64                   monotonic_time_us,
                                  GError                 **error)
 {
-  gint64 counter;
+  guint32 counter;
+  gint64 difference;
 
   g_return_val_if_fail (EMER_IS_AGGREGATE_TIMER_IMPL (self), FALSE);
   g_return_val_if_fail (date != NULL && *date != '\0', FALSE);
 
-  counter = monotonic_time_us - self->start_monotonic_us;
+  difference = monotonic_time_us - self->start_monotonic_us;
+  counter = CLAMP (difference / G_USEC_PER_SEC, 0, G_MAXUINT32);
+
   return emer_aggregate_tally_store_event (self->tally,
                                            self->unix_user_id,
                                            self->event_id,
@@ -147,11 +150,13 @@ emer_aggregate_timer_impl_stop (EmerAggregateTimerImpl  *self,
   g_autoptr(GError) local_error = NULL;
   g_autofree gchar *month_date = NULL;
   g_autofree gchar *date = NULL;
-  gint64 counter;
+  guint32 counter;
+  gint64 difference;
 
   g_return_val_if_fail (EMER_IS_AGGREGATE_TIMER_IMPL (self), FALSE);
 
-  counter = monotonic_time_us - self->start_monotonic_us;
+  difference = monotonic_time_us - self->start_monotonic_us;
+  counter = CLAMP (difference / G_USEC_PER_SEC, 0, G_MAXUINT32);
 
   date = g_date_time_format (datetime, "%Y-%m-%d");
   emer_aggregate_tally_store_event (self->tally,

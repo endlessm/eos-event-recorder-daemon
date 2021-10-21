@@ -22,6 +22,9 @@
 
 #include "emer-aggregate-timer-impl.h"
 #include "emer-aggregate-tally.h"
+#include "shared/metrics-util.h"
+
+#include <uuid/uuid.h>
 
 struct _EmerAggregateTimerImpl
 {
@@ -34,6 +37,7 @@ struct _EmerAggregateTimerImpl
 
   guint32 unix_user_id;
   GVariant *event_id; /* owned */
+  GVariant *monthly_event_id; /* owned */
   GVariant *aggregate_key; /* owned */
   GVariant *payload; /* owned */
   gchar *cache_key_string; /* owned */
@@ -41,6 +45,25 @@ struct _EmerAggregateTimerImpl
 };
 
 G_DEFINE_TYPE (EmerAggregateTimerImpl, emer_aggregate_timer_impl, G_TYPE_OBJECT)
+
+static GVariant *
+create_uuid_variant (GVariant    *event_id,
+                     const gchar *name)
+{
+  GVariantBuilder builder;
+  g_autoptr(GVariantIter) iter = NULL;
+  uuid_t uuid, new_uuid;
+  size_t i = 0;
+
+  g_variant_get (event_id, "ay", &iter);
+  while (g_variant_iter_loop (iter, "y", &uuid[i++]))
+    ;
+
+  uuid_generate_sha1 (new_uuid, uuid, name, strlen (name));
+
+  get_uuid_builder (new_uuid, &builder);
+  return g_variant_builder_end (&builder);
+}
 
 static void
 emer_aggregate_timer_impl_finalize (GObject *object)
@@ -50,6 +73,7 @@ emer_aggregate_timer_impl_finalize (GObject *object)
   g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (self->timer));
 
   g_clear_pointer (&self->event_id, g_variant_unref);
+  g_clear_pointer (&self->monthly_event_id, g_variant_unref);
   g_clear_pointer (&self->aggregate_key, g_variant_unref);
   g_clear_pointer (&self->payload, g_variant_unref);
   g_clear_pointer (&self->cache_key_string, g_free);
@@ -102,6 +126,7 @@ emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
   self->tally = tally;
   self->unix_user_id = unix_user_id;
   self->event_id = g_variant_ref (event_id);
+  self->monthly_event_id = create_uuid_variant (event_id, "monthly");
   self->aggregate_key = g_variant_ref (aggregate_key);
   self->payload = payload ? g_variant_ref (payload) : NULL;
   self->start_monotonic_us = monotonic_time_us;

@@ -122,31 +122,35 @@ static void
 test_aggregate_tally_store_events (struct Fixture *fixture,
                                    gconstpointer   dontuseme)
 {
+  g_autoptr(GDateTime) datetime = NULL;
   g_autoptr(GError) error = NULL;
   struct AggregateEvent *event;
 
+  datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
   event = create_aggregate_event (0, uuids[0],
                                   g_variant_new_string (""),
                                   g_variant_new_string (""));
 
   emer_aggregate_tally_store_event (fixture->tally,
+                                    EMER_TALLY_DAILY_EVENTS,
                                     event->unix_user_id,
                                     event->event_id,
                                     event->aggregate_key,
                                     event->payload,
                                     1,
-                                    "2021-09-22",
+                                    datetime,
                                     g_get_monotonic_time (),
                                     &error);
   g_assert_no_error (error);
 
   emer_aggregate_tally_store_event (fixture->tally,
+                                    EMER_TALLY_DAILY_EVENTS,
                                     event->unix_user_id,
                                     event->event_id,
                                     event->aggregate_key,
                                     event->payload,
                                     2,
-                                    "2021-09-22",
+                                    datetime,
                                     g_get_monotonic_time (),
                                     &error);
   g_assert_no_error (error);
@@ -180,8 +184,11 @@ static void
 test_aggregate_tally_iter (struct Fixture *fixture,
                            gconstpointer   dontuseme)
 {
+  g_autoptr(GDateTime) datetime = NULL;
   struct IterData data;
   int i;
+
+  datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
 
   // Add the same aggregate event multiple times. It must
   // result in a single aggregate event with the sum of
@@ -196,12 +203,13 @@ test_aggregate_tally_iter (struct Fixture *fixture,
                                       g_variant_new_string (""));
 
       emer_aggregate_tally_store_event (fixture->tally,
+                                        EMER_TALLY_DAILY_EVENTS,
                                         event->unix_user_id,
                                         event->event_id,
                                         event->aggregate_key,
                                         event->payload,
                                         1,
-                                        "2021-09-22",
+                                        datetime,
                                         g_get_monotonic_time (),
                                         &error);
 
@@ -212,7 +220,8 @@ test_aggregate_tally_iter (struct Fixture *fixture,
 
   data = (struct IterData) { 0, 0 };
   emer_aggregate_tally_iter (fixture->tally,
-                             "2021-09-22",
+                             EMER_TALLY_DAILY_EVENTS,
+                             datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
                              &data);

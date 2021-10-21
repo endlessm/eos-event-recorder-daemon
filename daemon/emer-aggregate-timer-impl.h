@@ -46,7 +46,7 @@ emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
 
 gboolean emer_aggregate_timer_impl_store (EmerAggregateTimerImpl  *self,
                                           EmerTallyType            tally_type,
-                                          const gchar             *date,
+                                          GDateTime               *datetime,
                                           gint64                   monotonic_time_us,
                                           GError                 **error);
 

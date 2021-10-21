@@ -42,6 +42,25 @@ enum {
 
 static GParamSpec *properties[N_PROPS] = { NULL, };
 
+static gchar *
+format_datetime_for_tally_type (GDateTime     *datetime,
+                                EmerTallyType  tally_type)
+{
+  switch (tally_type)
+    {
+    case EMER_TALLY_DAILY_EVENTS:
+      return g_date_time_format (datetime, "%Y-%m-%d");
+
+    case EMER_TALLY_MONTHLY_EVENTS:
+      return g_date_time_format (datetime, "%Y-%m");
+
+    default:
+      g_assert_not_reached ();
+    }
+
+  return NULL;
+}
+
 static void
 ensure_folder_exists (EmerAggregateTally  *self,
                       const char          *path,
@@ -230,21 +249,24 @@ emer_aggregate_tally_new (const char *persistent_cache_directory)
 
 gboolean
 emer_aggregate_tally_store_event (EmerAggregateTally  *self,
+                                  EmerTallyType        tally_type,
                                   guint32              unix_user_id,
                                   GVariant            *event_id,
                                   GVariant            *aggregate_key,
                                   GVariant            *payload,
                                   guint32              counter,
-                                  const char          *date,
+                                  GDateTime           *datetime,
                                   gint64               monotonic_time_us,
                                   GError             **error)
 {
   g_autofree gchar *tally_path = NULL;
   g_autofree gchar *dirname = NULL;
+  g_autofree gchar *date = NULL;
   g_autoptr(GVariant) timer_variant = NULL;
   g_autoptr(GError) local_error = NULL;
   guint32 previous_counter;
 
+  date = format_datetime_for_tally_type (datetime, tally_type);
   tally_path = get_tally_path_from_aggregate_timer (self, unix_user_id,
                                                     event_id, aggregate_key,
                                                     date);
@@ -287,7 +309,8 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
 
 void
 emer_aggregate_tally_iter (EmerAggregateTally *self,
-                           const char         *date,
+                           EmerTallyType       tally_type,
+                           GDateTime          *datetime,
                            EmerTallyIterFlags  flags,
                            EmerTallyIterFunc   func,
                            gpointer            user_data)
@@ -296,7 +319,9 @@ emer_aggregate_tally_iter (EmerAggregateTally *self,
   g_autoptr(GError) error = NULL;
   g_autoptr(GFile) tallies_folder = NULL;
   g_autofree gchar *tallies_path = NULL;
+  g_autofree gchar *date = NULL;
 
+  date = format_datetime_for_tally_type (datetime, tally_type);
   tallies_path = g_build_filename (self->persistent_cache_directory,
                                    "aggregate-timers",
                                    date,

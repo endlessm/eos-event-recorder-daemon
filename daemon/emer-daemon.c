@@ -1157,7 +1157,7 @@ static void schedule_next_midnight_tick (EmerDaemon *self);
 static void
 save_aggregate_timers_to_tally (EmerDaemon    *self,
                                 EmerTallyType  tally_type,
-                                const char    *date,
+                                GDateTime     *datetime,
                                 gint64         monotonic_time_us)
 {
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
@@ -1171,7 +1171,7 @@ save_aggregate_timers_to_tally (EmerDaemon    *self,
 
       emer_aggregate_timer_impl_store (timer_impl,
                                        tally_type,
-                                       date,
+                                       datetime,
                                        monotonic_time_us,
                                        &error);
 
@@ -1243,11 +1243,12 @@ clock_ticked_midnight_cb (gpointer user_data)
 
   save_aggregate_timers_to_tally (self,
                                   EMER_TALLY_DAILY_EVENTS,
-                                  date,
+                                  priv->current_aggregate_tally_date,
                                   now_monotonic_us);
 
   emer_aggregate_tally_iter (priv->aggregate_tally,
-                             date,
+                             EMER_TALLY_DAILY_EVENTS,
+                             priv->current_aggregate_tally_date,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              buffer_aggregate_event_to_queue,
                              self);
@@ -1266,11 +1267,12 @@ clock_ticked_midnight_cb (gpointer user_data)
 
       save_aggregate_timers_to_tally (self,
                                       EMER_TALLY_MONTHLY_EVENTS,
-                                      month_date,
+                                      priv->current_aggregate_tally_date,
                                       now_monotonic_us);
 
       emer_aggregate_tally_iter (priv->aggregate_tally,
-                                 month_date,
+                                 EMER_TALLY_MONTHLY_EVENTS,
+                                 priv->current_aggregate_tally_date,
                                  EMER_TALLY_ITER_FLAG_DELETE,
                                  buffer_aggregate_event_to_queue,
                                  self);

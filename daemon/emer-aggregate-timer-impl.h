@@ -37,6 +37,7 @@ G_DECLARE_FINAL_TYPE (EmerAggregateTimerImpl,
 EmerAggregateTimerImpl *
 emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
                                EmerAggregateTimer *timer,
+                               const gchar        *sender_name,
                                guint32             unix_user_id,
                                GVariant           *event_id,
                                GVariant           *aggregate_key,
@@ -55,6 +56,9 @@ gboolean emer_aggregate_timer_impl_stop (EmerAggregateTimerImpl  *self,
                                          GDateTime               *datetime,
                                          gint64                   monotonic_time_us,
                                          GError                 **error);
+
+const gchar *
+emer_aggregate_timer_impl_get_sender_name (EmerAggregateTimerImpl *self);
 
 guint emer_aggregate_timer_impl_hash (gconstpointer timer_impl);
 gboolean emer_aggregate_timer_impl_equal (gconstpointer a,

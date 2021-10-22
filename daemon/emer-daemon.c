@@ -131,6 +131,12 @@ typedef struct _CacheMetricEventData
   GVariant *payload;
 } CacheMetricEventData;
 
+typedef struct _AggregateTimerSenderData
+{
+  guint watch_id;
+  GPtrArray *aggregate_timers;
+} AggregateTimerSenderData;
+
 typedef struct _EmerDaemonPrivate
 {
   guint network_send_interval;
@@ -148,6 +154,7 @@ typedef struct _EmerDaemonPrivate
   gboolean have_logged_overflow;
 
   GHashTable *aggregate_timers;
+  GHashTable *monitored_senders;
 
   /* Private storage for public properties */
 
@@ -208,6 +215,17 @@ static gboolean handle_upload_timer (EmerDaemon *self);
 static void handle_http_response (SoupSession *http_session,
                                   SoupMessage *http_message,
                                   GTask       *upload_task);
+
+static void
+aggregate_timer_sender_data_free (AggregateTimerSenderData *sender_data)
+{
+  if (!sender_data)
+    return;
+
+  g_clear_handle_id (&sender_data->watch_id, g_bus_unwatch_name);
+  g_clear_pointer (&sender_data->aggregate_timers, g_ptr_array_unref);
+  g_free (sender_data);
+}
 
 static void
 network_callback_data_free (NetworkCallbackData *callback_data)
@@ -1015,6 +1033,7 @@ on_permissions_changed (EmerPermissionsProvider *permissions_provider,
       GError *error = NULL;
 
       remove_events (self, priv->variant_array->len);
+      g_hash_table_remove_all (priv->monitored_senders);
       g_hash_table_remove_all (priv->aggregate_timers);
 
       if (!emer_persistent_cache_remove_all (priv->persistent_cache, &error))
@@ -1287,8 +1306,10 @@ on_timer_stopped_cb (EmerAggregateTimer     *timer,
 {
   EmerDaemon *self = g_object_get_data (G_OBJECT (timer_impl), "daemon");
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+  AggregateTimerSenderData *sender_data;
   g_autoptr(GDateTime) now = NULL;
   g_autoptr(GError) error = NULL;
+  const gchar *sender_name;
   gint64 now_monotonic_us;
 
   now = g_date_time_new_now_local ();
@@ -1299,10 +1320,58 @@ on_timer_stopped_cb (EmerAggregateTimer     *timer,
   else
     emer_aggregate_timer_complete_stop_timer (timer, invocation);
 
+  /* Stop watching the sender if this was the last of its timers */
+  sender_name = emer_aggregate_timer_impl_get_sender_name (timer_impl);
+  sender_data = g_hash_table_lookup (priv->monitored_senders, sender_name);
+  g_assert (sender_data != NULL);
+  g_ptr_array_remove_fast (sender_data->aggregate_timers, timer_impl);
+  if (sender_data->aggregate_timers->len == 0)
+    g_hash_table_remove (priv->monitored_senders, sender_name);
+
   if (!g_hash_table_remove (priv->aggregate_timers, timer_impl))
     g_warning ("Stopped timer was not in the set of running timers");
 
   return TRUE;
+}
+
+static void
+sender_name_vanished_cb (GDBusConnection *connection,
+                         const gchar     *sender_name,
+                         gpointer         user_data)
+{
+  EmerDaemon *self = EMER_DAEMON (user_data);
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+  AggregateTimerSenderData *sender_data;
+  g_autoptr(GDateTime) now = NULL;
+  gint64 now_monotonic_us;
+  guint i;
+
+  now = g_date_time_new_now_local ();
+  now_monotonic_us = g_get_monotonic_time ();
+
+  sender_data = g_hash_table_lookup (priv->monitored_senders, sender_name);
+  g_assert (sender_data != NULL);
+
+  for (i = 0; i < sender_data->aggregate_timers->len; i++)
+    {
+      g_autoptr(GError) error = NULL;
+      EmerAggregateTimerImpl *timer_impl =
+        g_ptr_array_index (sender_data->aggregate_timers, i);
+
+      emer_aggregate_timer_impl_stop (timer_impl,
+                                      now,
+                                      now_monotonic_us,
+                                      &error);
+
+      if (error)
+        g_warning ("Error stopping aggregate timer after sender disappeared: %s",
+                   error->message);
+
+      if (!g_hash_table_remove (priv->aggregate_timers, timer_impl))
+        g_warning ("Stopped timer was not in the set of running timers");
+    }
+
+  g_hash_table_remove (priv->monitored_senders, sender_name);
 }
 
 static void
@@ -1445,6 +1514,7 @@ emer_daemon_finalize (GObject *object)
   /* While an upload is ongoing, the GTask holds a ref to the EmerDaemon. */
   g_warn_if_fail (priv->current_upload_cancellable == NULL);
 
+  g_clear_pointer (&priv->monitored_senders, g_hash_table_destroy);
   g_clear_pointer (&priv->aggregate_timers, g_hash_table_destroy);
 
   g_source_remove (priv->upload_events_timeout_source_id);
@@ -1646,6 +1716,10 @@ emer_daemon_init (EmerDaemon *self)
     g_hash_table_new_full (emer_aggregate_timer_impl_hash,
                            emer_aggregate_timer_impl_equal,
                            g_object_unref, NULL);
+
+  priv->monitored_senders =
+    g_hash_table_new_full (g_str_hash, g_str_equal, g_free,
+                           (GDestroyNotify)aggregate_timer_sender_data_free);
 
   priv->variant_array =
     g_ptr_array_new_with_free_func ((GDestroyNotify) g_variant_unref);
@@ -1870,6 +1944,7 @@ emer_daemon_get_permissions_provider (EmerDaemon *self)
 gboolean
 emer_daemon_start_aggregate_timer (EmerDaemon          *self,
                                    EmerAggregateTimer  *timer,
+                                   const gchar         *sender_name,
                                    guint32              unix_user_id,
                                    GVariant            *event_id,
                                    GVariant            *aggregate_key,
@@ -1879,6 +1954,7 @@ emer_daemon_start_aggregate_timer (EmerDaemon          *self,
 {
   EmerDaemonPrivate *priv;
   g_autoptr(EmerAggregateTimerImpl) timer_impl = NULL;
+  AggregateTimerSenderData *sender_data;
   GVariant *nullable_payload;
 
   g_return_val_if_fail (EMER_IS_DAEMON (self), FALSE);
@@ -1908,6 +1984,7 @@ emer_daemon_start_aggregate_timer (EmerDaemon          *self,
   nullable_payload = get_nullable_payload (payload, has_payload);
   timer_impl = emer_aggregate_timer_impl_new (priv->aggregate_tally,
                                               timer,
+                                              sender_name,
                                               unix_user_id,
                                               event_id,
                                               aggregate_key,
@@ -1938,6 +2015,29 @@ emer_daemon_start_aggregate_timer (EmerDaemon          *self,
                     G_CALLBACK (on_timer_stopped_cb),
                     timer_impl);
 
+  /* Monitor sender and shut down all timers from it when it vanishes */
+  sender_data = g_hash_table_lookup (priv->monitored_senders, sender_name);
+  if (!sender_data)
+    {
+      GDBusConnection *connection =
+        g_dbus_interface_skeleton_get_connection (G_DBUS_INTERFACE_SKELETON (timer));
+
+      sender_data = g_new0 (AggregateTimerSenderData, 1);
+      sender_data->aggregate_timers = g_ptr_array_sized_new (1);
+      sender_data->watch_id =
+        g_bus_watch_name_on_connection (connection,
+                                        sender_name,
+                                        G_BUS_NAME_WATCHER_FLAGS_NONE,
+                                        NULL,
+                                        sender_name_vanished_cb,
+                                        self,
+                                        NULL);
+      g_hash_table_insert (priv->monitored_senders,
+                           g_strdup (sender_name),
+                           sender_data);
+    }
+
+  g_ptr_array_add (sender_data->aggregate_timers, timer_impl);
   g_hash_table_add (priv->aggregate_timers, g_steal_pointer (&timer_impl));
 
   return TRUE;

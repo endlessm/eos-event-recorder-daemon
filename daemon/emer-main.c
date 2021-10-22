@@ -159,6 +159,7 @@ on_start_aggregate_timer (EmerEventRecorderServer *object,
 
   emer_daemon_start_aggregate_timer (daemon,
                                      g_steal_pointer (&timer),
+                                     sender,
                                      unix_user_id,
                                      event_id,
                                      aggregate_key,

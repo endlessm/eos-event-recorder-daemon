@@ -36,6 +36,12 @@ typedef enum {
   EMER_TALLY_ITER_STOP = 1,
 } EmerTallyIterResult;
 
+typedef enum
+{
+  EMER_TALLY_DAILY_EVENTS,
+  EMER_TALLY_MONTHLY_EVENTS,
+} EmerTallyType;
+
 typedef EmerTallyIterResult (*EmerTallyIterFunc) (guint32     unix_user_id,
                                                   GVariant   *event_id,
                                                   GVariant   *aggregate_key,
@@ -53,17 +59,19 @@ EmerAggregateTally *
 emer_aggregate_tally_new (const gchar *persistent_cache_directory);
 
 gboolean emer_aggregate_tally_store_event (EmerAggregateTally  *self,
+                                           EmerTallyType        tally_type,
                                            guint32              unix_user_id,
                                            GVariant            *event_id,
                                            GVariant            *aggregate_key,
                                            GVariant            *payload,
                                            guint32              counter,
-                                           const char          *date,
+                                           GDateTime            *datetime,
                                            gint64               monotonic_time_us,
                                            GError             **error);
 
 void emer_aggregate_tally_iter (EmerAggregateTally *self,
-                                const char         *date,
+                                EmerTallyType       tally_type,
+                                GDateTime          *datetime,
                                 EmerTallyIterFlags  flags,
                                 EmerTallyIterFunc   func,
                                 gpointer            user_data);

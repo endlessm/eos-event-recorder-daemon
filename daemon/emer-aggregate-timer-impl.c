@@ -22,6 +22,9 @@
 
 #include "emer-aggregate-timer-impl.h"
 #include "emer-aggregate-tally.h"
+#include "shared/metrics-util.h"
+
+#include <uuid/uuid.h>
 
 struct _EmerAggregateTimerImpl
 {
@@ -34,6 +37,7 @@ struct _EmerAggregateTimerImpl
 
   guint32 unix_user_id;
   GVariant *event_id; /* owned */
+  GVariant *monthly_event_id; /* owned */
   GVariant *aggregate_key; /* owned */
   GVariant *payload; /* owned */
   gchar *cache_key_string; /* owned */
@@ -41,6 +45,25 @@ struct _EmerAggregateTimerImpl
 };
 
 G_DEFINE_TYPE (EmerAggregateTimerImpl, emer_aggregate_timer_impl, G_TYPE_OBJECT)
+
+static GVariant *
+create_uuid_variant (GVariant    *event_id,
+                     const gchar *name)
+{
+  GVariantBuilder builder;
+  g_autoptr(GVariantIter) iter = NULL;
+  uuid_t uuid, new_uuid;
+  size_t i = 0;
+
+  g_variant_get (event_id, "ay", &iter);
+  while (g_variant_iter_loop (iter, "y", &uuid[i++]))
+    ;
+
+  uuid_generate_sha1 (new_uuid, uuid, name, strlen (name));
+
+  get_uuid_builder (new_uuid, &builder);
+  return g_variant_builder_end (&builder);
+}
 
 static void
 emer_aggregate_timer_impl_finalize (GObject *object)
@@ -50,6 +73,7 @@ emer_aggregate_timer_impl_finalize (GObject *object)
   g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (self->timer));
 
   g_clear_pointer (&self->event_id, g_variant_unref);
+  g_clear_pointer (&self->monthly_event_id, g_variant_unref);
   g_clear_pointer (&self->aggregate_key, g_variant_unref);
   g_clear_pointer (&self->payload, g_variant_unref);
   g_clear_pointer (&self->cache_key_string, g_free);
@@ -102,6 +126,7 @@ emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
   self->tally = tally;
   self->unix_user_id = unix_user_id;
   self->event_id = g_variant_ref (event_id);
+  self->monthly_event_id = create_uuid_variant (event_id, "monthly");
   self->aggregate_key = g_variant_ref (aggregate_key);
   self->payload = payload ? g_variant_ref (payload) : NULL;
   self->start_monotonic_us = monotonic_time_us;
@@ -112,26 +137,43 @@ emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
 
 gboolean
 emer_aggregate_timer_impl_store (EmerAggregateTimerImpl  *self,
-                                 const gchar             *date,
+                                 EmerTallyType            tally_type,
+                                 GDateTime               *datetime,
                                  gint64                   monotonic_time_us,
                                  GError                 **error)
 {
+  GVariant *event_id;
   guint32 counter;
   gint64 difference;
 
   g_return_val_if_fail (EMER_IS_AGGREGATE_TIMER_IMPL (self), FALSE);
-  g_return_val_if_fail (date != NULL && *date != '\0', FALSE);
+  g_return_val_if_fail (datetime != NULL, FALSE);
 
   difference = monotonic_time_us - self->start_monotonic_us;
   counter = CLAMP (difference / G_USEC_PER_SEC, 0, G_MAXUINT32);
 
+  switch (tally_type)
+    {
+    case EMER_TALLY_DAILY_EVENTS:
+      event_id = self->event_id;
+      break;
+
+    case EMER_TALLY_MONTHLY_EVENTS:
+      event_id = self->monthly_event_id;
+      break;
+
+    default:
+      g_assert_not_reached ();
+    }
+
   return emer_aggregate_tally_store_event (self->tally,
+                                           tally_type,
                                            self->unix_user_id,
-                                           self->event_id,
+                                           event_id,
                                            self->aggregate_key,
                                            self->payload,
                                            counter,
-                                           date,
+                                           datetime,
                                            monotonic_time_us,
                                            error);
 }
@@ -152,8 +194,6 @@ emer_aggregate_timer_impl_stop (EmerAggregateTimerImpl  *self,
                                 GError                 **error)
 {
   g_autoptr(GError) local_error = NULL;
-  g_autofree gchar *month_date = NULL;
-  g_autofree gchar *date = NULL;
   guint32 counter;
   gint64 difference;
 
@@ -162,14 +202,14 @@ emer_aggregate_timer_impl_stop (EmerAggregateTimerImpl  *self,
   difference = monotonic_time_us - self->start_monotonic_us;
   counter = CLAMP (difference / G_USEC_PER_SEC, 0, G_MAXUINT32);
 
-  date = g_date_time_format (datetime, "%Y-%m-%d");
   emer_aggregate_tally_store_event (self->tally,
+                                    EMER_TALLY_DAILY_EVENTS,
                                     self->unix_user_id,
                                     self->event_id,
                                     self->aggregate_key,
                                     self->payload,
                                     counter,
-                                    date,
+                                    datetime,
                                     monotonic_time_us,
                                     &local_error);
   if (local_error)
@@ -179,14 +219,14 @@ emer_aggregate_timer_impl_stop (EmerAggregateTimerImpl  *self,
     }
 
 
-  month_date = g_date_time_format (datetime, "%Y-%m");
   emer_aggregate_tally_store_event (self->tally,
+                                    EMER_TALLY_MONTHLY_EVENTS,
                                     self->unix_user_id,
-                                    self->event_id,
+                                    self->monthly_event_id,
                                     self->aggregate_key,
                                     self->payload,
                                     counter,
-                                    month_date,
+                                    datetime,
                                     monotonic_time_us,
                                     &local_error);
   if (local_error)

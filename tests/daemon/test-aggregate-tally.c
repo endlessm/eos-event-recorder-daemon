@@ -228,6 +228,17 @@ test_aggregate_tally_iter (struct Fixture *fixture,
 
   g_assert_cmpuint (data.n_iterations, ==, 1);
   g_assert_cmpuint (data.counter, ==, 10);
+
+  data = (struct IterData) { 0, 0 };
+  emer_aggregate_tally_iter (fixture->tally,
+                             EMER_TALLY_DAILY_EVENTS,
+                             datetime,
+                             EMER_TALLY_ITER_FLAG_DELETE,
+                             tally_iter_func,
+                             &data);
+
+  g_assert_cmpuint (data.n_iterations, ==, 0);
+  g_assert_cmpuint (data.counter, ==, 0);
 }
 
 gint

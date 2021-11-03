@@ -145,6 +145,33 @@ column_to_uint32 (sqlite3_stmt *stmt,
 }
 
 static void
+delete_tally_entries (EmerAggregateTally *self,
+                      GArray             *rows_to_delete)
+{
+  const char *DELETE_SQL = "DELETE FROM tally WHERE id IN ";
+  g_autoptr(GString) query = NULL;
+  sqlite3_stmt *stmt = NULL;
+  size_t i;
+
+  if (!rows_to_delete || rows_to_delete->len == 0)
+    return;
+
+  query = g_string_new (DELETE_SQL);
+  g_string_append (query, "(");
+  for (i = 0; i < rows_to_delete->len; i++)
+    {
+      sqlite_int64 row_id = g_array_index (rows_to_delete, gint, i);
+      g_string_append_printf (query, i == 0 ? "%" G_GINT64_FORMAT : ", %" G_GINT64_FORMAT, (gint64) row_id);
+    }
+  g_string_append (query, ");");
+
+  CHECK (sqlite3_prepare_v2 (self->db, query->str, -1, &stmt, NULL));
+  CHECK (sqlite3_step (stmt));
+  CHECK (sqlite3_reset (stmt));
+  CHECK (sqlite3_finalize (stmt));
+}
+
+static void
 emer_aggregate_tally_constructed (GObject *object)
 {
   EmerAggregateTally *self = EMER_AGGREGATE_TALLY (object);
@@ -384,26 +411,5 @@ emer_aggregate_tally_iter (EmerAggregateTally *self,
 
   CHECK (sqlite3_finalize (stmt));
 
-  if (rows_to_delete->len > 0)
-    {
-      const char *DELETE_SQL = "DELETE FROM tally WHERE id IN ";
-      g_autoptr(GString) query = NULL;
-      size_t i;
-
-      g_assert (flags & EMER_TALLY_ITER_FLAG_DELETE);
-
-      query = g_string_new (DELETE_SQL);
-      g_string_append (query, "(");
-      for (i = 0; i < rows_to_delete->len; i++)
-        {
-          sqlite_int64 row_id = g_array_index (rows_to_delete, gint, i);
-          g_string_append_printf (query, i == 0 ? "%" G_GINT64_FORMAT : ", %" G_GINT64_FORMAT, (gint64) row_id);
-        }
-      g_string_append (query, ");");
-
-      CHECK (sqlite3_prepare_v2 (self->db, query->str, -1, &stmt, NULL));
-      CHECK (sqlite3_step (stmt));
-      CHECK (sqlite3_reset (stmt));
-      CHECK (sqlite3_finalize (stmt));
-    }
+  delete_tally_entries (self, rows_to_delete);
 }

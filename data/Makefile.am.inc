@@ -24,7 +24,7 @@ data/eos-metrics-event-recorder.service: data/eos-metrics-event-recorder.service
 	$(substitute_libexecdir) $< >$@.tmp && \
 	mv $@.tmp $@
 
-dist_dbusservice_DATA += data/com.endlessm.Metrics.service
+dbusservice_DATA += data/com.endlessm.Metrics.service
 
 data/com.endlessm.Metrics.service: data/com.endlessm.Metrics.service.in
 	$(AM_V_GEN)$(MKDIR_P) data && \

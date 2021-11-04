@@ -241,6 +241,153 @@ test_aggregate_tally_iter (struct Fixture *fixture,
   g_assert_cmpuint (data.counter, ==, 0);
 }
 
+static void
+test_aggregate_tally_large_counter_single (struct Fixture *fixture,
+                                           gconstpointer   dontuseme)
+{
+  g_autoptr(GDateTime) datetime = NULL;
+  struct IterData data;
+
+  datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+
+  // Add an aggregate event with a counter too large to fit into a 32-bit
+  // signed integer.
+  g_autoptr(GError) error = NULL;
+  struct AggregateEvent *event;
+
+  event = create_aggregate_event (1001, uuids[0],
+                                  g_variant_new_string (""),
+                                  g_variant_new_string (""));
+
+  emer_aggregate_tally_store_event (fixture->tally,
+                                    EMER_TALLY_DAILY_EVENTS,
+                                    event->unix_user_id,
+                                    event->event_id,
+                                    event->aggregate_key,
+                                    event->payload,
+                                    ((guint32) G_MAXINT32) + 1,
+                                    datetime,
+                                    g_get_monotonic_time (),
+                                    &error);
+  g_assert_no_error (error);
+  aggregate_event_free (event);
+
+  data = (struct IterData) { 0, 0 };
+  emer_aggregate_tally_iter (fixture->tally,
+                             EMER_TALLY_DAILY_EVENTS,
+                             datetime,
+                             EMER_TALLY_ITER_FLAG_DELETE,
+                             tally_iter_func,
+                             &data);
+
+  g_assert_cmpuint (data.n_iterations, ==, 1);
+  g_assert_cmpuint (data.counter, ==, ((guint32) G_MAXINT32) + 1);
+}
+
+static void
+test_aggregate_tally_large_counter_add (struct Fixture *fixture,
+                                        gconstpointer   dontuseme)
+{
+  g_autoptr(GDateTime) datetime = NULL;
+  struct IterData data;
+
+  datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+
+  // Add an aggregate event whose counter only just fits in a 32-bit signed
+  // integer
+  g_autoptr(GError) error = NULL;
+  struct AggregateEvent *event;
+
+  event = create_aggregate_event (1001, uuids[0],
+                                  g_variant_new_string (""),
+                                  g_variant_new_string (""));
+
+  emer_aggregate_tally_store_event (fixture->tally,
+                                    EMER_TALLY_DAILY_EVENTS,
+                                    event->unix_user_id,
+                                    event->event_id,
+                                    event->aggregate_key,
+                                    event->payload,
+                                    (guint32) G_MAXINT32,
+                                    datetime,
+                                    g_get_monotonic_time (),
+                                    &error);
+  g_assert_no_error (error);
+
+  // Now add 1 to it
+  emer_aggregate_tally_store_event (fixture->tally,
+                                    EMER_TALLY_DAILY_EVENTS,
+                                    event->unix_user_id,
+                                    event->event_id,
+                                    event->aggregate_key,
+                                    event->payload,
+                                    1,
+                                    datetime,
+                                    g_get_monotonic_time (),
+                                    &error);
+  g_assert_no_error (error);
+
+  aggregate_event_free (event);
+
+  data = (struct IterData) { 0, 0 };
+  emer_aggregate_tally_iter (fixture->tally,
+                             EMER_TALLY_DAILY_EVENTS,
+                             datetime,
+                             EMER_TALLY_ITER_FLAG_DELETE,
+                             tally_iter_func,
+                             &data);
+
+  g_assert_cmpuint (data.n_iterations, ==, 1);
+  g_assert_cmpuint (data.counter, ==, ((guint32) G_MAXINT32) + 1);
+}
+
+static void
+test_aggregate_tally_large_counter_upper_bound (struct Fixture *fixture,
+                                                gconstpointer   dontuseme)
+{
+  g_autoptr(GDateTime) datetime = NULL;
+  size_t i;
+  struct IterData data;
+
+  datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+
+  // The upper bound of an event's timer is 2 ** 32 - 1. Check that trying to
+  // count above this limit is clamped at the limit.
+  for (i = 0; i < 10; i++)
+    {
+      g_autoptr(GError) error = NULL;
+      struct AggregateEvent *event;
+
+      event = create_aggregate_event (1001, uuids[0],
+                                      g_variant_new_string (""),
+                                      g_variant_new_string (""));
+
+      emer_aggregate_tally_store_event (fixture->tally,
+                                        EMER_TALLY_DAILY_EVENTS,
+                                        event->unix_user_id,
+                                        event->event_id,
+                                        event->aggregate_key,
+                                        event->payload,
+                                        G_MAXUINT32,
+                                        datetime,
+                                        g_get_monotonic_time (),
+                                        &error);
+      g_assert_no_error (error);
+
+      aggregate_event_free (event);
+    }
+
+  data = (struct IterData) { 0, 0 };
+  emer_aggregate_tally_iter (fixture->tally,
+                             EMER_TALLY_DAILY_EVENTS,
+                             datetime,
+                             EMER_TALLY_ITER_FLAG_DELETE,
+                             tally_iter_func,
+                             &data);
+
+  g_assert_cmpuint (data.n_iterations, ==, 1);
+  g_assert_cmpuint (data.counter, ==, G_MAXUINT32);
+}
 gint
 main (gint                argc,
       const gchar * const argv[])
@@ -256,6 +403,12 @@ main (gint                argc,
                                  test_aggregate_tally_store_events);
   ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/iter",
                                  test_aggregate_tally_iter);
+  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/large-counter/single",
+                                 test_aggregate_tally_large_counter_single);
+  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/large-counter/add",
+                                 test_aggregate_tally_large_counter_add);
+  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/large-counter/upper-bound",
+                                 test_aggregate_tally_large_counter_upper_bound);
 
 #undef ADD_AGGREGATE_TALLY_TEST_FUNC
 

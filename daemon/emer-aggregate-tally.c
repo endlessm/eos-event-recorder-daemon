@@ -413,3 +413,67 @@ emer_aggregate_tally_iter (EmerAggregateTally *self,
 
   delete_tally_entries (self, rows_to_delete);
 }
+
+void
+emer_aggregate_tally_iter_before (EmerAggregateTally *self,
+                                  EmerTallyType       tally_type,
+                                  GDateTime          *datetime,
+                                  EmerTallyIterFlags  flags,
+                                  EmerTallyIterFunc   func,
+                                  gpointer            user_data)
+{
+  const char *SELECT_SQL =
+    "SELECT id, event_id, unix_user_id, "
+    "       aggregate_key_type, aggregate_key, "
+    "       payload_type, payload, counter "
+    "FROM tally "
+    "WHERE length(date) = ? AND date < ?;";
+
+  g_autoptr(GArray) rows_to_delete = NULL;
+  g_autofree gchar *date = NULL;
+  sqlite3_stmt *stmt = NULL;
+  int date_text_len;
+  int ret;
+
+  date = format_datetime_for_tally_type (datetime, tally_type);
+  date_text_len = g_utf8_strlen (date, -1);
+  rows_to_delete = g_array_new (FALSE, FALSE, sizeof (gint));
+
+  CHECK (sqlite3_prepare_v2 (self->db, SELECT_SQL, -1, &stmt, NULL));
+  CHECK (sqlite3_bind_int (stmt, 1, date_text_len));
+  CHECK (sqlite3_bind_text (stmt, 2, date, -1, SQLITE_TRANSIENT));
+
+  while ((ret = sqlite3_step (stmt)) == SQLITE_ROW)
+    {
+      g_autoptr(GVariant) event_id =
+        text_to_variant (stmt, 1);
+      guint32 unix_user_id = column_to_uint32 (stmt, 2);
+      const gchar *aggregate_key_type =
+        (const gchar *) sqlite3_column_text (stmt, 3);
+      g_autoptr(GVariant) aggregate_key =
+        column_to_variant (stmt, aggregate_key_type, 4);
+      const gchar *payload_type =
+        (const gchar *)sqlite3_column_text (stmt, 5);
+      g_autoptr(GVariant) payload =
+        column_to_variant (stmt, payload_type, 6);
+      guint32 counter = column_to_uint32 (stmt, 7);
+      EmerTallyIterResult result;
+
+      result = func (unix_user_id, event_id,
+                     aggregate_key, payload,
+                     counter, date, user_data);
+
+      if (flags & EMER_TALLY_ITER_FLAG_DELETE)
+        {
+          const gint row_id = sqlite3_column_int (stmt, 0);
+          g_array_append_val (rows_to_delete, row_id);
+        }
+
+      if (result & EMER_TALLY_ITER_STOP)
+        break;
+    }
+
+  CHECK (sqlite3_finalize (stmt));
+
+  delete_tally_entries (self, rows_to_delete);
+}

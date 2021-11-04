@@ -76,4 +76,11 @@ void emer_aggregate_tally_iter (EmerAggregateTally *self,
                                 EmerTallyIterFunc   func,
                                 gpointer            user_data);
 
+void emer_aggregate_tally_iter_before (EmerAggregateTally *self,
+                                       EmerTallyType       tally_type,
+                                       GDateTime          *datetime,
+                                       EmerTallyIterFlags  flags,
+                                       EmerTallyIterFunc   func,
+                                       gpointer            user_data);
+
 G_END_DECLS

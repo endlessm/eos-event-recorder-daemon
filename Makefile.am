@@ -73,7 +73,7 @@ substitute_libexecdir = sed \
 
 # dbus services
 dbusservicedir = ${datadir}/dbus-1/system-services
-dist_dbusservice_DATA =
+dbusservice_DATA =
 
 # dbus security policy
 systembussecuritypolicydir = ${sysconfdir}/dbus-1/system.d

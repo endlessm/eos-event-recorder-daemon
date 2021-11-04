@@ -1387,6 +1387,28 @@ sender_name_vanished_cb (GDBusConnection *connection,
 }
 
 static void
+buffer_past_aggregate_events (EmerDaemon *self)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+  g_autoptr(GDateTime) now = g_date_time_new_now_local ();
+
+  emer_aggregate_tally_iter_before (priv->aggregate_tally,
+                                    EMER_TALLY_DAILY_EVENTS,
+                                    now,
+                                    EMER_TALLY_ITER_FLAG_DELETE,
+                                    buffer_aggregate_event_to_queue,
+                                    self);
+
+  emer_aggregate_tally_iter_before (priv->aggregate_tally,
+                                    EMER_TALLY_MONTHLY_EVENTS,
+                                    now,
+                                    EMER_TALLY_ITER_FLAG_DELETE,
+                                    buffer_aggregate_event_to_queue,
+                                    self);
+
+}
+
+static void
 emer_daemon_constructed (GObject *object)
 {
   EmerDaemon *self = EMER_DAEMON (object);
@@ -1442,6 +1464,7 @@ emer_daemon_constructed (GObject *object)
 
   priv->aggregate_tally =
     emer_aggregate_tally_new (priv->persistent_cache_directory ?: g_get_user_cache_dir ());
+  buffer_past_aggregate_events (self);
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->constructed (object);
 }

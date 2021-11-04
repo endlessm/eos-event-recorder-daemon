@@ -43,9 +43,6 @@ enum {
 
 static GParamSpec *properties[N_PROPS] = { NULL, };
 
-#define INT_TO_UINT32(n) (*((guint32*)&n))
-#define UINT32_TO_INT(n) (*((int*)&n))
-
 static gchar *
 format_datetime_for_tally_type (GDateTime     *datetime,
                                 EmerTallyType  tally_type)
@@ -143,8 +140,8 @@ static guint32
 column_to_uint32 (sqlite3_stmt *stmt,
                   int           i)
 {
-  int number = sqlite3_column_int (stmt, i);
-  return INT_TO_UINT32 (number);
+  sqlite_int64 number = sqlite3_column_int64 (stmt, i);
+  return CLAMP (number, 0, G_MAXUINT32);
 }
 
 static void
@@ -303,7 +300,7 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
 
   CHECK (sqlite3_bind_text (stmt, 1, date, -1, SQLITE_TRANSIENT));
   CHECK (sqlite3_bind_text (stmt, 2, g_variant_print (event_id, TRUE), -1, g_free));
-  CHECK (sqlite3_bind_int (stmt, 3, UINT32_TO_INT (unix_user_id)));
+  CHECK (sqlite3_bind_int64 (stmt, 3, unix_user_id));
   CHECK (sqlite3_bind_text (stmt, 4,
                             g_variant_get_type_string (aggregate_key),
                             -1, SQLITE_TRANSIENT));
@@ -318,7 +315,7 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
                             payload ? g_variant_get_data (payload) : NULL,
                             payload ? g_variant_get_size (payload) : 0,
                             SQLITE_TRANSIENT));
-  CHECK (sqlite3_bind_int (stmt, 8, counter));
+  CHECK (sqlite3_bind_int64 (stmt, 8, counter));
 
   CHECK (sqlite3_step (stmt));
 
@@ -326,6 +323,8 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
 
   return TRUE;
 }
+
+G_STATIC_ASSERT (sizeof (sqlite3_int64) == sizeof (gint64));
 
 void
 emer_aggregate_tally_iter (EmerAggregateTally *self,
@@ -348,7 +347,7 @@ emer_aggregate_tally_iter (EmerAggregateTally *self,
   int ret;
 
   date = format_datetime_for_tally_type (datetime, tally_type);
-  rows_to_delete = g_array_new (FALSE, FALSE, sizeof (gint));
+  rows_to_delete = g_array_new (FALSE, FALSE, sizeof (sqlite3_int64));
 
   CHECK (sqlite3_prepare_v2 (self->db, SELECT_SQL, -1, &stmt, NULL));
   CHECK (sqlite3_bind_text (stmt, 1, date, -1, SQLITE_TRANSIENT));
@@ -375,7 +374,7 @@ emer_aggregate_tally_iter (EmerAggregateTally *self,
 
       if (flags & EMER_TALLY_ITER_FLAG_DELETE)
         {
-          const gint row_id = sqlite3_column_int (stmt, 0);
+          const sqlite3_int64 row_id = sqlite3_column_int64 (stmt, 0);
           g_array_append_val (rows_to_delete, row_id);
         }
 
@@ -397,8 +396,8 @@ emer_aggregate_tally_iter (EmerAggregateTally *self,
       g_string_append (query, "(");
       for (i = 0; i < rows_to_delete->len; i++)
         {
-          gint row_id = g_array_index (rows_to_delete, gint, i);
-          g_string_append_printf (query, i == 0 ? "%d" : ", %d", row_id);
+          sqlite_int64 row_id = g_array_index (rows_to_delete, gint, i);
+          g_string_append_printf (query, i == 0 ? "%" G_GINT64_FORMAT : ", %" G_GINT64_FORMAT, (gint64) row_id);
         }
       g_string_append (query, ");");
 

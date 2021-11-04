@@ -2,6 +2,8 @@
 Description=EndlessOS Metrics Event Recorder Server
 Requires=dbus.service
 After=dbus.service
+StartLimitIntervalSec=10m
+StartLimitBurst=10
 
 [Service]
 Environment=DCONF_PROFILE=/dev/null
@@ -9,6 +11,8 @@ User=metrics
 Type=dbus
 BusName=com.endlessm.Metrics
 ExecStart=@libexecdir@/eos-metrics-event-recorder
+Restart=on-failure
+RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target

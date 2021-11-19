@@ -107,19 +107,11 @@ emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
                                gint64              monotonic_time_us)
 {
   EmerAggregateTimerImpl *self;
-  g_autoptr(GVariant) cache_key = NULL;
 
   g_variant_take_ref (event_id);
   g_variant_take_ref (aggregate_key);
   if (payload)
     g_variant_take_ref (payload);
-
-  cache_key = g_variant_new ("(su@ayvmv)",
-                             sender_name,
-                             unix_user_id,
-                             event_id,
-                             aggregate_key,
-                             payload);
 
   self = g_object_new (EMER_TYPE_AGGREGATE_TIMER_IMPL, NULL);
   self->timer = timer;
@@ -131,7 +123,12 @@ emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
   self->aggregate_key = g_variant_ref (aggregate_key);
   self->payload = payload ? g_variant_ref (payload) : NULL;
   self->start_monotonic_us = monotonic_time_us;
-  self->cache_key_string = g_variant_print (cache_key, TRUE);
+  self->cache_key_string =
+    emer_aggregate_timer_impl_compose_hash_string (sender_name,
+                                                   unix_user_id,
+                                                   event_id,
+                                                   aggregate_key,
+                                                   payload);
 
   return self;
 }
@@ -264,4 +261,23 @@ emer_aggregate_timer_impl_equal (gconstpointer a,
 
   return g_str_equal (timer_impl_a->cache_key_string,
                       timer_impl_b->cache_key_string);
+}
+
+gchar *
+emer_aggregate_timer_impl_compose_hash_string (const gchar *sender_name,
+                                               guint32      unix_user_id,
+                                               GVariant    *event_id,
+                                               GVariant    *aggregate_key,
+                                               GVariant    *payload)
+{
+  g_autoptr(GVariant) cache_key = NULL;
+
+  cache_key = g_variant_new ("(su@ayvmv)",
+                             sender_name,
+                             unix_user_id,
+                             g_variant_take_ref (event_id),
+                             g_variant_take_ref (aggregate_key),
+                             payload ? g_variant_take_ref (payload) : NULL);
+
+  return g_variant_print (cache_key, TRUE);
 }

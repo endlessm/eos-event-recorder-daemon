@@ -65,4 +65,11 @@ guint emer_aggregate_timer_impl_hash (gconstpointer timer_impl);
 gboolean emer_aggregate_timer_impl_equal (gconstpointer a,
                                           gconstpointer b);
 
+gchar *
+emer_aggregate_timer_impl_compose_hash_string (const gchar *sender_name,
+                                               guint32      unix_user_id,
+                                               GVariant    *event_id,
+                                               GVariant    *aggregate_key,
+                                               GVariant    *payload);
+
 G_END_DECLS

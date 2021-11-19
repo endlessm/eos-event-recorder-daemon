@@ -1977,20 +1977,25 @@ emer_daemon_get_permissions_provider (EmerDaemon *self)
 }
 
 gboolean
-emer_daemon_start_aggregate_timer (EmerDaemon          *self,
-                                   EmerAggregateTimer  *timer,
-                                   const gchar         *sender_name,
-                                   guint32              unix_user_id,
-                                   GVariant            *event_id,
-                                   GVariant            *aggregate_key,
-                                   gboolean             has_payload,
-                                   GVariant            *payload,
-                                   GError             **error)
+emer_daemon_start_aggregate_timer (EmerDaemon       *self,
+                                   GDBusConnection  *connection,
+                                   const gchar      *sender_name,
+                                   guint32           unix_user_id,
+                                   GVariant         *event_id,
+                                   GVariant         *aggregate_key,
+                                   gboolean          has_payload,
+                                   GVariant         *payload,
+                                   gchar           **out_timer_object_path,
+                                   GError          **error)
 {
   EmerDaemonPrivate *priv;
   g_autoptr(EmerAggregateTimerImpl) timer_impl = NULL;
+  g_autoptr(EmerAggregateTimer) timer = NULL;
+  g_autofree gchar *timer_object_path = NULL;
   AggregateTimerSenderData *sender_data;
+  g_autoptr(GError) local_error = NULL;
   GVariant *nullable_payload;
+  static guint64 timer_id = 0;
 
   g_return_val_if_fail (EMER_IS_DAEMON (self), FALSE);
   g_return_val_if_fail (event_id != NULL, FALSE);
@@ -2000,7 +2005,6 @@ emer_daemon_start_aggregate_timer (EmerDaemon          *self,
 
   if (!priv->recording_enabled)
     {
-      g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (timer));
       g_set_error (error, G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
                    "Metrics are disabled");
       return FALSE;
@@ -2008,7 +2012,6 @@ emer_daemon_start_aggregate_timer (EmerDaemon          *self,
 
   if (!is_uuid (event_id))
     {
-      g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (timer));
       g_set_error (error, G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
                    "Event ID must be a UUID represented as an array of %"
                    G_GSIZE_FORMAT " bytes. Dropping event.",
@@ -2016,9 +2019,26 @@ emer_daemon_start_aggregate_timer (EmerDaemon          *self,
       return FALSE;
     }
 
+  timer_object_path = g_strdup_printf ("/com/endlessm/Metrics/AggregateTimer%lu",
+                                       timer_id);
+
+  timer = emer_aggregate_timer_skeleton_new ();
+  g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (timer),
+                                    connection,
+                                    timer_object_path,
+                                    &local_error);
+  if (local_error)
+    {
+      g_propagate_error (error, g_steal_pointer (&local_error));
+      return FALSE;
+    }
+
+  // Only increment on success, otherwise we waste ids for nothing
+  timer_id++;
+
   nullable_payload = get_nullable_payload (payload, has_payload);
   timer_impl = emer_aggregate_timer_impl_new (priv->aggregate_tally,
-                                              timer,
+                                              g_object_ref (timer),
                                               sender_name,
                                               unix_user_id,
                                               event_id,
@@ -2054,9 +2074,6 @@ emer_daemon_start_aggregate_timer (EmerDaemon          *self,
   sender_data = g_hash_table_lookup (priv->monitored_senders, sender_name);
   if (!sender_data)
     {
-      GDBusConnection *connection =
-        g_dbus_interface_skeleton_get_connection (G_DBUS_INTERFACE_SKELETON (timer));
-
       sender_data = g_new0 (AggregateTimerSenderData, 1);
       sender_data->aggregate_timers = g_ptr_array_sized_new (1);
       sender_data->watch_id =
@@ -2074,6 +2091,8 @@ emer_daemon_start_aggregate_timer (EmerDaemon          *self,
 
   g_ptr_array_add (sender_data->aggregate_timers, timer_impl);
   g_hash_table_add (priv->aggregate_timers, g_steal_pointer (&timer_impl));
+
+  *out_timer_object_path = g_steal_pointer (&timer_object_path);
 
   return TRUE;
 }

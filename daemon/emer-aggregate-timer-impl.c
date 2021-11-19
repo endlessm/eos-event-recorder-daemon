@@ -114,7 +114,8 @@ emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
   if (payload)
     g_variant_take_ref (payload);
 
-  cache_key = g_variant_new ("(u@ayvmv)",
+  cache_key = g_variant_new ("(su@ayvmv)",
+                             sender_name,
                              unix_user_id,
                              event_id,
                              aggregate_key,

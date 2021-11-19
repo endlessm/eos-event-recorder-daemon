@@ -2020,6 +2020,14 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
       return FALSE;
     }
 
+  nullable_payload = get_nullable_payload (payload, has_payload);
+  timer_hash_string =
+    emer_aggregate_timer_impl_compose_hash_string (sender_name,
+                                                   unix_user_id,
+                                                   event_id,
+                                                   aggregate_key,
+                                                   nullable_payload);
+
   timer_object_path = g_strdup_printf ("/com/endlessm/Metrics/AggregateTimer%lu",
                                        timer_id);
 
@@ -2037,7 +2045,6 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
   // Only increment on success, otherwise we waste ids for nothing
   timer_id++;
 
-  nullable_payload = get_nullable_payload (payload, has_payload);
   timer_impl = emer_aggregate_timer_impl_new (priv->aggregate_tally,
                                               g_object_ref (timer),
                                               sender_name,
@@ -2050,13 +2057,6 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
                           "daemon",
                           g_object_ref (self),
                           g_object_unref);
-
-  timer_hash_string =
-    emer_aggregate_timer_impl_compose_hash_string (sender_name,
-                                                   unix_user_id,
-                                                   event_id,
-                                                   aggregate_key,
-                                                   nullable_payload);
 
   if (g_hash_table_contains (priv->aggregate_timers, timer_hash_string))
     {

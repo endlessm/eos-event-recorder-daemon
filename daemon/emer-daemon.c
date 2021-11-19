@@ -1325,6 +1325,12 @@ on_timer_stopped_cb (EmerAggregateTimer     *timer,
   gint64 now_monotonic_us;
   const gchar *cache_key;
 
+  if (!emer_aggregate_timer_impl_pop_run_count (timer_impl))
+    {
+      emer_aggregate_timer_complete_stop_timer (timer, invocation);
+      return TRUE;
+    }
+
   now = g_date_time_new_now_local ();
   now_monotonic_us = g_get_monotonic_time ();
   emer_aggregate_timer_impl_stop (timer_impl, now, now_monotonic_us, &error);
@@ -1989,14 +1995,10 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
                                    GError          **error)
 {
   EmerDaemonPrivate *priv;
-  g_autoptr(EmerAggregateTimerImpl) timer_impl = NULL;
-  g_autoptr(EmerAggregateTimer) timer = NULL;
-  g_autofree gchar *timer_object_path = NULL;
+  EmerAggregateTimerImpl *timer_impl;
   g_autofree gchar *timer_hash_string = NULL;
   AggregateTimerSenderData *sender_data;
-  g_autoptr(GError) local_error = NULL;
   GVariant *nullable_payload;
-  static guint64 timer_id = 0;
 
   g_return_val_if_fail (EMER_IS_DAEMON (self), FALSE);
   g_return_val_if_fail (event_id != NULL, FALSE);
@@ -2027,82 +2029,89 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
                                                    event_id,
                                                    aggregate_key,
                                                    nullable_payload);
+  timer_impl = g_hash_table_lookup (priv->aggregate_timers, timer_hash_string);
 
-  timer_object_path = g_strdup_printf ("/com/endlessm/Metrics/AggregateTimer%lu",
-                                       timer_id);
-
-  timer = emer_aggregate_timer_skeleton_new ();
-  g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (timer),
-                                    connection,
-                                    timer_object_path,
-                                    &local_error);
-  if (local_error)
+  if (!timer_impl)
     {
-      g_propagate_error (error, g_steal_pointer (&local_error));
-      return FALSE;
+      g_autofree gchar *timer_object_path = NULL;
+      g_autoptr(EmerAggregateTimer) timer = NULL;
+      g_autoptr(GError) local_error = NULL;
+      static guint64 timer_id = 0;
+
+      timer_object_path = g_strdup_printf ("/com/endlessm/Metrics/AggregateTimer%lu",
+                                           timer_id);
+
+      timer = emer_aggregate_timer_skeleton_new ();
+      g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (timer),
+                                        connection,
+                                        timer_object_path,
+                                        &local_error);
+      if (local_error)
+        {
+          g_propagate_error (error, g_steal_pointer (&local_error));
+          return FALSE;
+        }
+
+      // Only increment on success, otherwise we waste ids for nothing
+      timer_id++;
+
+      timer_impl = emer_aggregate_timer_impl_new (priv->aggregate_tally,
+                                                  g_object_ref (timer),
+                                                  sender_name,
+                                                  unix_user_id,
+                                                  event_id,
+                                                  aggregate_key,
+                                                  nullable_payload,
+                                                  g_get_monotonic_time ());
+      g_object_set_data_full (G_OBJECT (timer_impl),
+                              "daemon",
+                              g_object_ref (self),
+                              g_object_unref);
+      g_object_set_data_full (G_OBJECT (timer_impl),
+                              "object-path",
+                              g_strdup (timer_object_path),
+                              g_free);
+
+      g_signal_connect (timer,
+                        "handle-stop-timer",
+                        G_CALLBACK (on_timer_stopped_cb),
+                        timer_impl);
+
+      /* Monitor sender and shut down all timers from it when it vanishes */
+      sender_data = g_hash_table_lookup (priv->monitored_senders, sender_name);
+      if (!sender_data)
+        {
+          sender_data = g_new0 (AggregateTimerSenderData, 1);
+          sender_data->aggregate_timers = g_ptr_array_sized_new (1);
+          sender_data->watch_id =
+            g_bus_watch_name_on_connection (connection,
+                                            sender_name,
+                                            G_BUS_NAME_WATCHER_FLAGS_NONE,
+                                            NULL,
+                                            sender_name_vanished_cb,
+                                            self,
+                                            NULL);
+          g_hash_table_insert (priv->monitored_senders,
+                               g_strdup (sender_name),
+                               sender_data);
+        }
+
+      g_ptr_array_add (sender_data->aggregate_timers, timer_impl);
+      g_hash_table_insert (priv->aggregate_timers,
+                           g_steal_pointer (&timer_hash_string),
+                           g_steal_pointer (&timer_impl));
+
+      *out_timer_object_path = g_steal_pointer (&timer_object_path);
     }
-
-  // Only increment on success, otherwise we waste ids for nothing
-  timer_id++;
-
-  timer_impl = emer_aggregate_timer_impl_new (priv->aggregate_tally,
-                                              g_object_ref (timer),
-                                              sender_name,
-                                              unix_user_id,
-                                              event_id,
-                                              aggregate_key,
-                                              nullable_payload,
-                                              g_get_monotonic_time ());
-  g_object_set_data_full (G_OBJECT (timer_impl),
-                          "daemon",
-                          g_object_ref (self),
-                          g_object_unref);
-
-  if (g_hash_table_contains (priv->aggregate_timers, timer_hash_string))
+  else
     {
-      g_autofree gchar *event_id_str = g_variant_print (event_id, FALSE);
-      g_autofree gchar *aggregate_key_str = g_variant_print (aggregate_key, FALSE);
-      g_autofree gchar *payload_str = nullable_payload ? g_variant_print (nullable_payload, FALSE) : NULL;
-      g_set_error (error, G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
-                   "There already is a timer for event %s, user %u, "
-                   "aggregate key %s and payload %s",
-                   event_id_str,
-                   unix_user_id,
-                   aggregate_key_str,
-                   payload_str);
-      return FALSE;
+      const gchar *object_path;
+
+      emer_aggregate_timer_impl_push_run_count (timer_impl);
+
+      object_path = g_object_get_data (G_OBJECT (timer_impl), "object-path");
+      *out_timer_object_path = g_strdup (object_path);
     }
-
-  g_signal_connect (timer,
-                    "handle-stop-timer",
-                    G_CALLBACK (on_timer_stopped_cb),
-                    timer_impl);
-
-  /* Monitor sender and shut down all timers from it when it vanishes */
-  sender_data = g_hash_table_lookup (priv->monitored_senders, sender_name);
-  if (!sender_data)
-    {
-      sender_data = g_new0 (AggregateTimerSenderData, 1);
-      sender_data->aggregate_timers = g_ptr_array_sized_new (1);
-      sender_data->watch_id =
-        g_bus_watch_name_on_connection (connection,
-                                        sender_name,
-                                        G_BUS_NAME_WATCHER_FLAGS_NONE,
-                                        NULL,
-                                        sender_name_vanished_cb,
-                                        self,
-                                        NULL);
-      g_hash_table_insert (priv->monitored_senders,
-                           g_strdup (sender_name),
-                           sender_data);
-    }
-
-  g_ptr_array_add (sender_data->aggregate_timers, timer_impl);
-  g_hash_table_insert (priv->aggregate_timers,
-                       g_steal_pointer (&timer_hash_string),
-                       g_steal_pointer (&timer_impl));
-
-  *out_timer_object_path = g_steal_pointer (&timer_object_path);
 
   return TRUE;
 }

@@ -70,4 +70,8 @@ emer_aggregate_timer_impl_compose_hash_string (const gchar *sender_name,
                                                GVariant    *aggregate_key,
                                                GVariant    *payload);
 
+void emer_aggregate_timer_impl_push_run_count (EmerAggregateTimerImpl *self);
+
+gboolean emer_aggregate_timer_impl_pop_run_count (EmerAggregateTimerImpl *self);
+
 G_END_DECLS

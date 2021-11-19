@@ -42,6 +42,8 @@ struct _EmerAggregateTimerImpl
   GVariant *payload; /* owned */
   gchar *cache_key_string; /* owned */
   gchar *sender_name; /* owned */
+
+  guint32 run_count;
 };
 
 G_DEFINE_TYPE (EmerAggregateTimerImpl, emer_aggregate_timer_impl, G_TYPE_OBJECT)
@@ -129,6 +131,7 @@ emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
                                                    event_id,
                                                    aggregate_key,
                                                    payload);
+  self->run_count = 1;
 
   return self;
 }
@@ -269,4 +272,22 @@ emer_aggregate_timer_impl_compose_hash_string (const gchar *sender_name,
                              payload ? g_variant_take_ref (payload) : NULL);
 
   return g_variant_print (cache_key, TRUE);
+}
+
+void
+emer_aggregate_timer_impl_push_run_count (EmerAggregateTimerImpl *self)
+{
+  g_return_if_fail (EMER_IS_AGGREGATE_TIMER_IMPL (self));
+
+  self->run_count++;
+}
+
+gboolean
+emer_aggregate_timer_impl_pop_run_count (EmerAggregateTimerImpl *self)
+{
+  g_return_val_if_fail (EMER_IS_AGGREGATE_TIMER_IMPL (self), FALSE);
+
+  self->run_count--;
+
+  return self->run_count == 0;
 }

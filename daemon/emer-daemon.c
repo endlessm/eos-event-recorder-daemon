@@ -1165,7 +1165,7 @@ save_aggregate_timers_to_tally (EmerDaemon    *self,
   GHashTableIter iter;
 
   g_hash_table_iter_init (&iter, priv->aggregate_timers);
-  while (g_hash_table_iter_next (&iter, (gpointer *) &timer_impl, NULL))
+  while (g_hash_table_iter_next (&iter, NULL, (gpointer *) &timer_impl))
     {
       g_autoptr(GError) error = NULL;
 
@@ -1190,7 +1190,7 @@ split_aggregate_timers (EmerDaemon *self,
   GHashTableIter iter;
 
   g_hash_table_iter_init (&iter, priv->aggregate_timers);
-  while (g_hash_table_iter_next (&iter, (gpointer *) &timer_impl, NULL))
+  while (g_hash_table_iter_next (&iter, NULL, (gpointer *) &timer_impl))
     emer_aggregate_timer_impl_split (timer_impl, monotonic_time_us);
 }
 
@@ -1323,6 +1323,7 @@ on_timer_stopped_cb (EmerAggregateTimer     *timer,
   g_autoptr(GError) error = NULL;
   const gchar *sender_name;
   gint64 now_monotonic_us;
+  const gchar *cache_key;
 
   now = g_date_time_new_now_local ();
   now_monotonic_us = g_get_monotonic_time ();
@@ -1340,7 +1341,8 @@ on_timer_stopped_cb (EmerAggregateTimer     *timer,
   if (sender_data->aggregate_timers->len == 0)
     g_hash_table_remove (priv->monitored_senders, sender_name);
 
-  if (!g_hash_table_remove (priv->aggregate_timers, timer_impl))
+  cache_key = emer_aggregate_timer_impl_get_cache_key (timer_impl);
+  if (!g_hash_table_remove (priv->aggregate_timers, cache_key))
     g_warning ("Stopped timer was not in the set of running timers");
 
   return TRUE;
@@ -1748,9 +1750,7 @@ emer_daemon_init (EmerDaemon *self)
                                    NULL);
 
   priv->aggregate_timers =
-    g_hash_table_new_full (emer_aggregate_timer_impl_hash,
-                           emer_aggregate_timer_impl_equal,
-                           g_object_unref, NULL);
+    g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_object_unref);
 
   priv->monitored_senders =
     g_hash_table_new_full (g_str_hash, g_str_equal, g_free,
@@ -1992,6 +1992,7 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
   g_autoptr(EmerAggregateTimerImpl) timer_impl = NULL;
   g_autoptr(EmerAggregateTimer) timer = NULL;
   g_autofree gchar *timer_object_path = NULL;
+  g_autofree gchar *timer_hash_string = NULL;
   AggregateTimerSenderData *sender_data;
   g_autoptr(GError) local_error = NULL;
   GVariant *nullable_payload;
@@ -2050,7 +2051,14 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
                           g_object_ref (self),
                           g_object_unref);
 
-  if (g_hash_table_contains (priv->aggregate_timers, timer_impl))
+  timer_hash_string =
+    emer_aggregate_timer_impl_compose_hash_string (sender_name,
+                                                   unix_user_id,
+                                                   event_id,
+                                                   aggregate_key,
+                                                   nullable_payload);
+
+  if (g_hash_table_contains (priv->aggregate_timers, timer_hash_string))
     {
       g_autofree gchar *event_id_str = g_variant_print (event_id, FALSE);
       g_autofree gchar *aggregate_key_str = g_variant_print (aggregate_key, FALSE);
@@ -2090,7 +2098,9 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
     }
 
   g_ptr_array_add (sender_data->aggregate_timers, timer_impl);
-  g_hash_table_add (priv->aggregate_timers, g_steal_pointer (&timer_impl));
+  g_hash_table_insert (priv->aggregate_timers,
+                       g_steal_pointer (&timer_hash_string),
+                       g_steal_pointer (&timer_impl));
 
   *out_timer_object_path = g_steal_pointer (&timer_object_path);
 

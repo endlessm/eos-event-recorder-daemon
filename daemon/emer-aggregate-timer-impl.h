@@ -57,13 +57,11 @@ gboolean emer_aggregate_timer_impl_stop (EmerAggregateTimerImpl  *self,
                                          GDateTime               *datetime,
                                          gint64                   monotonic_time_us,
                                          GError                 **error);
+const gchar *
+emer_aggregate_timer_impl_get_cache_key (EmerAggregateTimerImpl *self);
 
 const gchar *
 emer_aggregate_timer_impl_get_sender_name (EmerAggregateTimerImpl *self);
-
-guint emer_aggregate_timer_impl_hash (gconstpointer timer_impl);
-gboolean emer_aggregate_timer_impl_equal (gconstpointer a,
-                                          gconstpointer b);
 
 gchar *
 emer_aggregate_timer_impl_compose_hash_string (const gchar *sender_name,

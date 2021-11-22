@@ -60,7 +60,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         self.config_file = os.path.join(self.test_dir.name, 'permissions.conf')
         config_file_arg = '--config-file-path={}'.format(self.config_file)
 
-        self.daemon = subprocess.Popen(['./eos-metrics-event-recorder',
+        self.daemon = subprocess.Popen([os.environ.get('EMER_PATH', './eos-metrics-event-recorder'),
                                         persistent_cache_dir_arg,
                                         config_file_arg])
 

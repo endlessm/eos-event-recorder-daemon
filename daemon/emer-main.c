@@ -110,32 +110,13 @@ on_start_aggregate_timer (EmerEventRecorderServer *object,
                           EmerDaemon              *daemon)
 {
   g_autofree gchar *timer_object_path = NULL;
-  g_autoptr(EmerAggregateTimer) timer = NULL;
   g_autoptr(GVariant) result = NULL;
   g_autoptr(GError) error = NULL;
   GDBusConnection *system_bus;
-  static guint64 timer_id = 0;
   const gchar *sender;
   guint32 unix_user_id;
 
   system_bus = g_dbus_method_invocation_get_connection (invocation);
-  timer_object_path = g_strdup_printf ("/com/endlessm/Metrics/AggregateTimer%lu",
-                                       timer_id);
-
-  timer = emer_aggregate_timer_skeleton_new ();
-
-  g_dbus_interface_skeleton_export (G_DBUS_INTERFACE_SKELETON (timer),
-                                    system_bus,
-                                    timer_object_path,
-                                    &error);
-  if (error)
-    {
-      g_warning ("Could not export aggregate timer interface on system bus: %s.",
-                 error->message);
-      g_dbus_method_invocation_return_gerror (invocation, error);
-      return TRUE;
-    }
-
   sender = g_dbus_method_invocation_get_sender (invocation);
   result = g_dbus_connection_call_sync (system_bus,
                                         "org.freedesktop.DBus",
@@ -151,20 +132,20 @@ on_start_aggregate_timer (EmerEventRecorderServer *object,
       g_warning ("Could not get unix user for bus name '%s': %s.",
                  sender, error->message);
       g_dbus_method_invocation_return_gerror (invocation, error);
-      g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (timer));
       return TRUE;
     }
 
   g_variant_get (result, "(u)", &unix_user_id);
 
   emer_daemon_start_aggregate_timer (daemon,
-                                     g_steal_pointer (&timer),
+                                     system_bus,
                                      sender,
                                      unix_user_id,
                                      event_id,
                                      aggregate_key,
                                      has_payload,
                                      payload,
+                                     &timer_object_path,
                                      &error);
 
   if (error)
@@ -174,9 +155,6 @@ on_start_aggregate_timer (EmerEventRecorderServer *object,
       g_dbus_method_invocation_return_gerror (invocation, error);
       return TRUE;
     }
-
-  // Only increment on success, otherwise we waste ids for nothing
-  timer_id++;
 
   emer_event_recorder_server_complete_start_aggregate_timer (object,
                                                              invocation,

@@ -180,6 +180,8 @@ main (gint   argc,
 
   gboolean print_succeeded =
     print_variants_to_file (variants, num_variants, OUTPUT_FILE);
+  if (print_succeeded)
+    g_message ("Saved persistent cache contents to %s", OUTPUT_FILE);
   destroy_variants (variants, num_variants);
 
   return print_succeeded ? EXIT_SUCCESS : EXIT_FAILURE;

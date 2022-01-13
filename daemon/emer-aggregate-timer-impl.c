@@ -20,6 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "emer-aggregate-timer-impl.h"
 #include "emer-aggregate-tally.h"
 #include "shared/metrics-util.h"

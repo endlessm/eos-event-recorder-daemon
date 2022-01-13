@@ -20,6 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "emer-image-id-provider.h"
 #include <glib.h>
 #include <sys/xattr.h>

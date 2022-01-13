@@ -20,6 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "emer-machine-id-provider.h"
 #include "emer-types.h"
 

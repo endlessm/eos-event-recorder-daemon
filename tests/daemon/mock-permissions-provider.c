@@ -20,6 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "emer-permissions-provider.h"
 #include "mock-permissions-provider.h"
 

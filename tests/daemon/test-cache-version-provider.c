@@ -18,6 +18,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "emer-cache-version-provider.h"
 
 #include <gio/gio.h>

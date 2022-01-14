@@ -131,7 +131,8 @@ AS_IF([test -f $EVENT_RECORDER_SERVER_XML],
 AC_ARG_WITH([default_metrics_server],
     [AS_HELP_STRING([--with-default-metrics-server=HOSTNAME],[choose default metrics server])],
     [DEFAULT_METRICS_SERVER="\"$withval\""],
-    [AC_MSG_ERROR([You must specify a default metrics server using --with-default-metrics-server])])
+    [DEFAULT_METRICS_SERVER="\"azafea.example\""
+     AC_MSG_WARN([You should specify a default metrics server using --with-default-metrics-server])])
 AC_DEFINE_UNQUOTED([DEFAULT_METRICS_SERVER], [$DEFAULT_METRICS_SERVER], [Default metrics server])
 
 # Required libraries

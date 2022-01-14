@@ -20,6 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include <string.h>
 
 #include <gio/gio.h>

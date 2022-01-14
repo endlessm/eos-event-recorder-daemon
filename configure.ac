@@ -86,6 +86,9 @@ EMER_SHARED_REQUIRED_MODULES="$GIO_REQUIREMENT \
 AC_SUBST(EMER_REQUIRED_MODULES)
 AC_SUBST(EMER_SHARED_REQUIRED_MODULES)
 
+AC_DEFINE([GLIB_VERSION_MIN_REQUIRED], [GLIB_VERSION_2_64], [Require at least this GLib version])
+AC_DEFINE([GLIB_VERSION_MAX_ALLOWED], [GLIB_VERSION_2_64], [Prevent using GLib API newer than this version])
+
 # Required build tools
 # --------------------
 # Make sure we can create directory hierarchies

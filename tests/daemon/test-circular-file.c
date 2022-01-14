@@ -18,6 +18,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "emer-circular-file.h"
 
 #include <string.h>

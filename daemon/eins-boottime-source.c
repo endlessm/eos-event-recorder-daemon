@@ -17,6 +17,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "eins-boottime-source.h"
 
 #include <errno.h>

@@ -20,6 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "emer-boot-id-provider.h"
 
 #include <uuid/uuid.h>

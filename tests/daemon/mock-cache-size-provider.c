@@ -20,6 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "emer-cache-size-provider.h"
 
 /* This is the default maximum cache size in bytes. */

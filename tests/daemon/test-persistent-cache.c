@@ -18,6 +18,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "emer-persistent-cache.h"
 
 #include <string.h>

@@ -20,6 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "mock-circular-file.h"
 
 #include <string.h>

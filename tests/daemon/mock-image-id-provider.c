@@ -20,6 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "mock-image-id-provider.h"
 #include <glib.h>
 #include <string.h>

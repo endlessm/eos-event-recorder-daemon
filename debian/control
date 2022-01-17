@@ -1,6 +1,6 @@
 Source: eos-event-recorder-daemon
 Priority: standard
-Maintainer: Kurt von Laven <kurt@endlessm.com>
+Maintainer: Endless OS Team <maintainers@endlessos.org>
 Build-Depends: autoconf-archive,
                autotools-dev,
                ca-certificates,
@@ -27,5 +27,5 @@ Replaces: eos-metrics-event-recorder
 Provides: eos-metrics-event-recorder
 Depends: ${shlibs:Depends},
          ${misc:Depends}
-Description: EndlessOS Event Recorder Daemon
- Daemon for aggregating and recording metrics data in EndlessOS.
+Description: Endless OS Event Recorder Daemon
+ Daemon for aggregating and recording metrics data in Endless OS.

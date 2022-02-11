@@ -1,15 +1,14 @@
 Source: eos-event-recorder-daemon
 Priority: standard
 Maintainer: Endless OS Team <maintainers@endlessos.org>
-Build-Depends: autoconf-archive,
-               autotools-dev,
-               ca-certificates,
+Build-Depends: ca-certificates,
                debhelper (>= 8.0.0),
                eos-metrics-0-dev (>= 0.2),
                libglib2.0-dev (>= 2.38),
                libostree-dev (>= 2013.7),
                libpolkit-gobject-1-dev,
                libsoup2.4-dev (>= 2.42),
+               meson (>= 0.52),
                pkg-config,
                python3-dbus,
                python3-dbusmock,

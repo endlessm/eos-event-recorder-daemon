@@ -10,14 +10,11 @@
 #export DH_VERBOSE=1
 
 %:
-	dh $@  --with autotools-dev,systemd
+	dh $@  --with systemd
 
 # Build our documentation as well
 override_dh_auto_configure:
-	dh_auto_configure -- --enable-strict-flags --with-default-metrics-server=metrics.endlessm.com
-
-override_dh_auto_test:
-	dh_auto_test VERBOSE=1 || ( find . -name '*.log' | xargs cat; false )
+	dh_auto_configure -- -Ddefault_metrics_server=metrics.endlessm.com
 
 # Avoid changing the owner of configuration files and the persistent cache
 # directory to root:root.

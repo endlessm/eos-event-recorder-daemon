@@ -205,20 +205,28 @@ emer_aggregate_tally_constructed (GObject *object)
   /* Magic number is "emer" in ASCII */
   tally_exec_or_die (self, "PRAGMA application_id = 0x656d6572");
   tally_exec_or_die (self, "PRAGMA user_version = 1");
-  tally_exec_or_die (self, "CREATE TABLE IF NOT EXISTS tally (id INTEGER PRIMARY KEY ASC,"
-                           "                                  date TEXT NOT NULL,"
-                           "                                  event_id TEXT NOT NULL,"
-                           "                                  unix_user_id INT NOT NULL,"
-                           "                                  aggregate_key_type TEXT NOT NULL,"
-                           "                                  aggregate_key BLOB NOT NULL,"
-                           "                                  payload_type TEXT,"
-                           "                                  payload BLOB,"
-                           "                                  counter INT NOT NULL);");
+  tally_exec_or_die (self, "CREATE TABLE IF NOT EXISTS tally (\n"
+                           "    id INTEGER PRIMARY KEY ASC,\n"
+                           "    date TEXT NOT NULL,\n"
+                           "    event_id TEXT NOT NULL,\n"
+                           "    unix_user_id INT NOT NULL,\n"
+                           "    aggregate_key_type TEXT NOT NULL,\n"
+                           "    aggregate_key BLOB NOT NULL,\n"
+                           "    payload_type TEXT,\n"
+                           "    payload BLOB,\n"
+                           "    counter INT NOT NULL\n"
+                           ")");
   tally_exec_or_die (self,
                      "CREATE UNIQUE INDEX IF NOT EXISTS "
-                     "ix_tally_unique_fields ON tally (date, event_id, unix_user_id, "
-                     "                                 aggregate_key_type, aggregate_key, "
-                     "                                 payload_type, payload)");
+                     "ix_tally_unique_fields ON tally (\n"
+                     "    date,\n"
+                     "    event_id,\n"
+                     "    unix_user_id,\n"
+                     "    aggregate_key_type,\n"
+                     "    aggregate_key,\n"
+                     "    payload_type,\n"
+                     "    payload\n"
+                     ")");
 }
 
 static void

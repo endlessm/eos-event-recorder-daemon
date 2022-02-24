@@ -80,8 +80,8 @@ create_aggregate_event (guint32     unix_user_id,
   event = g_new0 (struct AggregateEvent, 1);
   event->unix_user_id = unix_user_id;
   event->event_id = g_variant_ref_sink (event_id_to_variant (event_id));
-  event->aggregate_key = g_variant_ref_sink (aggregate_key);
-  event->payload = g_variant_ref_sink (payload);
+  event->aggregate_key = g_variant_ref_sink (g_variant_new_variant (aggregate_key));
+  event->payload = g_variant_ref_sink (g_variant_new_variant (payload));
 
   return event;
 }

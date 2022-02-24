@@ -117,7 +117,6 @@ text_to_variant (sqlite3_stmt *stmt,
 
 static GVariant *
 column_to_variant (sqlite3_stmt *stmt,
-                   const gchar  *type,
                    int           i)
 {
   g_autoptr(GVariant) variant = NULL;
@@ -131,7 +130,7 @@ column_to_variant (sqlite3_stmt *stmt,
   size = sqlite3_column_bytes (stmt, i);
   gpointer data = g_memdup (sqlite_data, size);
 
-  variant = g_variant_new_from_data (G_VARIANT_TYPE (type),
+  variant = g_variant_new_from_data (G_VARIANT_TYPE_VARIANT,
                                      data, size, FALSE,
                                      g_free, data);
   return swap_bytes_if_big_endian (g_variant_ref_sink (variant));
@@ -210,9 +209,7 @@ emer_aggregate_tally_constructed (GObject *object)
                            "    date TEXT NOT NULL,\n"
                            "    event_id TEXT NOT NULL,\n"
                            "    unix_user_id INT NOT NULL,\n"
-                           "    aggregate_key_type TEXT NOT NULL,\n"
                            "    aggregate_key BLOB NOT NULL,\n"
-                           "    payload_type TEXT,\n"
                            "    payload BLOB,\n"
                            "    counter INT NOT NULL\n"
                            ")");
@@ -222,9 +219,7 @@ emer_aggregate_tally_constructed (GObject *object)
                      "    date,\n"
                      "    event_id,\n"
                      "    unix_user_id,\n"
-                     "    aggregate_key_type,\n"
                      "    aggregate_key,\n"
-                     "    payload_type,\n"
                      "    payload\n"
                      ")");
 }
@@ -317,14 +312,17 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
                                   gint64               monotonic_time_us,
                                   GError             **error)
 {
+  g_return_val_if_fail (g_variant_is_of_type (aggregate_key, G_VARIANT_TYPE_VARIANT), FALSE);
+  g_return_val_if_fail (g_variant_is_of_type (payload, G_VARIANT_TYPE_VARIANT), FALSE);
+
   const char *UPSERT_SQL =
     "INSERT INTO tally (date, event_id, unix_user_id, "
-    "                   aggregate_key_type, aggregate_key, "
-    "                   payload_type, payload, counter) "
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+    "                   aggregate_key, "
+    "                   payload, counter) "
+    "VALUES (?, ?, ?, ?, ?, ?) "
     "ON CONFLICT (date, event_id, unix_user_id, "
-    "             aggregate_key_type, aggregate_key, "
-    "             payload_type, payload) "
+    "             aggregate_key, "
+    "             payload) "
     "DO UPDATE SET counter = tally.counter + excluded.counter;";
 
   g_autofree gchar *date = NULL;
@@ -337,21 +335,15 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
   CHECK (sqlite3_bind_text (stmt, 1, date, -1, SQLITE_TRANSIENT));
   CHECK (sqlite3_bind_text (stmt, 2, g_variant_print (event_id, TRUE), -1, g_free));
   CHECK (sqlite3_bind_int64 (stmt, 3, unix_user_id));
-  CHECK (sqlite3_bind_text (stmt, 4,
-                            g_variant_get_type_string (aggregate_key),
-                            -1, SQLITE_TRANSIENT));
-  CHECK (sqlite3_bind_blob (stmt, 5,
+  CHECK (sqlite3_bind_blob (stmt, 4,
                             g_variant_get_data (aggregate_key),
                             g_variant_get_size (aggregate_key),
                             SQLITE_TRANSIENT));
-  CHECK (sqlite3_bind_text (stmt, 6,
-                            payload ? g_variant_get_type_string (aggregate_key) : NULL,
-                            -1, SQLITE_TRANSIENT));
-  CHECK (sqlite3_bind_blob (stmt, 7,
+  CHECK (sqlite3_bind_blob (stmt, 5,
                             payload ? g_variant_get_data (payload) : NULL,
                             payload ? g_variant_get_size (payload) : 0,
                             SQLITE_TRANSIENT));
-  CHECK (sqlite3_bind_int64 (stmt, 8, counter));
+  CHECK (sqlite3_bind_int64 (stmt, 6, counter));
 
   CHECK (sqlite3_step (stmt));
 
@@ -372,8 +364,8 @@ emer_aggregate_tally_iter (EmerAggregateTally *self,
 {
   const char *SELECT_SQL =
     "SELECT id, event_id, unix_user_id, "
-    "       aggregate_key_type, aggregate_key, "
-    "       payload_type, payload, counter "
+    "       aggregate_key, "
+    "       payload, counter "
     "FROM tally "
     "WHERE date = ?";
 
@@ -393,15 +385,9 @@ emer_aggregate_tally_iter (EmerAggregateTally *self,
       g_autoptr(GVariant) event_id =
         text_to_variant (stmt, 1);
       guint32 unix_user_id = column_to_uint32 (stmt, 2);
-      const gchar *aggregate_key_type =
-        (const gchar *) sqlite3_column_text (stmt, 3);
-      g_autoptr(GVariant) aggregate_key =
-        column_to_variant (stmt, aggregate_key_type, 4);
-      const gchar *payload_type =
-        (const gchar *)sqlite3_column_text (stmt, 5);
-      g_autoptr(GVariant) payload =
-        column_to_variant (stmt, payload_type, 6);
-      guint32 counter = column_to_uint32 (stmt, 7);
+      g_autoptr(GVariant) aggregate_key = column_to_variant (stmt, 3);
+      g_autoptr(GVariant) payload = column_to_variant (stmt, 4);
+      guint32 counter = column_to_uint32 (stmt, 5);
       EmerTallyIterResult result;
 
       result = func (unix_user_id, event_id,
@@ -433,8 +419,8 @@ emer_aggregate_tally_iter_before (EmerAggregateTally *self,
 {
   const char *SELECT_SQL =
     "SELECT id, event_id, unix_user_id, "
-    "       aggregate_key_type, aggregate_key, "
-    "       payload_type, payload, counter "
+    "       aggregate_key, "
+    "       payload, counter "
     "FROM tally "
     "WHERE length(date) = ? AND date < ?;";
 
@@ -457,15 +443,9 @@ emer_aggregate_tally_iter_before (EmerAggregateTally *self,
       g_autoptr(GVariant) event_id =
         text_to_variant (stmt, 1);
       guint32 unix_user_id = column_to_uint32 (stmt, 2);
-      const gchar *aggregate_key_type =
-        (const gchar *) sqlite3_column_text (stmt, 3);
-      g_autoptr(GVariant) aggregate_key =
-        column_to_variant (stmt, aggregate_key_type, 4);
-      const gchar *payload_type =
-        (const gchar *)sqlite3_column_text (stmt, 5);
-      g_autoptr(GVariant) payload =
-        column_to_variant (stmt, payload_type, 6);
-      guint32 counter = column_to_uint32 (stmt, 7);
+      g_autoptr(GVariant) aggregate_key = column_to_variant (stmt, 3);
+      g_autoptr(GVariant) payload = column_to_variant (stmt, 4);
+      guint32 counter = column_to_uint32 (stmt, 5);
       EmerTallyIterResult result;
 
       result = func (unix_user_id, event_id,

@@ -390,23 +390,6 @@ test_aggregate_tally_large_counter_upper_bound (struct Fixture *fixture,
   g_assert_cmpuint (data.counter, ==, G_MAXUINT32);
 }
 
-static EmerTallyIterResult
-tally_iter_before_func (guint32     unix_user_id,
-                        GVariant   *event_id,
-                        GVariant   *aggregate_key,
-                        GVariant   *payload,
-                        guint32     counter,
-                        const char *date,
-                        gpointer    user_data)
-{
-  struct IterData *data = user_data;
-
-  data->n_iterations++;
-  data->counter += counter;
-
-  return EMER_TALLY_ITER_CONTINUE;
-}
-
 static void
 test_aggregate_tally_iter_before (struct Fixture *fixture,
                                   gconstpointer   dontuseme)
@@ -481,7 +464,7 @@ test_aggregate_tally_iter_before (struct Fixture *fixture,
                                     EMER_TALLY_DAILY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
-                                    tally_iter_before_func,
+                                    tally_iter_func,
                                     &data);
 
   g_assert_cmpuint (data.n_iterations, ==, 25);
@@ -493,7 +476,7 @@ test_aggregate_tally_iter_before (struct Fixture *fixture,
                                     EMER_TALLY_DAILY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DELETE,
-                                    tally_iter_before_func,
+                                    tally_iter_func,
                                     &data);
 
   g_assert_cmpuint (data.n_iterations, ==, 25);
@@ -505,7 +488,7 @@ test_aggregate_tally_iter_before (struct Fixture *fixture,
                                     EMER_TALLY_DAILY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
-                                    tally_iter_before_func,
+                                    tally_iter_func,
                                     &data);
 
   g_assert_cmpuint (data.n_iterations, ==, 0);
@@ -576,7 +559,7 @@ test_aggregate_tally_iter_before (struct Fixture *fixture,
                                     EMER_TALLY_MONTHLY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
-                                    tally_iter_before_func,
+                                    tally_iter_func,
                                     &data);
 
   g_assert_cmpuint (data.n_iterations, ==, 12);
@@ -588,7 +571,7 @@ test_aggregate_tally_iter_before (struct Fixture *fixture,
                                     EMER_TALLY_MONTHLY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DELETE,
-                                    tally_iter_before_func,
+                                    tally_iter_func,
                                     &data);
 
   g_assert_cmpuint (data.n_iterations, ==, 12);
@@ -600,7 +583,7 @@ test_aggregate_tally_iter_before (struct Fixture *fixture,
                                     EMER_TALLY_MONTHLY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
-                                    tally_iter_before_func,
+                                    tally_iter_func,
                                     &data);
 
   g_assert_cmpuint (data.n_iterations, ==, 0);

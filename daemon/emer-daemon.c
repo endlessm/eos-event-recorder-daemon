@@ -1196,7 +1196,7 @@ split_aggregate_timers (EmerDaemon *self,
 
 static EmerTallyIterResult
 buffer_aggregate_event_to_queue (guint32     unix_user_id,
-                                 GVariant   *event_id,
+                                 uuid_t      event_uuid,
                                  GVariant   *aggregate_key,
                                  GVariant   *payload,
                                  guint32     counter,
@@ -1206,7 +1206,7 @@ buffer_aggregate_event_to_queue (guint32     unix_user_id,
   EmerDaemon *self = user_data;
 
   emer_daemon_record_aggregate_event (self,
-                                      event_id,
+                                      get_uuid_as_variant (event_uuid),
                                       date,
                                       counter,
                                       payload != NULL,

@@ -44,7 +44,7 @@ static const char *uuids[] = {
 struct AggregateEvent
 {
   guint32 unix_user_id;
-  GVariant *event_id;
+  uuid_t event_id;
   GVariant *aggregate_key;
   GVariant *payload;
 };
@@ -54,17 +54,6 @@ struct Fixture
   EmerAggregateTally *tally;
   GFile *tally_folder;
 };
-
-static GVariant *
-event_id_to_variant (const char *event_id)
-{
-  uuid_t parsed_event_id;
-
-  if (uuid_parse (event_id, parsed_event_id) != 0)
-    return NULL;
-
-  return get_uuid_as_variant (parsed_event_id);
-}
 
 static struct AggregateEvent *
 create_aggregate_event (guint32     unix_user_id,
@@ -76,7 +65,8 @@ create_aggregate_event (guint32     unix_user_id,
 
   event = g_new0 (struct AggregateEvent, 1);
   event->unix_user_id = unix_user_id;
-  event->event_id = g_variant_ref_sink (event_id_to_variant (event_id));
+  int ret = uuid_parse (event_id, event->event_id);
+  g_assert (ret == 0);
   event->aggregate_key = g_variant_ref_sink (g_variant_new_variant (aggregate_key));
   event->payload = g_variant_ref_sink (g_variant_new_variant (payload));
 
@@ -86,7 +76,6 @@ create_aggregate_event (guint32     unix_user_id,
 static void
 aggregate_event_free (struct AggregateEvent *event)
 {
-  g_clear_pointer (&event->event_id, g_variant_unref);
   g_clear_pointer (&event->aggregate_key, g_variant_unref);
   g_clear_pointer (&event->payload, g_variant_unref);
   g_free (event);
@@ -163,7 +152,7 @@ struct IterData {
 
 static EmerTallyIterResult
 tally_iter_func (guint32     unix_user_id,
-                 GVariant   *event_id,
+                 uuid_t      event_id,
                  GVariant   *aggregate_key,
                  GVariant   *payload,
                  guint32     counter,

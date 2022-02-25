@@ -37,8 +37,8 @@ struct _EmerAggregateTimerImpl
   gint64 end_monotonic_us;
 
   guint32 unix_user_id;
-  GVariant *event_id; /* owned */
-  GVariant *monthly_event_id; /* owned */
+  uuid_t event_id;
+  uuid_t monthly_event_id;
   GVariant *aggregate_key; /* owned */
   GVariant *payload; /* owned */
   gchar *cache_key_string; /* owned */
@@ -49,23 +49,6 @@ struct _EmerAggregateTimerImpl
 
 G_DEFINE_TYPE (EmerAggregateTimerImpl, emer_aggregate_timer_impl, G_TYPE_OBJECT)
 
-static GVariant *
-create_uuid_variant (GVariant    *event_id,
-                     const gchar *name)
-{
-  g_autoptr(GVariantIter) iter = NULL;
-  uuid_t uuid, new_uuid;
-  size_t i = 0;
-
-  g_variant_get (event_id, "ay", &iter);
-  while (g_variant_iter_loop (iter, "y", &uuid[i++]))
-    ;
-
-  uuid_generate_sha1 (new_uuid, uuid, name, strlen (name));
-
-  return get_uuid_as_variant (new_uuid);
-}
-
 static void
 emer_aggregate_timer_impl_finalize (GObject *object)
 {
@@ -73,8 +56,6 @@ emer_aggregate_timer_impl_finalize (GObject *object)
 
   g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (self->timer));
 
-  g_clear_pointer (&self->event_id, g_variant_unref);
-  g_clear_pointer (&self->monthly_event_id, g_variant_unref);
   g_clear_pointer (&self->aggregate_key, g_variant_unref);
   g_clear_pointer (&self->payload, g_variant_unref);
   g_clear_pointer (&self->cache_key_string, g_free);
@@ -108,8 +89,18 @@ emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
                                gint64              monotonic_time_us)
 {
   EmerAggregateTimerImpl *self;
+  gconstpointer event_id_bytes = NULL;
+  gsize event_id_len = 0;
+  uuid_t event_uuid;
 
-  g_variant_take_ref (event_id);
+  /* TODO: factor this out */
+  g_return_val_if_fail (g_variant_is_of_type (event_id, G_VARIANT_TYPE_BYTESTRING), NULL);
+  g_return_val_if_fail (g_variant_is_of_type (aggregate_key, G_VARIANT_TYPE_VARIANT), NULL);
+  g_return_val_if_fail (payload == NULL || g_variant_is_of_type (payload, G_VARIANT_TYPE_VARIANT), NULL);
+
+  event_id_bytes = g_variant_get_fixed_array (event_id, &event_id_len, sizeof (event_uuid[0]));
+  g_return_val_if_fail (event_id_len == sizeof (event_uuid), NULL);
+
   g_variant_take_ref (aggregate_key);
   if (payload)
     g_variant_take_ref (payload);
@@ -119,8 +110,10 @@ emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
   self->sender_name = g_strdup (sender_name);
   self->tally = tally;
   self->unix_user_id = unix_user_id;
-  self->event_id = g_variant_ref (event_id);
-  self->monthly_event_id = create_uuid_variant (event_id, "monthly");
+
+  memcpy (self->event_id, event_id_bytes, event_id_len);
+  uuid_generate_sha1 (self->monthly_event_id, self->event_id, "monthly", strlen ("monthly"));
+
   self->aggregate_key = g_variant_ref (aggregate_key);
   self->payload = payload ? g_variant_ref (payload) : NULL;
   self->start_monotonic_us = monotonic_time_us;
@@ -142,7 +135,7 @@ emer_aggregate_timer_impl_store (EmerAggregateTimerImpl  *self,
                                  gint64                   monotonic_time_us,
                                  GError                 **error)
 {
-  GVariant *event_id;
+  uuid_t *event_id;
   guint32 counter;
   gint64 difference;
 
@@ -155,11 +148,11 @@ emer_aggregate_timer_impl_store (EmerAggregateTimerImpl  *self,
   switch (tally_type)
     {
     case EMER_TALLY_DAILY_EVENTS:
-      event_id = self->event_id;
+      event_id = &self->event_id;
       break;
 
     case EMER_TALLY_MONTHLY_EVENTS:
-      event_id = self->monthly_event_id;
+      event_id = &self->monthly_event_id;
       break;
 
     default:
@@ -169,7 +162,7 @@ emer_aggregate_timer_impl_store (EmerAggregateTimerImpl  *self,
   return emer_aggregate_tally_store_event (self->tally,
                                            tally_type,
                                            self->unix_user_id,
-                                           event_id,
+                                           *event_id,
                                            self->aggregate_key,
                                            self->payload,
                                            counter,

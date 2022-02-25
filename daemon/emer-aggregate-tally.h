@@ -23,6 +23,7 @@
 #pragma once
 
 #include <glib-object.h>
+#include <uuid.h>
 
 G_BEGIN_DECLS
 
@@ -43,7 +44,7 @@ typedef enum
 } EmerTallyType;
 
 typedef EmerTallyIterResult (*EmerTallyIterFunc) (guint32     unix_user_id,
-                                                  GVariant   *event_id,
+                                                  uuid_t      event_id,
                                                   GVariant   *aggregate_key,
                                                   GVariant   *payload,
                                                   guint32     counter,
@@ -61,7 +62,7 @@ emer_aggregate_tally_new (const gchar *persistent_cache_directory);
 gboolean emer_aggregate_tally_store_event (EmerAggregateTally  *self,
                                            EmerTallyType        tally_type,
                                            guint32              unix_user_id,
-                                           GVariant            *event_id,
+                                           uuid_t               event_id,
                                            GVariant            *aggregate_key,
                                            GVariant            *payload,
                                            guint32              counter,

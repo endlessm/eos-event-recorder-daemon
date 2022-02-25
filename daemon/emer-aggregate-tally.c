@@ -107,12 +107,18 @@ check_sqlite_error (EmerAggregateTally *self,
 #define CHECK(x) \
   check_sqlite_error (self, (G_STRLOC), (x))
 
-static GVariant *
-text_to_variant (sqlite3_stmt *stmt,
-                 int           i)
+static void
+column_to_uuid (sqlite3_stmt *stmt,
+                int           i,
+                uuid_t        u)
 {
-  const gchar *text = (const gchar *)sqlite3_column_text (stmt, i);
-  return g_variant_parse (NULL, text, NULL, NULL, NULL);
+  gconstpointer blob = sqlite3_column_blob (stmt, i);
+  gint size = sqlite3_column_bytes (stmt, i);
+
+  if (blob != NULL && size == sizeof (uuid_t))
+    uuid_copy (u, blob);
+  else
+    g_warning ("Malformed UUID of size %d", size);
 }
 
 static GVariant *
@@ -207,7 +213,7 @@ emer_aggregate_tally_constructed (GObject *object)
   tally_exec_or_die (self, "CREATE TABLE IF NOT EXISTS tally (\n"
                            "    id INTEGER PRIMARY KEY ASC,\n"
                            "    date TEXT NOT NULL,\n"
-                           "    event_id TEXT NOT NULL,\n"
+                           "    event_id BLOB NOT NULL CHECK (length(event_id) = 16),\n"
                            "    unix_user_id INT NOT NULL,\n"
                            "    aggregate_key BLOB NOT NULL,\n"
                            "    payload BLOB,\n"
@@ -304,7 +310,7 @@ gboolean
 emer_aggregate_tally_store_event (EmerAggregateTally  *self,
                                   EmerTallyType        tally_type,
                                   guint32              unix_user_id,
-                                  GVariant            *event_id,
+                                  uuid_t               event_id,
                                   GVariant            *aggregate_key,
                                   GVariant            *payload,
                                   guint32              counter,
@@ -313,7 +319,7 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
                                   GError             **error)
 {
   g_return_val_if_fail (g_variant_is_of_type (aggregate_key, G_VARIANT_TYPE_VARIANT), FALSE);
-  g_return_val_if_fail (g_variant_is_of_type (payload, G_VARIANT_TYPE_VARIANT), FALSE);
+  g_return_val_if_fail (payload == NULL || g_variant_is_of_type (payload, G_VARIANT_TYPE_VARIANT), FALSE);
 
   const char *UPSERT_SQL =
     "INSERT INTO tally (date, event_id, unix_user_id, "
@@ -333,7 +339,7 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
   CHECK (sqlite3_prepare_v2 (self->db, UPSERT_SQL, -1, &stmt, NULL));
 
   CHECK (sqlite3_bind_text (stmt, 1, date, -1, SQLITE_TRANSIENT));
-  CHECK (sqlite3_bind_text (stmt, 2, g_variant_print (event_id, TRUE), -1, g_free));
+  CHECK (sqlite3_bind_blob (stmt, 2, event_id, sizeof (uuid_t), SQLITE_STATIC));
   CHECK (sqlite3_bind_int64 (stmt, 3, unix_user_id));
   CHECK (sqlite3_bind_blob (stmt, 4,
                             g_variant_get_data (aggregate_key),
@@ -382,13 +388,14 @@ emer_aggregate_tally_iter (EmerAggregateTally *self,
 
   while ((ret = sqlite3_step (stmt)) == SQLITE_ROW)
     {
-      g_autoptr(GVariant) event_id =
-        text_to_variant (stmt, 1);
       guint32 unix_user_id = column_to_uint32 (stmt, 2);
       g_autoptr(GVariant) aggregate_key = column_to_variant (stmt, 3);
       g_autoptr(GVariant) payload = column_to_variant (stmt, 4);
       guint32 counter = column_to_uint32 (stmt, 5);
       EmerTallyIterResult result;
+      uuid_t event_id = { 0 };
+
+      column_to_uuid (stmt, 1, event_id);
 
       result = func (unix_user_id, event_id,
                      aggregate_key, payload,
@@ -440,13 +447,14 @@ emer_aggregate_tally_iter_before (EmerAggregateTally *self,
 
   while ((ret = sqlite3_step (stmt)) == SQLITE_ROW)
     {
-      g_autoptr(GVariant) event_id =
-        text_to_variant (stmt, 1);
       guint32 unix_user_id = column_to_uint32 (stmt, 2);
       g_autoptr(GVariant) aggregate_key = column_to_variant (stmt, 3);
       g_autoptr(GVariant) payload = column_to_variant (stmt, 4);
       guint32 counter = column_to_uint32 (stmt, 5);
+      uuid_t event_id = { 0 };
       EmerTallyIterResult result;
+
+      column_to_uuid (stmt, 1, event_id);
 
       result = func (unix_user_id, event_id,
                      aggregate_key, payload,

@@ -432,7 +432,7 @@ emer_aggregate_tally_iter_before (EmerAggregateTally *self,
   const char *SELECT_SQL =
     "SELECT id, event_id, unix_user_id, "
     "       aggregate_key, "
-    "       payload, counter "
+    "       payload, counter, date "
     "FROM tally "
     "WHERE length(date) = ? AND date < ?;";
 
@@ -456,6 +456,7 @@ emer_aggregate_tally_iter_before (EmerAggregateTally *self,
       g_autoptr(GVariant) aggregate_key = column_to_variant (stmt, 3);
       g_autoptr(GVariant) payload = column_to_variant (stmt, 4);
       guint32 counter = column_to_uint32 (stmt, 5);
+      const char *event_date = (const char *) sqlite3_column_text (stmt, 6);
       uuid_t event_id = { 0 };
       EmerTallyIterResult result;
 
@@ -463,7 +464,7 @@ emer_aggregate_tally_iter_before (EmerAggregateTally *self,
 
       result = func (unix_user_id, event_id,
                      aggregate_key, payload,
-                     counter, date, user_data);
+                     counter, event_date, user_data);
 
       if (flags & EMER_TALLY_ITER_FLAG_DELETE)
         {

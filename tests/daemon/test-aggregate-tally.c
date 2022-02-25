@@ -390,6 +390,8 @@ test_aggregate_tally_iter_before_daily (struct Fixture *fixture,
       AggregateEvent *e = g_ptr_array_index (events, i);
 
       g_assert_cmpuint (e->counter, ==, 1);
+      /* All returned dates should be before the requested date */
+      g_assert_cmpstr (e->date, <, "2021-09-22");
     }
 
   /* Iterate again, and delete entries this time */
@@ -464,6 +466,8 @@ test_aggregate_tally_iter_before_monthly (struct Fixture *fixture,
       AggregateEvent *e = g_ptr_array_index (events, i);
 
       g_assert_cmpuint (e->counter, ==, 1);
+      /* All returned dates should be before the requested date */
+      g_assert_cmpstr (e->date, <, "2021-09");
     }
 
   /* Iterate again, and delete entries this time */

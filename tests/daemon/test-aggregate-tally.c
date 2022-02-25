@@ -38,13 +38,50 @@ static const char *uuid_strs[] = {
 };
 static uuid_t uuids[G_N_ELEMENTS(uuid_strs)];
 
-struct AggregateEvent
+typedef struct
 {
-  guint32 unix_user_id;
-  uuid_t event_id;
-  GVariant *aggregate_key;
-  GVariant *payload;
-};
+  guint32     unix_user_id;
+  uuid_t      event_id;
+  GVariant   *aggregate_key;
+  GVariant   *payload;
+  guint32     counter;
+  char *      date;
+} AggregateEvent;
+
+static AggregateEvent *
+aggregate_event_new (guint32     unix_user_id,
+                     uuid_t      event_id,
+                     GVariant   *aggregate_key,
+                     GVariant   *payload,
+                     guint32     counter,
+                     const char *date)
+{
+  AggregateEvent *e = g_new0 (AggregateEvent, 1);
+
+  e->unix_user_id = unix_user_id;
+  uuid_copy (e->event_id, event_id);
+  e->aggregate_key = g_variant_ref (aggregate_key);
+  e->payload = payload ? g_variant_ref (payload) : NULL;
+  e->counter = counter;
+  e->date = g_strdup (date);
+
+  return e;
+}
+
+/* The argument has type gpointer to allow this function to be used as a
+ * GDestroyNotify without casting
+ */
+static void
+aggregate_event_free (gpointer e_)
+{
+  AggregateEvent *e = e_;
+
+  g_clear_pointer (&e->aggregate_key, g_variant_unref);
+  g_clear_pointer (&e->payload, g_variant_unref);
+  g_clear_pointer (&e->date, g_free);
+
+  g_free (e);
+}
 
 struct Fixture
 {
@@ -119,11 +156,6 @@ test_aggregate_tally_store_events (struct Fixture *fixture,
   g_assert_no_error (error);
 }
 
-struct IterData {
-  guint32 n_iterations;
-  guint32 counter;
-};
-
 static EmerTallyIterResult
 tally_iter_func (guint32     unix_user_id,
                  uuid_t      event_id,
@@ -133,10 +165,9 @@ tally_iter_func (guint32     unix_user_id,
                  const char *date,
                  gpointer    user_data)
 {
-  struct IterData *data = user_data;
+  GPtrArray *events = user_data;
 
-  data->n_iterations++;
-  data->counter += counter;
+  g_ptr_array_add (events, aggregate_event_new (unix_user_id, event_id, aggregate_key, payload, counter, date));
 
   return EMER_TALLY_ITER_CONTINUE;
 }
@@ -148,7 +179,7 @@ test_aggregate_tally_iter (struct Fixture *fixture,
   g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
   g_autoptr(GVariant) aggregate_key = v_str (G_STRFUNC);
   g_autoptr(GVariant) payload = payload_str ? v_str (payload_str) : NULL;
-  struct IterData data;
+  g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
   int i;
 
   // Add the same aggregate event multiple times. It must
@@ -172,27 +203,25 @@ test_aggregate_tally_iter (struct Fixture *fixture,
       g_assert_no_error (error);
     }
 
-  data = (struct IterData) { 0, 0 };
   emer_aggregate_tally_iter (fixture->tally,
                              EMER_TALLY_DAILY_EVENTS,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             &data);
+                             events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 1);
-  g_assert_cmpuint (data.counter, ==, 10);
+  g_assert_cmpuint (events->len, ==, 1);
+  AggregateEvent *e = g_ptr_array_index (events, 0);
+  g_assert_cmpuint (e->counter, ==, 10);
 
-  data = (struct IterData) { 0, 0 };
+  g_ptr_array_set_size (events, 0);
   emer_aggregate_tally_iter (fixture->tally,
                              EMER_TALLY_DAILY_EVENTS,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             &data);
-
-  g_assert_cmpuint (data.n_iterations, ==, 0);
-  g_assert_cmpuint (data.counter, ==, 0);
+                             events);
+  g_assert_cmpuint (events->len, ==, 0);
 }
 
 static void
@@ -201,7 +230,7 @@ test_aggregate_tally_large_counter_single (struct Fixture *fixture,
 {
   g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
   g_autoptr(GVariant) v = v_str (G_STRFUNC);
-  struct IterData data;
+  g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
   g_autoptr(GError) error = NULL;
 
   // Add an aggregate event with a counter too large to fit into a 32-bit
@@ -218,16 +247,16 @@ test_aggregate_tally_large_counter_single (struct Fixture *fixture,
                                     &error);
   g_assert_no_error (error);
 
-  data = (struct IterData) { 0, 0 };
   emer_aggregate_tally_iter (fixture->tally,
                              EMER_TALLY_DAILY_EVENTS,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             &data);
+                             events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 1);
-  g_assert_cmpuint (data.counter, ==, ((guint32) G_MAXINT32) + 1);
+  g_assert_cmpuint (events->len, ==, 1);
+  AggregateEvent *e = g_ptr_array_index (events, 0);
+  g_assert_cmpuint (e->counter, ==, ((guint32) G_MAXINT32) + 1);
 }
 
 static void
@@ -236,7 +265,7 @@ test_aggregate_tally_large_counter_add (struct Fixture *fixture,
 {
   g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
   g_autoptr(GVariant) v = v_str (G_STRFUNC);
-  struct IterData data;
+  g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
   g_autoptr(GError) error = NULL;
 
   // Add an aggregate event whose counter only just fits in a 32-bit signed
@@ -266,16 +295,16 @@ test_aggregate_tally_large_counter_add (struct Fixture *fixture,
                                     &error);
   g_assert_no_error (error);
 
-  data = (struct IterData) { 0, 0 };
   emer_aggregate_tally_iter (fixture->tally,
                              EMER_TALLY_DAILY_EVENTS,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             &data);
+                             events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 1);
-  g_assert_cmpuint (data.counter, ==, ((guint32) G_MAXINT32) + 1);
+  g_assert_cmpuint (events->len, ==, 1);
+  AggregateEvent *e = g_ptr_array_index (events, 0);
+  g_assert_cmpuint (e->counter, ==, ((guint32) G_MAXINT32) + 1);
 }
 
 static void
@@ -285,7 +314,7 @@ test_aggregate_tally_large_counter_upper_bound (struct Fixture *fixture,
   g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
   g_autoptr(GVariant) v = v_str (G_STRFUNC);
   size_t i;
-  struct IterData data;
+  g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
   g_autoptr(GError) error = NULL;
 
   // The upper bound of an event's timer is 2 ** 32 - 1. Check that trying to
@@ -306,16 +335,16 @@ test_aggregate_tally_large_counter_upper_bound (struct Fixture *fixture,
       g_assert_no_error (error);
     }
 
-  data = (struct IterData) { 0, 0 };
   emer_aggregate_tally_iter (fixture->tally,
                              EMER_TALLY_DAILY_EVENTS,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             &data);
+                             events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 1);
-  g_assert_cmpuint (data.counter, ==, G_MAXUINT32);
+  g_assert_cmpuint (events->len, ==, 1);
+  AggregateEvent *e = g_ptr_array_index (events, 0);
+  g_assert_cmpuint (e->counter, ==, G_MAXUINT32);
 }
 
 static void
@@ -324,8 +353,8 @@ test_aggregate_tally_iter_before (struct Fixture *fixture,
 {
   g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
   g_autoptr(GVariant) v = v_str (G_STRFUNC);
-  struct IterData data;
-  int i;
+  g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
+  size_t i;
   g_autoptr(GError) error = NULL;
 
 
@@ -368,40 +397,48 @@ test_aggregate_tally_iter_before (struct Fixture *fixture,
     }
 
   /* Iterate but don't delete */
-  data = (struct IterData) { 0, 0 };
   emer_aggregate_tally_iter_before (fixture->tally,
                                     EMER_TALLY_DAILY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
                                     tally_iter_func,
-                                    &data);
+                                    events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 25);
-  g_assert_cmpuint (data.counter, ==, 25);
+  g_assert_cmpuint (events->len, ==, 25);
+  for (i = 0; i < events->len; i++)
+    {
+      AggregateEvent *e = g_ptr_array_index (events, i);
+
+      g_assert_cmpuint (e->counter, ==, 1);
+    }
 
   /* Iterate again, and delete entries this time */
-  data = (struct IterData) { 0, 0 };
+  g_ptr_array_set_size (events, 0);
   emer_aggregate_tally_iter_before (fixture->tally,
                                     EMER_TALLY_DAILY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DELETE,
                                     tally_iter_func,
-                                    &data);
+                                    events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 25);
-  g_assert_cmpuint (data.counter, ==, 25);
+  g_assert_cmpuint (events->len, ==, 25);
+  for (i = 0; i < events->len; i++)
+    {
+      AggregateEvent *e = g_ptr_array_index (events, i);
 
-  /* There should be nothing else iterate now */
-  data = (struct IterData) { 0, 0 };
+      g_assert_cmpuint (e->counter, ==, 1);
+    }
+
+  /* There should be nothing else to iterate now */
+  g_ptr_array_set_size (events, 0);
   emer_aggregate_tally_iter_before (fixture->tally,
                                     EMER_TALLY_DAILY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
                                     tally_iter_func,
-                                    &data);
+                                    events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 0);
-  g_assert_cmpuint (data.counter, ==, 0);
+  g_assert_cmpuint (events->len, ==, 0);
 
   // Now test previous months - add as much as 1 year to
   // the past
@@ -443,40 +480,49 @@ test_aggregate_tally_iter_before (struct Fixture *fixture,
     }
 
   /* Iterate but don't delete */
-  data = (struct IterData) { 0, 0 };
+  g_ptr_array_set_size (events, 0);
   emer_aggregate_tally_iter_before (fixture->tally,
                                     EMER_TALLY_MONTHLY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
                                     tally_iter_func,
-                                    &data);
+                                    events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 12);
-  g_assert_cmpuint (data.counter, ==, 12);
+  g_assert_cmpuint (events->len, ==, 12);
+  for (i = 0; i < events->len; i++)
+    {
+      AggregateEvent *e = g_ptr_array_index (events, i);
+
+      g_assert_cmpuint (e->counter, ==, 1);
+    }
 
   /* Iterate again, and delete entries this time */
-  data = (struct IterData) { 0, 0 };
+  g_ptr_array_set_size (events, 0);
   emer_aggregate_tally_iter_before (fixture->tally,
                                     EMER_TALLY_MONTHLY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DELETE,
                                     tally_iter_func,
-                                    &data);
+                                    events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 12);
-  g_assert_cmpuint (data.counter, ==, 12);
+  g_assert_cmpuint (events->len, ==, 12);
+  for (i = 0; i < events->len; i++)
+    {
+      AggregateEvent *e = g_ptr_array_index (events, i);
+
+      g_assert_cmpuint (e->counter, ==, 1);
+    }
 
   /* There should be nothing else iterate now */
-  data = (struct IterData) { 0, 0 };
+  g_ptr_array_set_size (events, 0);
   emer_aggregate_tally_iter_before (fixture->tally,
                                     EMER_TALLY_MONTHLY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
                                     tally_iter_func,
-                                    &data);
+                                    events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 0);
-  g_assert_cmpuint (data.counter, ==, 0);
+  g_assert_cmpuint (events->len, ==, 0);
 }
 
 gint

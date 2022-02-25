@@ -68,7 +68,7 @@ create_aggregate_event (guint32     unix_user_id,
   int ret = uuid_parse (event_id, event->event_id);
   g_assert (ret == 0);
   event->aggregate_key = g_variant_ref_sink (g_variant_new_variant (aggregate_key));
-  event->payload = g_variant_ref_sink (g_variant_new_variant (payload));
+  event->payload = payload ? g_variant_ref_sink (g_variant_new_variant (payload)) : NULL;
 
   return event;
 }
@@ -169,7 +169,7 @@ tally_iter_func (guint32     unix_user_id,
 
 static void
 test_aggregate_tally_iter (struct Fixture *fixture,
-                           gconstpointer   dontuseme)
+                           gconstpointer   payload_str)
 {
   g_autoptr(GDateTime) datetime = NULL;
   struct IterData data;
@@ -187,7 +187,7 @@ test_aggregate_tally_iter (struct Fixture *fixture,
 
       event = create_aggregate_event (1001, uuids[0],
                                       g_variant_new_string (""),
-                                      g_variant_new_string (""));
+                                      payload_str ? g_variant_new_string (payload_str) : NULL);
 
       emer_aggregate_tally_store_event (fixture->tally,
                                         EMER_TALLY_DAILY_EVENTS,
@@ -589,8 +589,18 @@ main (gint                argc,
                                  test_aggregate_tally_new_succeeds);
   ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/store-events",
                                  test_aggregate_tally_store_events);
-  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/iter",
-                                 test_aggregate_tally_iter);
+  g_test_add ("/aggregate-tally/iter/null-payload",
+              struct Fixture,
+              NULL,
+              setup,
+              test_aggregate_tally_iter,
+              teardown);
+  g_test_add ("/aggregate-tally/iter/nonnull-payload",
+              struct Fixture,
+              "what a big payload you have, grandma",
+              setup,
+              test_aggregate_tally_iter,
+              teardown);
   ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/large-counter/single",
                                  test_aggregate_tally_large_counter_single);
   ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/large-counter/add",

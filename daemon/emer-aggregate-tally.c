@@ -129,6 +129,11 @@ column_to_variant (sqlite3_stmt *stmt,
   gconstpointer sqlite_data;
   gint size;
 
+  /* Unlike sqlite3_column_text, "The return value from sqlite3_column_blob()
+   * for a zero-length BLOB is a NULL pointer." even if the value is not NULL
+   * at the SQL level. Weird, but it suits our purposes of storing the
+   * absence of a payload as a non-NULL empty blob.
+   */
   sqlite_data = sqlite3_column_blob (stmt, i);
   if (!sqlite_data)
     return NULL;
@@ -216,7 +221,7 @@ emer_aggregate_tally_constructed (GObject *object)
                            "    event_id BLOB NOT NULL CHECK (length(event_id) = 16),\n"
                            "    unix_user_id INT NOT NULL,\n"
                            "    aggregate_key BLOB NOT NULL,\n"
-                           "    payload BLOB,\n"
+                           "    payload BLOB NOT NULL,\n"
                            "    counter INT NOT NULL\n"
                            ")");
   tally_exec_or_die (self,
@@ -346,7 +351,7 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
                             g_variant_get_size (aggregate_key),
                             SQLITE_TRANSIENT));
   CHECK (sqlite3_bind_blob (stmt, 5,
-                            payload ? g_variant_get_data (payload) : NULL,
+                            payload ? g_variant_get_data (payload) : "",
                             payload ? g_variant_get_size (payload) : 0,
                             SQLITE_TRANSIENT));
   CHECK (sqlite3_bind_int64 (stmt, 6, counter));

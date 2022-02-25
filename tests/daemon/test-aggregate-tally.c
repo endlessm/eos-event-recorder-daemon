@@ -348,15 +348,14 @@ test_aggregate_tally_large_counter_upper_bound (struct Fixture *fixture,
 }
 
 static void
-test_aggregate_tally_iter_before (struct Fixture *fixture,
-                                  gconstpointer   dontuseme)
+test_aggregate_tally_iter_before_daily (struct Fixture *fixture,
+                                        gconstpointer   dontuseme)
 {
   g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
   g_autoptr(GVariant) v = v_str (G_STRFUNC);
   g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
   size_t i;
   g_autoptr(GError) error = NULL;
-
 
   // Add the same aggregate event to different days in the past
   for (i = 0; i < 25; i++)
@@ -439,6 +438,17 @@ test_aggregate_tally_iter_before (struct Fixture *fixture,
                                     events);
 
   g_assert_cmpuint (events->len, ==, 0);
+}
+
+static void
+test_aggregate_tally_iter_before_monthly (struct Fixture *fixture,
+                                          gconstpointer   dontuseme)
+{
+  g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+  g_autoptr(GVariant) v = v_str (G_STRFUNC);
+  g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
+  size_t i;
+  g_autoptr(GError) error = NULL;
 
   // Now test previous months - add as much as 1 year to
   // the past
@@ -480,7 +490,6 @@ test_aggregate_tally_iter_before (struct Fixture *fixture,
     }
 
   /* Iterate but don't delete */
-  g_ptr_array_set_size (events, 0);
   emer_aggregate_tally_iter_before (fixture->tally,
                                     EMER_TALLY_MONTHLY_EVENTS,
                                     datetime,
@@ -559,8 +568,10 @@ main (gint                argc,
                                  test_aggregate_tally_large_counter_add);
   ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/large-counter/upper-bound",
                                  test_aggregate_tally_large_counter_upper_bound);
-  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/iter-before",
-                                 test_aggregate_tally_iter_before);
+  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/iter-before/daily",
+                                 test_aggregate_tally_iter_before_daily);
+  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/iter-before/monthly",
+                                 test_aggregate_tally_iter_before_monthly);
 
 #undef ADD_AGGREGATE_TALLY_TEST_FUNC
 

@@ -357,29 +357,10 @@ test_aggregate_tally_iter_before_daily (struct Fixture *fixture,
   size_t i;
   g_autoptr(GError) error = NULL;
 
-  // Add the same aggregate event to different days in the past
-  for (i = 0; i < 25; i++)
+  // Add the same aggregate event to different days in the past and future
+  for (i = 0; i < 50; i++)
     {
-      g_autoptr(GDateTime) past_datetime = g_date_time_add_days (datetime, -(i + 1));
-
-      emer_aggregate_tally_store_event (fixture->tally,
-                                        EMER_TALLY_DAILY_EVENTS,
-                                        1001,
-                                        test_uuid,
-                                        v,
-                                        v,
-                                        1,
-                                        past_datetime,
-                                        g_get_monotonic_time (),
-                                        &error);
-
-      g_assert_no_error (error);
-    }
-
-  // ... and in the future as well
-  for (i = 0; i < 25; i++)
-    {
-      g_autoptr(GDateTime) future_datetime = g_date_time_add_days (datetime, i + 1);
+      g_autoptr(GDateTime) dt = g_date_time_add_days (datetime, i - 25);
 
       emer_aggregate_tally_store_event (fixture->tally,
                                         EMER_TALLY_DAILY_EVENTS,
@@ -388,7 +369,7 @@ test_aggregate_tally_iter_before_daily (struct Fixture *fixture,
                                         v,
                                         v,
                                         1,
-                                        future_datetime,
+                                        dt,
                                         g_get_monotonic_time (),
                                         &error);
 
@@ -450,30 +431,10 @@ test_aggregate_tally_iter_before_monthly (struct Fixture *fixture,
   size_t i;
   g_autoptr(GError) error = NULL;
 
-  // Now test previous months - add as much as 1 year to
-  // the past
-  for (i = 0; i < 12; i++)
+  // Add the same event in different months of the past and future
+  for (i = 0; i < 24; i++)
     {
-      g_autoptr(GDateTime) past_datetime = g_date_time_add_months (datetime, -(i + 1));
-
-      emer_aggregate_tally_store_event (fixture->tally,
-                                        EMER_TALLY_MONTHLY_EVENTS,
-                                        1001,
-                                        test_uuid,
-                                        v,
-                                        v,
-                                        1,
-                                        past_datetime,
-                                        g_get_monotonic_time (),
-                                        &error);
-
-      g_assert_no_error (error);
-    }
-
-  // ... and to the future as well
-  for (i = 0; i < 12; i++)
-    {
-      g_autoptr(GDateTime) future_datetime = g_date_time_add_months (datetime, i + 1);
+      g_autoptr(GDateTime) dt = g_date_time_add_months (datetime, i - 12);
 
       emer_aggregate_tally_store_event (fixture->tally,
                                         EMER_TALLY_MONTHLY_EVENTS,
@@ -482,7 +443,7 @@ test_aggregate_tally_iter_before_monthly (struct Fixture *fixture,
                                         v,
                                         v,
                                         1,
-                                        future_datetime,
+                                        dt,
                                         g_get_monotonic_time (),
                                         &error);
 

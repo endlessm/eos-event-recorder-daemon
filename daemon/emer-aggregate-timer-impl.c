@@ -53,7 +53,6 @@ static GVariant *
 create_uuid_variant (GVariant    *event_id,
                      const gchar *name)
 {
-  GVariantBuilder builder;
   g_autoptr(GVariantIter) iter = NULL;
   uuid_t uuid, new_uuid;
   size_t i = 0;
@@ -64,8 +63,7 @@ create_uuid_variant (GVariant    *event_id,
 
   uuid_generate_sha1 (new_uuid, uuid, name, strlen (name));
 
-  get_uuid_builder (new_uuid, &builder);
-  return g_variant_builder_end (&builder);
+  return get_uuid_as_variant (new_uuid);
 }
 
 static void

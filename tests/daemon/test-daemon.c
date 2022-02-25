@@ -382,9 +382,7 @@ make_variant_for_event_id (const gchar *event_id)
 {
   uuid_t uuid;
   g_assert_cmpint (uuid_parse (event_id, uuid), ==, 0);
-  GVariantBuilder event_id_builder;
-  get_uuid_builder (uuid, &event_id_builder);
-  return g_variant_builder_end (&event_id_builder);
+  return get_uuid_as_variant (uuid);
 }
 
 static GVariant *

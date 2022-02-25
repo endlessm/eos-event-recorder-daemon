@@ -58,15 +58,12 @@ struct Fixture
 static GVariant *
 event_id_to_variant (const char *event_id)
 {
-  GVariantBuilder event_id_builder;
   uuid_t parsed_event_id;
 
   if (uuid_parse (event_id, parsed_event_id) != 0)
     return NULL;
 
-  get_uuid_builder (parsed_event_id, &event_id_builder);
-
-  return g_variant_new ("ay", &event_id_builder);
+  return get_uuid_as_variant (parsed_event_id);
 }
 
 static struct AggregateEvent *

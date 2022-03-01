@@ -24,6 +24,7 @@
 #include "emer-aggregate-tally.h"
 #include "shared/metrics-util.h"
 
+#include <glib/gstdio.h>
 #include <gio/gio.h>
 #include <sqlite3.h>
 
@@ -357,7 +358,19 @@ emer_aggregate_tally_constructed (GObject *object)
                            "metrics.db",
                            NULL);
   if (!emer_aggregate_tally_init_db (self, path, &error))
-    g_error ("Failed to initialize %s: %s", path, error->message);
+    {
+      g_warning ("Failed to initialize %s: %s; trying to delete and recreate it",
+                 path, error->message);
+      g_clear_error (&error);
+
+      g_clear_pointer (&self->db, close_db);
+      emer_aggregate_tally_delete_db (self, path);
+
+      if (!emer_aggregate_tally_init_db (self, path, &error))
+        {
+          g_error ("Failed to initialize %s again: %s", path, error->message);
+        }
+    }
 }
 
 static void

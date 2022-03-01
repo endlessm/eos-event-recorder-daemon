@@ -314,7 +314,7 @@ emer_aggregate_tally_constructed (GObject *object)
   g_assert (self->persistent_cache_directory != NULL);
   ensure_folder_exists (self, self->persistent_cache_directory, NULL);
   path = g_build_filename (self->persistent_cache_directory,
-                           "aggregate-events.db",
+                           "metrics.db",
                            NULL);
   if (!emer_aggregate_tally_init_db (self, path, &error))
     g_error ("Failed to initialize %s: %s", path, error->message);

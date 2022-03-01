@@ -37,6 +37,10 @@ struct _EmerAggregateTally
 
 G_DEFINE_TYPE (EmerAggregateTally, emer_aggregate_tally, G_TYPE_OBJECT)
 
+/* Error domain; codes from https://www.sqlite.org/rescode.html */
+G_DEFINE_QUARK ("emer-sqlite-error", emer_sqlite_error)
+#define EMER_SQLITE_ERROR (emer_sqlite_error_quark ())
+
 enum {
   PROP_PERSISTENT_CACHE_DIRECTORY = 1,
   N_PROPS,
@@ -90,22 +94,25 @@ tally_exec_or_die (EmerAggregateTally *self,
     g_error ("Failed to execute SQL '%s': (%d) %s", sql, ret, errmsg);
 }
 
-static void
-check_sqlite_error (EmerAggregateTally *self,
-                    const char         *tag,
-                    int                 ret)
+static gboolean
+check_sqlite_error (const char          *tag,
+                    int                  ret,
+                    GError             **error)
 {
   if (ret == SQLITE_OK || ret == SQLITE_DONE)
-    return;
+    return TRUE;
 
-  g_error ("%s: (%d) %s",
-           tag,
-           sqlite3_extended_errcode (self->db),
-           sqlite3_errmsg (self->db));
+  g_set_error (error,
+               EMER_SQLITE_ERROR,
+               ret,
+               "%s: %s",
+               tag,
+               sqlite3_errstr (ret));
+  return FALSE;
 }
 
 #define CHECK(x) \
-  check_sqlite_error (self, (G_STRLOC), (x))
+  check_sqlite_error ((G_STRLOC), (x), error)
 
 static void
 column_to_uuid (sqlite3_stmt *stmt,
@@ -157,9 +164,10 @@ column_to_uint32 (sqlite3_stmt *stmt,
 
 G_STATIC_ASSERT (sizeof (sqlite_int64) == sizeof (gint64));
 
-static void
-delete_tally_entries (EmerAggregateTally *self,
-                      GArray             *rows_to_delete)
+static gboolean
+delete_tally_entries (EmerAggregateTally  *self,
+                      GArray              *rows_to_delete,
+                      GError             **error)
 {
   const char *DELETE_SQL = "DELETE FROM tally WHERE id IN ";
   g_autoptr(GString) query = NULL;
@@ -167,7 +175,7 @@ delete_tally_entries (EmerAggregateTally *self,
   size_t i;
 
   if (!rows_to_delete || rows_to_delete->len == 0)
-    return;
+    return TRUE;
 
   query = g_string_new (DELETE_SQL);
   g_string_append (query, "(");
@@ -181,10 +189,28 @@ delete_tally_entries (EmerAggregateTally *self,
     }
   g_string_append (query, ");");
 
-  CHECK (sqlite3_prepare_v2 (self->db, query->str, -1, &stmt, NULL));
-  CHECK (sqlite3_step (stmt));
-  CHECK (sqlite3_reset (stmt));
-  CHECK (sqlite3_finalize (stmt));
+  if (!CHECK (sqlite3_prepare_v2 (self->db, query->str, -1, &stmt, NULL)) ||
+      !CHECK (sqlite3_step (stmt)) ||
+      !CHECK (sqlite3_reset (stmt)) ||
+      !CHECK (sqlite3_finalize (stmt)))
+    {
+      g_prefix_error (error, "Failed to delete %u tally entries: ", rows_to_delete->len);
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
+static void
+close_db (sqlite3 *db)
+{
+  g_autoptr(GError) error = NULL;
+
+  if (db != NULL)
+    return;
+
+  if (!check_sqlite_error ("sqlite3_close", sqlite3_close (db), &error))
+    g_warning ("Failed to close database: %s", error->message);
 }
 
 static void
@@ -206,6 +232,7 @@ emer_aggregate_tally_constructed (GObject *object)
     g_error ("Failed to open %s: %d", path, ret);
 
   g_assert (self->db);
+  sqlite3_extended_result_codes (self->db, TRUE);
 
   /* Use write-ahead logging rather than the default rollback journal. WAL
    * reduces the number of writes to disk, and crucially only calls fsync()
@@ -245,12 +272,7 @@ emer_aggregate_tally_finalize (GObject *object)
 {
   EmerAggregateTally *self = (EmerAggregateTally *)object;
 
-  if (self->db)
-    {
-      CHECK (sqlite3_close (self->db));
-      self->db = NULL;
-    }
-
+  g_clear_pointer (&self->db, close_db);
   g_clear_pointer (&self->persistent_cache_directory, g_free);
 
   G_OBJECT_CLASS (emer_aggregate_tally_parent_class)->finalize (object);
@@ -345,38 +367,35 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
 
   date = format_datetime_for_tally_type (datetime, tally_type);
 
-  CHECK (sqlite3_prepare_v2 (self->db, UPSERT_SQL, -1, &stmt, NULL));
-
-  CHECK (sqlite3_bind_text (stmt, 1, date, -1, SQLITE_TRANSIENT));
-  CHECK (sqlite3_bind_blob (stmt, 2, event_id, sizeof (uuid_t), SQLITE_STATIC));
-  CHECK (sqlite3_bind_int64 (stmt, 3, unix_user_id));
-  CHECK (sqlite3_bind_blob (stmt, 4,
-                            g_variant_get_data (aggregate_key),
-                            g_variant_get_size (aggregate_key),
-                            SQLITE_TRANSIENT));
-  CHECK (sqlite3_bind_blob (stmt, 5,
-                            payload ? g_variant_get_data (payload) : "",
-                            payload ? g_variant_get_size (payload) : 0,
-                            SQLITE_TRANSIENT));
-  CHECK (sqlite3_bind_int64 (stmt, 6, counter));
-
-  CHECK (sqlite3_step (stmt));
-
-  CHECK (sqlite3_finalize (stmt));
-
-  return TRUE;
+  return
+      CHECK (sqlite3_prepare_v2 (self->db, UPSERT_SQL, -1, &stmt, NULL)) &&
+      CHECK (sqlite3_bind_text (stmt, 1, date, -1, SQLITE_TRANSIENT)) &&
+      CHECK (sqlite3_bind_blob (stmt, 2, event_id, sizeof (uuid_t), SQLITE_STATIC)) &&
+      CHECK (sqlite3_bind_int64 (stmt, 3, unix_user_id)) &&
+      CHECK (sqlite3_bind_blob (stmt, 4,
+                                g_variant_get_data (aggregate_key),
+                                g_variant_get_size (aggregate_key),
+                                SQLITE_TRANSIENT)) &&
+      CHECK (sqlite3_bind_blob (stmt, 5,
+                                payload ? g_variant_get_data (payload) : "",
+                                payload ? g_variant_get_size (payload) : 0,
+                                SQLITE_TRANSIENT)) &&
+      CHECK (sqlite3_bind_int64 (stmt, 6, counter)) &&
+      CHECK (sqlite3_step (stmt)) &&
+      CHECK (sqlite3_finalize (stmt));
 }
 
 G_STATIC_ASSERT (sizeof (sqlite3_int64) == sizeof (gint64));
 
-static void
+static gboolean
 emer_aggregate_tally_iter_internal (EmerAggregateTally *self,
                                     const char         *query,
                                     EmerTallyType       tally_type,
                                     GDateTime          *datetime,
                                     EmerTallyIterFlags  flags,
                                     EmerTallyIterFunc   func,
-                                    gpointer            user_data)
+                                    gpointer            user_data,
+                                    GError             **error)
 {
   g_autoptr(GArray) rows_to_delete = NULL;
   g_autofree gchar *date = NULL;
@@ -386,8 +405,12 @@ emer_aggregate_tally_iter_internal (EmerAggregateTally *self,
   date = format_datetime_for_tally_type (datetime, tally_type);
   rows_to_delete = g_array_new (FALSE, FALSE, sizeof (sqlite3_int64));
 
-  CHECK (sqlite3_prepare_v2 (self->db, query, -1, &stmt, NULL));
-  CHECK (sqlite3_bind_text (stmt, 1, date, -1, SQLITE_TRANSIENT));
+  if (!CHECK (sqlite3_prepare_v2 (self->db, query, -1, &stmt, NULL)) ||
+      !CHECK (sqlite3_bind_text (stmt, 1, date, -1, SQLITE_TRANSIENT)))
+    {
+      g_prefix_error (error, "While preparing query: ");
+      return FALSE;
+    }
 
   while ((ret = sqlite3_step (stmt)) == SQLITE_ROW)
     {
@@ -415,9 +438,10 @@ emer_aggregate_tally_iter_internal (EmerAggregateTally *self,
         break;
     }
 
-  CHECK (sqlite3_finalize (stmt));
-
-  delete_tally_entries (self, rows_to_delete);
+  return
+      CHECK (ret) &&
+      CHECK (sqlite3_finalize (stmt)) &&
+      delete_tally_entries (self, rows_to_delete, error);
 }
 
 void
@@ -434,14 +458,17 @@ emer_aggregate_tally_iter (EmerAggregateTally *self,
     "       payload, counter, date "
     "FROM tally "
     "WHERE date = ?";
+  g_autoptr(GError) error = NULL;
 
-  emer_aggregate_tally_iter_internal (self,
-                                      SELECT_SQL,
-                                      tally_type,
-                                      datetime,
-                                      flags,
-                                      func,
-                                      user_data);
+  if (!emer_aggregate_tally_iter_internal (self,
+                                           SELECT_SQL,
+                                           tally_type,
+                                           datetime,
+                                           flags,
+                                           func,
+                                           user_data,
+                                           &error))
+    g_critical ("%s: %s", G_STRFUNC, error->message);
 }
 
 void
@@ -458,12 +485,15 @@ emer_aggregate_tally_iter_before (EmerAggregateTally *self,
     "       payload, counter, date "
     "FROM tally "
     "WHERE length(date) = length(?1) AND date < ?1;";
+  g_autoptr(GError) error = NULL;
 
-  emer_aggregate_tally_iter_internal (self,
-                                      SELECT_SQL,
-                                      tally_type,
-                                      datetime,
-                                      flags,
-                                      func,
-                                      user_data);
+  if (!emer_aggregate_tally_iter_internal (self,
+                                           SELECT_SQL,
+                                           tally_type,
+                                           datetime,
+                                           flags,
+                                           func,
+                                           user_data,
+                                           &error))
+    g_critical ("%s: %s", G_STRFUNC, error->message);
 }

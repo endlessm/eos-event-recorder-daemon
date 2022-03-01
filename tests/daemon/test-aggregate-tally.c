@@ -210,6 +210,14 @@ test_aggregate_tally_iter (struct Fixture *fixture,
   g_assert_cmpuint (events->len, ==, 1);
   AggregateEvent *e = g_ptr_array_index (events, 0);
   g_assert_cmpuint (e->counter, ==, 10);
+  g_assert_cmpuint (e->unix_user_id, ==, 1001);
+  g_assert_cmpstr (e->date, ==, "2021-09-22");
+  g_assert_cmpmem (e->event_id, sizeof (uuid_t), uuids[0], sizeof (uuid_t));
+  g_assert_cmpvariant (e->aggregate_key, aggregate_key);
+  if (payload_str == NULL)
+    g_assert_null (e->payload);
+  else
+    g_assert_cmpvariant (e->payload, payload);
 
   g_ptr_array_set_size (events, 0);
   emer_aggregate_tally_iter (fixture->tally,

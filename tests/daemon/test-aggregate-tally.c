@@ -139,7 +139,6 @@ test_aggregate_tally_store_events (struct Fixture *fixture,
                                     payload,
                                     1,
                                     datetime,
-                                    g_get_monotonic_time (),
                                     &error);
   g_assert_no_error (error);
 
@@ -151,7 +150,6 @@ test_aggregate_tally_store_events (struct Fixture *fixture,
                                     payload,
                                     2,
                                     datetime,
-                                    g_get_monotonic_time (),
                                     &error);
   g_assert_no_error (error);
 }
@@ -197,7 +195,6 @@ test_aggregate_tally_iter (struct Fixture *fixture,
                                         payload,
                                         1,
                                         datetime,
-                                        g_get_monotonic_time (),
                                         &error);
 
       g_assert_no_error (error);
@@ -243,7 +240,6 @@ test_aggregate_tally_large_counter_single (struct Fixture *fixture,
                                     v,
                                     ((guint32) G_MAXINT32) + 1,
                                     datetime,
-                                    g_get_monotonic_time (),
                                     &error);
   g_assert_no_error (error);
 
@@ -278,7 +274,6 @@ test_aggregate_tally_large_counter_add (struct Fixture *fixture,
                                     v,
                                     (guint32) G_MAXINT32,
                                     datetime,
-                                    g_get_monotonic_time (),
                                     &error);
   g_assert_no_error (error);
 
@@ -291,7 +286,6 @@ test_aggregate_tally_large_counter_add (struct Fixture *fixture,
                                     v,
                                     1,
                                     datetime,
-                                    g_get_monotonic_time (),
                                     &error);
   g_assert_no_error (error);
 
@@ -330,7 +324,6 @@ test_aggregate_tally_large_counter_upper_bound (struct Fixture *fixture,
                                         v,
                                         G_MAXUINT32,
                                         datetime,
-                                        g_get_monotonic_time (),
                                         &error);
       g_assert_no_error (error);
     }
@@ -370,7 +363,6 @@ test_aggregate_tally_iter_before_daily (struct Fixture *fixture,
                                         v,
                                         1,
                                         dt,
-                                        g_get_monotonic_time (),
                                         &error);
 
       g_assert_no_error (error);
@@ -446,7 +438,6 @@ test_aggregate_tally_iter_before_monthly (struct Fixture *fixture,
                                         v,
                                         1,
                                         dt,
-                                        g_get_monotonic_time (),
                                         &error);
 
       g_assert_no_error (error);

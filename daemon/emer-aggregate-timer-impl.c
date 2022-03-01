@@ -167,7 +167,6 @@ emer_aggregate_timer_impl_store (EmerAggregateTimerImpl  *self,
                                            self->payload,
                                            counter,
                                            datetime,
-                                           monotonic_time_us,
                                            error);
 }
 
@@ -203,7 +202,6 @@ emer_aggregate_timer_impl_stop (EmerAggregateTimerImpl  *self,
                                     self->payload,
                                     counter,
                                     datetime,
-                                    monotonic_time_us,
                                     &local_error);
   if (local_error)
     {
@@ -220,7 +218,6 @@ emer_aggregate_timer_impl_stop (EmerAggregateTimerImpl  *self,
                                     self->payload,
                                     counter,
                                     datetime,
-                                    monotonic_time_us,
                                     &local_error);
   if (local_error)
     {

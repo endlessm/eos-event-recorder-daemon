@@ -320,7 +320,6 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
                                   GVariant            *payload,
                                   guint32              counter,
                                   GDateTime           *datetime,
-                                  gint64               monotonic_time_us,
                                   GError             **error)
 {
   g_return_val_if_fail (g_variant_is_of_type (aggregate_key, G_VARIANT_TYPE_VARIANT), FALSE);

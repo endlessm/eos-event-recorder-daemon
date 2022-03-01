@@ -67,7 +67,6 @@ gboolean emer_aggregate_tally_store_event (EmerAggregateTally  *self,
                                            GVariant            *payload,
                                            guint32              counter,
                                            GDateTime            *datetime,
-                                           gint64               monotonic_time_us,
                                            GError             **error);
 
 void emer_aggregate_tally_iter (EmerAggregateTally *self,

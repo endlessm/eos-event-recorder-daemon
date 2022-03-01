@@ -438,21 +438,18 @@ emer_aggregate_tally_iter_before (EmerAggregateTally *self,
     "       aggregate_key, "
     "       payload, counter, date "
     "FROM tally "
-    "WHERE length(date) = ? AND date < ?;";
+    "WHERE length(date) = length(?1) AND date < ?1;";
 
   g_autoptr(GArray) rows_to_delete = NULL;
   g_autofree gchar *date = NULL;
   sqlite3_stmt *stmt = NULL;
-  int date_text_len;
   int ret;
 
   date = format_datetime_for_tally_type (datetime, tally_type);
-  date_text_len = g_utf8_strlen (date, -1);
   rows_to_delete = g_array_new (FALSE, FALSE, sizeof (sqlite3_int64));
 
   CHECK (sqlite3_prepare_v2 (self->db, SELECT_SQL, -1, &stmt, NULL));
-  CHECK (sqlite3_bind_int (stmt, 1, date_text_len));
-  CHECK (sqlite3_bind_text (stmt, 2, date, -1, SQLITE_TRANSIENT));
+  CHECK (sqlite3_bind_text (stmt, 1, date, -1, SQLITE_TRANSIENT));
 
   while ((ret = sqlite3_step (stmt)) == SQLITE_ROW)
     {

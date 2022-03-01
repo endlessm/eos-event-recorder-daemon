@@ -369,21 +369,15 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
 
 G_STATIC_ASSERT (sizeof (sqlite3_int64) == sizeof (gint64));
 
-void
-emer_aggregate_tally_iter (EmerAggregateTally *self,
-                           EmerTallyType       tally_type,
-                           GDateTime          *datetime,
-                           EmerTallyIterFlags  flags,
-                           EmerTallyIterFunc   func,
-                           gpointer            user_data)
+static void
+emer_aggregate_tally_iter_internal (EmerAggregateTally *self,
+                                    const char         *query,
+                                    EmerTallyType       tally_type,
+                                    GDateTime          *datetime,
+                                    EmerTallyIterFlags  flags,
+                                    EmerTallyIterFunc   func,
+                                    gpointer            user_data)
 {
-  const char *SELECT_SQL =
-    "SELECT id, event_id, unix_user_id, "
-    "       aggregate_key, "
-    "       payload, counter "
-    "FROM tally "
-    "WHERE date = ?";
-
   g_autoptr(GArray) rows_to_delete = NULL;
   g_autofree gchar *date = NULL;
   sqlite3_stmt *stmt = NULL;
@@ -392,63 +386,7 @@ emer_aggregate_tally_iter (EmerAggregateTally *self,
   date = format_datetime_for_tally_type (datetime, tally_type);
   rows_to_delete = g_array_new (FALSE, FALSE, sizeof (sqlite3_int64));
 
-  CHECK (sqlite3_prepare_v2 (self->db, SELECT_SQL, -1, &stmt, NULL));
-  CHECK (sqlite3_bind_text (stmt, 1, date, -1, SQLITE_TRANSIENT));
-
-  while ((ret = sqlite3_step (stmt)) == SQLITE_ROW)
-    {
-      guint32 unix_user_id = column_to_uint32 (stmt, 2);
-      g_autoptr(GVariant) aggregate_key = column_to_variant (stmt, 3);
-      g_autoptr(GVariant) payload = column_to_variant (stmt, 4);
-      guint32 counter = column_to_uint32 (stmt, 5);
-      EmerTallyIterResult result;
-      uuid_t event_id = { 0 };
-
-      column_to_uuid (stmt, 1, event_id);
-
-      result = func (unix_user_id, event_id,
-                     aggregate_key, payload,
-                     counter, date, user_data);
-
-      if (flags & EMER_TALLY_ITER_FLAG_DELETE)
-        {
-          const sqlite3_int64 row_id = sqlite3_column_int64 (stmt, 0);
-          g_array_append_val (rows_to_delete, row_id);
-        }
-
-      if (result & EMER_TALLY_ITER_STOP)
-        break;
-    }
-
-  CHECK (sqlite3_finalize (stmt));
-
-  delete_tally_entries (self, rows_to_delete);
-}
-
-void
-emer_aggregate_tally_iter_before (EmerAggregateTally *self,
-                                  EmerTallyType       tally_type,
-                                  GDateTime          *datetime,
-                                  EmerTallyIterFlags  flags,
-                                  EmerTallyIterFunc   func,
-                                  gpointer            user_data)
-{
-  const char *SELECT_SQL =
-    "SELECT id, event_id, unix_user_id, "
-    "       aggregate_key, "
-    "       payload, counter, date "
-    "FROM tally "
-    "WHERE length(date) = length(?1) AND date < ?1;";
-
-  g_autoptr(GArray) rows_to_delete = NULL;
-  g_autofree gchar *date = NULL;
-  sqlite3_stmt *stmt = NULL;
-  int ret;
-
-  date = format_datetime_for_tally_type (datetime, tally_type);
-  rows_to_delete = g_array_new (FALSE, FALSE, sizeof (sqlite3_int64));
-
-  CHECK (sqlite3_prepare_v2 (self->db, SELECT_SQL, -1, &stmt, NULL));
+  CHECK (sqlite3_prepare_v2 (self->db, query, -1, &stmt, NULL));
   CHECK (sqlite3_bind_text (stmt, 1, date, -1, SQLITE_TRANSIENT));
 
   while ((ret = sqlite3_step (stmt)) == SQLITE_ROW)
@@ -480,4 +418,52 @@ emer_aggregate_tally_iter_before (EmerAggregateTally *self,
   CHECK (sqlite3_finalize (stmt));
 
   delete_tally_entries (self, rows_to_delete);
+}
+
+void
+emer_aggregate_tally_iter (EmerAggregateTally *self,
+                           EmerTallyType       tally_type,
+                           GDateTime          *datetime,
+                           EmerTallyIterFlags  flags,
+                           EmerTallyIterFunc   func,
+                           gpointer            user_data)
+{
+  const char *SELECT_SQL =
+    "SELECT id, event_id, unix_user_id, "
+    "       aggregate_key, "
+    "       payload, counter, date "
+    "FROM tally "
+    "WHERE date = ?";
+
+  emer_aggregate_tally_iter_internal (self,
+                                      SELECT_SQL,
+                                      tally_type,
+                                      datetime,
+                                      flags,
+                                      func,
+                                      user_data);
+}
+
+void
+emer_aggregate_tally_iter_before (EmerAggregateTally *self,
+                                  EmerTallyType       tally_type,
+                                  GDateTime          *datetime,
+                                  EmerTallyIterFlags  flags,
+                                  EmerTallyIterFunc   func,
+                                  gpointer            user_data)
+{
+  const char *SELECT_SQL =
+    "SELECT id, event_id, unix_user_id, "
+    "       aggregate_key, "
+    "       payload, counter, date "
+    "FROM tally "
+    "WHERE length(date) = length(?1) AND date < ?1;";
+
+  emer_aggregate_tally_iter_internal (self,
+                                      SELECT_SQL,
+                                      tally_type,
+                                      datetime,
+                                      flags,
+                                      func,
+                                      user_data);
 }

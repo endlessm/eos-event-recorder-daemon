@@ -122,6 +122,15 @@ test_aggregate_tally_new_succeeds (struct Fixture *fixture,
   g_assert_nonnull (fixture->tally);
 }
 
+/* Test reloading the same empty database */
+static void
+test_aggregate_tally_new_succeeds_twice (struct Fixture *fixture,
+                                         gconstpointer   dontuseme)
+{
+  teardown (fixture, dontuseme);
+  setup (fixture, dontuseme);
+}
+
 static void
 test_aggregate_tally_store_events (struct Fixture *fixture,
                                    gconstpointer   dontuseme)
@@ -613,6 +622,8 @@ main (gint                argc,
 
   ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/new-succeeds",
                                  test_aggregate_tally_new_succeeds);
+  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/new-succeeds-twice",
+                                 test_aggregate_tally_new_succeeds_twice);
   ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/store-events",
                                  test_aggregate_tally_store_events);
   g_test_add ("/aggregate-tally/iter/null-payload",

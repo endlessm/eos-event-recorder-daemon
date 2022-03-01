@@ -82,18 +82,6 @@ ensure_folder_exists (EmerAggregateTally  *self,
     g_propagate_error (error, g_steal_pointer (&local_error));
 }
 
-static void
-tally_exec_or_die (EmerAggregateTally *self,
-                   const char         *sql)
-{
-  int ret;
-  char *errmsg = NULL;
-
-  ret = sqlite3_exec (self->db, sql, NULL, NULL, &errmsg);
-  if (ret != SQLITE_OK)
-    g_error ("Failed to execute SQL '%s': (%d) %s", sql, ret, errmsg);
-}
-
 static gboolean
 check_sqlite_error (const char          *tag,
                     int                  ret,
@@ -213,26 +201,46 @@ close_db (sqlite3 *db)
     g_warning ("Failed to close database: %s", error->message);
 }
 
-static void
-emer_aggregate_tally_constructed (GObject *object)
+static sqlite3_int64
+emer_aggregate_tally_read_user_version (sqlite3  *db,
+                                        GError  **error)
 {
-  EmerAggregateTally *self = EMER_AGGREGATE_TALLY (object);
-  g_autofree gchar *path = NULL;
-  int ret;
+  sqlite3_stmt *stmt = NULL;
+  sqlite3_int64 version = 0;
+  int ret = 0;
 
-  G_OBJECT_CLASS (emer_aggregate_tally_parent_class)->constructed (object);
+  if (!CHECK (sqlite3_prepare_v2 (db, "PRAGMA user_version", -1, &stmt, NULL)))
+    return -1;
 
-  g_assert (self->persistent_cache_directory != NULL);
-  ensure_folder_exists (self, self->persistent_cache_directory, NULL);
-  path = g_build_filename (self->persistent_cache_directory,
-                           "aggregate-events.db",
-                           NULL);
-  ret = sqlite3_open (path, &self->db);
-  if (ret != SQLITE_OK)
-    g_error ("Failed to open %s: %d", path, ret);
+  ret = sqlite3_step (stmt);
+  if (ret == SQLITE_ROW)
+    version = sqlite3_column_int64 (stmt, 0);
+  else if (!CHECK (ret))
+    return -1;
+
+  if (!CHECK (sqlite3_finalize (stmt)))
+    return -1;
+
+  return version;
+}
+
+static gboolean
+emer_aggregate_tally_init_db (EmerAggregateTally  *self,
+                              const char          *path,
+                              GError             **error)
+{
+  g_assert (self->db == NULL);
+
+  if (!CHECK (sqlite3_open (path, &self->db)))
+    {
+      g_prefix_error (error, "Failed to open %s: ", path);
+      return FALSE;
+    }
 
   g_assert (self->db);
-  sqlite3_extended_result_codes (self->db, TRUE);
+
+  if (!CHECK (sqlite3_extended_result_codes (self->db, TRUE)))
+    return FALSE;
 
   /* Use write-ahead logging rather than the default rollback journal. WAL
    * reduces the number of writes to disk, and crucially only calls fsync()
@@ -243,28 +251,73 @@ emer_aggregate_tally_constructed (GObject *object)
    *
    * https://sqlite.org/wal.html
    */
-  tally_exec_or_die (self, "PRAGMA journal_mode = WAL");
+  if (!CHECK (sqlite3_exec (self->db, "PRAGMA journal_mode = WAL", NULL, NULL, NULL)))
+    return FALSE;
+
   /* Magic number is "emer" in ASCII */
-  tally_exec_or_die (self, "PRAGMA application_id = 0x656d6572");
-  tally_exec_or_die (self, "PRAGMA user_version = 1");
-  tally_exec_or_die (self, "CREATE TABLE IF NOT EXISTS tally (\n"
-                           "    id INTEGER PRIMARY KEY ASC,\n"
-                           "    date TEXT NOT NULL,\n"
-                           "    event_id BLOB NOT NULL CHECK (length(event_id) = 16),\n"
-                           "    unix_user_id INT NOT NULL,\n"
-                           "    aggregate_key BLOB NOT NULL,\n"
-                           "    payload BLOB NOT NULL,\n"
-                           "    counter INT NOT NULL\n"
-                           ")");
-  tally_exec_or_die (self,
-                     "CREATE UNIQUE INDEX IF NOT EXISTS "
-                     "ix_tally_unique_fields ON tally (\n"
-                     "    date,\n"
-                     "    event_id,\n"
-                     "    unix_user_id,\n"
-                     "    aggregate_key,\n"
-                     "    payload\n"
-                     ")");
+  if (!CHECK (sqlite3_exec (self->db, "PRAGMA application_id = 0x656d6572", NULL, NULL, NULL)))
+    return FALSE;
+
+  sqlite3_int64 user_version = emer_aggregate_tally_read_user_version (self->db, error);
+  g_debug ("Current user_version for %s: %" G_GINT64_FORMAT, path, (gint64) user_version);
+
+  switch (user_version)
+    {
+    case 0:
+      if (!CHECK (sqlite3_exec (self->db,
+                                "CREATE TABLE IF NOT EXISTS tally (\n"
+                                "    id INTEGER PRIMARY KEY ASC,\n"
+                                "    date TEXT NOT NULL,\n"
+                                "    event_id BLOB NOT NULL CHECK (length(event_id) = 16),\n"
+                                "    unix_user_id INT NOT NULL,\n"
+                                "    aggregate_key BLOB NOT NULL,\n"
+                                "    payload BLOB NOT NULL,\n"
+                                "    counter INT NOT NULL\n"
+                                ")",
+                                NULL, NULL, NULL)) ||
+          !CHECK (sqlite3_exec (self->db,
+                                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                                "ix_tally_unique_fields ON tally (\n"
+                                "    date,\n"
+                                "    event_id,\n"
+                                "    unix_user_id,\n"
+                                "    aggregate_key,\n"
+                                "    payload\n"
+                                ")",
+                                NULL, NULL, NULL)) ||
+          !CHECK (sqlite3_exec (self->db, "PRAGMA user_version = 1", NULL, NULL, NULL)))
+        return FALSE;
+      /* fallthrough: */
+    case 1:
+      break;
+    case -1:
+      return FALSE;
+    default:
+      g_set_error (error, EMER_SQLITE_ERROR, SQLITE_ERROR,
+                   "Unexpected user_version %" G_GINT64_FORMAT,
+                   (gint64) user_version);
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
+static void
+emer_aggregate_tally_constructed (GObject *object)
+{
+  EmerAggregateTally *self = EMER_AGGREGATE_TALLY (object);
+  g_autofree gchar *path = NULL;
+  g_autoptr(GError) error = NULL;
+
+  G_OBJECT_CLASS (emer_aggregate_tally_parent_class)->constructed (object);
+
+  g_assert (self->persistent_cache_directory != NULL);
+  ensure_folder_exists (self, self->persistent_cache_directory, NULL);
+  path = g_build_filename (self->persistent_cache_directory,
+                           "aggregate-events.db",
+                           NULL);
+  if (!emer_aggregate_tally_init_db (self, path, &error))
+    g_error ("Failed to initialize %s: %s", path, error->message);
 }
 
 static void

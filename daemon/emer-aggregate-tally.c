@@ -155,6 +155,8 @@ column_to_uint32 (sqlite3_stmt *stmt,
   return CLAMP (number, 0, G_MAXUINT32);
 }
 
+G_STATIC_ASSERT (sizeof (sqlite_int64) == sizeof (gint64));
+
 static void
 delete_tally_entries (EmerAggregateTally *self,
                       GArray             *rows_to_delete)
@@ -171,8 +173,11 @@ delete_tally_entries (EmerAggregateTally *self,
   g_string_append (query, "(");
   for (i = 0; i < rows_to_delete->len; i++)
     {
-      sqlite_int64 row_id = g_array_index (rows_to_delete, gint, i);
-      g_string_append_printf (query, i == 0 ? "%" G_GINT64_FORMAT : ", %" G_GINT64_FORMAT, (gint64) row_id);
+      if (i > 0)
+        g_string_append (query, ", ");
+
+      sqlite_int64 row_id = g_array_index (rows_to_delete, sqlite_int64, i);
+      g_string_append_printf (query, "%" G_GINT64_FORMAT, (gint64) row_id);
     }
   g_string_append (query, ");");
 
@@ -443,7 +448,7 @@ emer_aggregate_tally_iter_before (EmerAggregateTally *self,
 
   date = format_datetime_for_tally_type (datetime, tally_type);
   date_text_len = g_utf8_strlen (date, -1);
-  rows_to_delete = g_array_new (FALSE, FALSE, sizeof (gint));
+  rows_to_delete = g_array_new (FALSE, FALSE, sizeof (sqlite3_int64));
 
   CHECK (sqlite3_prepare_v2 (self->db, SELECT_SQL, -1, &stmt, NULL));
   CHECK (sqlite3_bind_int (stmt, 1, date_text_len));
@@ -467,7 +472,7 @@ emer_aggregate_tally_iter_before (EmerAggregateTally *self,
 
       if (flags & EMER_TALLY_ITER_FLAG_DELETE)
         {
-          const gint row_id = sqlite3_column_int (stmt, 0);
+          const sqlite3_int64 row_id = sqlite3_column_int64 (stmt, 0);
           g_array_append_val (rows_to_delete, row_id);
         }
 

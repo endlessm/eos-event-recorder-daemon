@@ -443,6 +443,23 @@ test_aggregate_tally_iter_before_daily (struct Fixture *fixture,
       g_assert_no_error (error);
     }
 
+  // Add a monthly event, which should be ignored in the queries below
+    {
+      g_autoptr(GDateTime) dt = g_date_time_add_months (datetime, -1);
+
+      emer_aggregate_tally_store_event (fixture->tally,
+                                        EMER_TALLY_MONTHLY_EVENTS,
+                                        1001,
+                                        uuids[0],
+                                        v,
+                                        v,
+                                        1,
+                                        dt,
+                                        &error);
+
+      g_assert_no_error (error);
+    }
+
   /* Iterate but don't delete */
   emer_aggregate_tally_iter_before (fixture->tally,
                                     EMER_TALLY_DAILY_EVENTS,
@@ -507,6 +524,23 @@ test_aggregate_tally_iter_before_monthly (struct Fixture *fixture,
 
       emer_aggregate_tally_store_event (fixture->tally,
                                         EMER_TALLY_MONTHLY_EVENTS,
+                                        1001,
+                                        uuids[0],
+                                        v,
+                                        v,
+                                        1,
+                                        dt,
+                                        &error);
+
+      g_assert_no_error (error);
+    }
+
+  // Add a daily event which should be ignored in the queries below
+    {
+      g_autoptr(GDateTime) dt = g_date_time_add_months (datetime, -1);
+
+      emer_aggregate_tally_store_event (fixture->tally,
+                                        EMER_TALLY_DAILY_EVENTS,
                                         1001,
                                         uuids[0],
                                         v,

@@ -303,9 +303,39 @@ emer_aggregate_tally_init_db (EmerAggregateTally  *self,
 }
 
 static void
+emer_aggregate_tally_delete_db (EmerAggregateTally *self,
+                                const char         *db_path)
+{
+  /*
+   * When in active use, the state of a WAL mode database is described by
+   * three separate files:
+   *
+   * 1. The main database file with an arbitrary name "X".
+   * 2. The write-ahead log file, usually named "X-wal".
+   * 3. The wal-index file, usually named "X-shm".
+   *
+   *  -- https://sqlite.org/walformat.html
+   */
+  const gchar *suffixes[] = {
+    "",
+    "-shm",
+    "-wal"
+  };
+
+  for (size_t i = 0; i < G_N_ELEMENTS (suffixes); i++)
+    {
+      g_autofree gchar *path = g_strconcat (db_path, suffixes[i], NULL);
+
+      if (0 != g_unlink (path) && errno != ENOENT)
+        g_warning ("Failed to unlink %s: %s", path, g_strerror (errno));
+    }
+}
+
+static void
 emer_aggregate_tally_constructed (GObject *object)
 {
   EmerAggregateTally *self = EMER_AGGREGATE_TALLY (object);
+  g_autofree gchar *old_path = NULL;
   g_autofree gchar *path = NULL;
   g_autoptr(GError) error = NULL;
 
@@ -313,6 +343,16 @@ emer_aggregate_tally_constructed (GObject *object)
 
   g_assert (self->persistent_cache_directory != NULL);
   ensure_folder_exists (self, self->persistent_cache_directory, NULL);
+
+ /* No daemon version that used this path made it into a production release,
+  * or even beta. So rather than migrating the data for the schema & filename
+  * change, just delete it (and ignore errors).
+  */
+  old_path = g_build_filename (self->persistent_cache_directory,
+                               "aggregate-events.db",
+                               NULL);
+  emer_aggregate_tally_delete_db (self, old_path);
+
   path = g_build_filename (self->persistent_cache_directory,
                            "metrics.db",
                            NULL);

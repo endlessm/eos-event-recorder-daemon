@@ -31,23 +31,57 @@
 
 #include <eosmetrics/eosmetrics.h>
 
-#define UUID_LENGTH (sizeof (uuid_t) / sizeof (guchar))
-
-// Generated with uuidgen
-
-static const char *uuids[] = {
+static const char *uuid_strs[] = {
   "41d45e08-5e72-4c43-8cbf-ef37bb4411a4",
   "03177773-7513-4866-ae97-bb935f2c5384",
   "a692ce9c-8684-4d6b-97d5-07f39e0a8560",
 };
+static uuid_t uuids[G_N_ELEMENTS(uuid_strs)];
 
-struct AggregateEvent
+typedef struct
 {
-  guint32 unix_user_id;
-  GVariant *event_id;
-  GVariant *aggregate_key;
-  GVariant *payload;
-};
+  guint32     unix_user_id;
+  uuid_t      event_id;
+  GVariant   *aggregate_key;
+  GVariant   *payload;
+  guint32     counter;
+  char *      date;
+} AggregateEvent;
+
+static AggregateEvent *
+aggregate_event_new (guint32     unix_user_id,
+                     uuid_t      event_id,
+                     GVariant   *aggregate_key,
+                     GVariant   *payload,
+                     guint32     counter,
+                     const char *date)
+{
+  AggregateEvent *e = g_new0 (AggregateEvent, 1);
+
+  e->unix_user_id = unix_user_id;
+  uuid_copy (e->event_id, event_id);
+  e->aggregate_key = g_variant_ref (aggregate_key);
+  e->payload = payload ? g_variant_ref (payload) : NULL;
+  e->counter = counter;
+  e->date = g_strdup (date);
+
+  return e;
+}
+
+/* The argument has type gpointer to allow this function to be used as a
+ * GDestroyNotify without casting
+ */
+static void
+aggregate_event_free (gpointer e_)
+{
+  AggregateEvent *e = e_;
+
+  g_clear_pointer (&e->aggregate_key, g_variant_unref);
+  g_clear_pointer (&e->payload, g_variant_unref);
+  g_clear_pointer (&e->date, g_free);
+
+  g_free (e);
+}
 
 struct Fixture
 {
@@ -55,44 +89,13 @@ struct Fixture
   GFile *tally_folder;
 };
 
+/**
+ * Returns: a non-floating GVariant of type 'v', containing the given string.
+ */
 static GVariant *
-event_id_to_variant (const char *event_id)
+v_str (const gchar *str)
 {
-  GVariantBuilder event_id_builder;
-  uuid_t parsed_event_id;
-
-  if (uuid_parse (event_id, parsed_event_id) != 0)
-    return NULL;
-
-  get_uuid_builder (parsed_event_id, &event_id_builder);
-
-  return g_variant_new ("ay", &event_id_builder);
-}
-
-static struct AggregateEvent *
-create_aggregate_event (guint32     unix_user_id,
-                        const char *event_id,
-                        GVariant   *aggregate_key,
-                        GVariant   *payload)
-{
-  struct AggregateEvent *event;
-
-  event = g_new0 (struct AggregateEvent, 1);
-  event->unix_user_id = unix_user_id;
-  event->event_id = g_variant_ref_sink (event_id_to_variant (event_id));
-  event->aggregate_key = g_variant_ref_sink (aggregate_key);
-  event->payload = g_variant_ref_sink (payload);
-
-  return event;
-}
-
-static void
-aggregate_event_free (struct AggregateEvent *event)
-{
-  g_clear_pointer (&event->event_id, g_variant_unref);
-  g_clear_pointer (&event->aggregate_key, g_variant_unref);
-  g_clear_pointer (&event->payload, g_variant_unref);
-  g_free (event);
+  return g_variant_ref_sink (g_variant_new_variant (g_variant_new_string (str)));
 }
 
 static void
@@ -119,77 +122,72 @@ test_aggregate_tally_new_succeeds (struct Fixture *fixture,
   g_assert_nonnull (fixture->tally);
 }
 
+/* Test reloading the same empty database */
+static void
+test_aggregate_tally_new_succeeds_twice (struct Fixture *fixture,
+                                         gconstpointer   dontuseme)
+{
+  teardown (fixture, dontuseme);
+  setup (fixture, dontuseme);
+}
+
 static void
 test_aggregate_tally_store_events (struct Fixture *fixture,
                                    gconstpointer   dontuseme)
 {
-  g_autoptr(GDateTime) datetime = NULL;
+  g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
   g_autoptr(GError) error = NULL;
-  struct AggregateEvent *event;
-
-  datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
-  event = create_aggregate_event (1001, uuids[0],
-                                  g_variant_new_string (""),
-                                  g_variant_new_string (""));
+  g_autoptr(GVariant) aggregate_key = v_str (G_STRFUNC);
+  GVariant *payload = aggregate_key;
 
   emer_aggregate_tally_store_event (fixture->tally,
                                     EMER_TALLY_DAILY_EVENTS,
-                                    event->unix_user_id,
-                                    event->event_id,
-                                    event->aggregate_key,
-                                    event->payload,
+                                    1001,
+                                    uuids[0],
+                                    aggregate_key,
+                                    payload,
                                     1,
                                     datetime,
-                                    g_get_monotonic_time (),
                                     &error);
   g_assert_no_error (error);
 
   emer_aggregate_tally_store_event (fixture->tally,
                                     EMER_TALLY_DAILY_EVENTS,
-                                    event->unix_user_id,
-                                    event->event_id,
-                                    event->aggregate_key,
-                                    event->payload,
+                                    1001,
+                                    uuids[0],
+                                    aggregate_key,
+                                    payload,
                                     2,
                                     datetime,
-                                    g_get_monotonic_time (),
                                     &error);
   g_assert_no_error (error);
-
-  aggregate_event_free (event);
 }
-
-struct IterData {
-  guint32 n_iterations;
-  guint32 counter;
-};
 
 static EmerTallyIterResult
 tally_iter_func (guint32     unix_user_id,
-                 GVariant   *event_id,
+                 uuid_t      event_id,
                  GVariant   *aggregate_key,
                  GVariant   *payload,
                  guint32     counter,
                  const char *date,
                  gpointer    user_data)
 {
-  struct IterData *data = user_data;
+  GPtrArray *events = user_data;
 
-  data->n_iterations++;
-  data->counter += counter;
+  g_ptr_array_add (events, aggregate_event_new (unix_user_id, event_id, aggregate_key, payload, counter, date));
 
   return EMER_TALLY_ITER_CONTINUE;
 }
 
 static void
 test_aggregate_tally_iter (struct Fixture *fixture,
-                           gconstpointer   dontuseme)
+                           gconstpointer   payload_str)
 {
-  g_autoptr(GDateTime) datetime = NULL;
-  struct IterData data;
+  g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+  g_autoptr(GVariant) aggregate_key = v_str (G_STRFUNC);
+  g_autoptr(GVariant) payload = payload_str ? v_str (payload_str) : NULL;
+  g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
   int i;
-
-  datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
 
   // Add the same aggregate event multiple times. It must
   // result in a single aggregate event with the sum of
@@ -197,420 +195,426 @@ test_aggregate_tally_iter (struct Fixture *fixture,
   for (i = 0; i < 10; i++)
     {
       g_autoptr(GError) error = NULL;
-      struct AggregateEvent *event;
-
-      event = create_aggregate_event (1001, uuids[0],
-                                      g_variant_new_string (""),
-                                      g_variant_new_string (""));
 
       emer_aggregate_tally_store_event (fixture->tally,
                                         EMER_TALLY_DAILY_EVENTS,
-                                        event->unix_user_id,
-                                        event->event_id,
-                                        event->aggregate_key,
-                                        event->payload,
+                                        1001,
+                                        uuids[0],
+                                        aggregate_key,
+                                        payload,
                                         1,
                                         datetime,
-                                        g_get_monotonic_time (),
                                         &error);
 
       g_assert_no_error (error);
-
-      aggregate_event_free (event);
     }
 
-  data = (struct IterData) { 0, 0 };
   emer_aggregate_tally_iter (fixture->tally,
                              EMER_TALLY_DAILY_EVENTS,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             &data);
+                             events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 1);
-  g_assert_cmpuint (data.counter, ==, 10);
+  g_assert_cmpuint (events->len, ==, 1);
+  AggregateEvent *e = g_ptr_array_index (events, 0);
+  g_assert_cmpuint (e->counter, ==, 10);
+  g_assert_cmpuint (e->unix_user_id, ==, 1001);
+  g_assert_cmpstr (e->date, ==, "2021-09-22");
+  g_assert_cmpmem (e->event_id, sizeof (uuid_t), uuids[0], sizeof (uuid_t));
+  g_assert_cmpvariant (e->aggregate_key, aggregate_key);
+  if (payload_str == NULL)
+    g_assert_null (e->payload);
+  else
+    g_assert_cmpvariant (e->payload, payload);
 
-  data = (struct IterData) { 0, 0 };
+  g_ptr_array_set_size (events, 0);
   emer_aggregate_tally_iter (fixture->tally,
                              EMER_TALLY_DAILY_EVENTS,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             &data);
+                             events);
+  g_assert_cmpuint (events->len, ==, 0);
+}
 
-  g_assert_cmpuint (data.n_iterations, ==, 0);
-  g_assert_cmpuint (data.counter, ==, 0);
+static void
+test_aggregate_tally_permutations (struct Fixture *fixture,
+                                   gconstpointer   data)
+{
+  g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+  char *aggregate_keys[] = { "a", "b", "c" };
+  g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
+  g_autoptr(GError) error = NULL;
+  const guint32 n_unix_uids = 3;
+  int iterations_per_permutation = 3;
+
+  for (guint32 unix_uid = 0; unix_uid < n_unix_uids; unix_uid++)
+    for (size_t uuid_ix = 0; uuid_ix < G_N_ELEMENTS (uuids); uuid_ix++)
+      for (size_t agg_ix = 0; agg_ix < G_N_ELEMENTS (aggregate_keys); agg_ix++)
+        for (gboolean has_payload = FALSE; has_payload <= TRUE; has_payload++)
+          for (int datetime_offset = 0; datetime_offset < 3; datetime_offset++)
+            for (EmerTallyType tally_type = EMER_TALLY_DAILY_EVENTS;
+                 tally_type <= EMER_TALLY_MONTHLY_EVENTS;
+                 tally_type++)
+              {
+                g_autoptr(GDateTime) dt = g_date_time_add_days (datetime, datetime_offset);
+                g_autoptr(GVariant) aggregate_key = v_str (aggregate_keys[agg_ix]);
+                GVariant *payload = has_payload ? aggregate_key : NULL;
+
+                for (int i = 1; i <= iterations_per_permutation; i++)
+                  {
+                    emer_aggregate_tally_store_event (fixture->tally,
+                                                      tally_type,
+                                                      unix_uid,
+                                                      uuids[uuid_ix],
+                                                      aggregate_key,
+                                                      payload,
+                                                      i,
+                                                      dt,
+                                                      &error);
+                    g_assert_no_error (error);
+                  }
+              }
+
+  emer_aggregate_tally_iter (fixture->tally,
+                             EMER_TALLY_DAILY_EVENTS,
+                             datetime,
+                             EMER_TALLY_ITER_FLAG_DELETE,
+                             tally_iter_func,
+                             events);
+
+  g_assert_cmpuint (events->len, ==, n_unix_uids * G_N_ELEMENTS (uuids) * G_N_ELEMENTS (aggregate_keys) * 2);
+  for (size_t i = 0; i < events->len; i++)
+    {
+      AggregateEvent *e = events->pdata[i];
+      g_assert_cmpuint (e->counter, ==, 1 + 2 + 3);
+      /* TODO: If we were feeling really enthusiastic we could test that we have one instance of each permutation */
+    }
+
+  /* Since we gave the DELETE flag above, these same events should not be
+   * retrievable a second time.
+   */
+  g_ptr_array_set_size (events, 0);
+  emer_aggregate_tally_iter (fixture->tally,
+                             EMER_TALLY_DAILY_EVENTS,
+                             datetime,
+                             EMER_TALLY_ITER_FLAG_DELETE,
+                             tally_iter_func,
+                             events);
+  g_assert_cmpuint (events->len, ==, 0);
 }
 
 static void
 test_aggregate_tally_large_counter_single (struct Fixture *fixture,
                                            gconstpointer   dontuseme)
 {
-  g_autoptr(GDateTime) datetime = NULL;
-  struct IterData data;
-
-  datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+  g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+  g_autoptr(GVariant) v = v_str (G_STRFUNC);
+  g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
+  g_autoptr(GError) error = NULL;
 
   // Add an aggregate event with a counter too large to fit into a 32-bit
   // signed integer.
-  g_autoptr(GError) error = NULL;
-  struct AggregateEvent *event;
-
-  event = create_aggregate_event (1001, uuids[0],
-                                  g_variant_new_string (""),
-                                  g_variant_new_string (""));
-
   emer_aggregate_tally_store_event (fixture->tally,
                                     EMER_TALLY_DAILY_EVENTS,
-                                    event->unix_user_id,
-                                    event->event_id,
-                                    event->aggregate_key,
-                                    event->payload,
+                                    1001,
+                                    uuids[0],
+                                    v,
+                                    v,
                                     ((guint32) G_MAXINT32) + 1,
                                     datetime,
-                                    g_get_monotonic_time (),
                                     &error);
   g_assert_no_error (error);
-  aggregate_event_free (event);
 
-  data = (struct IterData) { 0, 0 };
   emer_aggregate_tally_iter (fixture->tally,
                              EMER_TALLY_DAILY_EVENTS,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             &data);
+                             events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 1);
-  g_assert_cmpuint (data.counter, ==, ((guint32) G_MAXINT32) + 1);
+  g_assert_cmpuint (events->len, ==, 1);
+  AggregateEvent *e = g_ptr_array_index (events, 0);
+  g_assert_cmpuint (e->counter, ==, ((guint32) G_MAXINT32) + 1);
 }
 
 static void
 test_aggregate_tally_large_counter_add (struct Fixture *fixture,
                                         gconstpointer   dontuseme)
 {
-  g_autoptr(GDateTime) datetime = NULL;
-  struct IterData data;
-
-  datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+  g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+  g_autoptr(GVariant) v = v_str (G_STRFUNC);
+  g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
+  g_autoptr(GError) error = NULL;
 
   // Add an aggregate event whose counter only just fits in a 32-bit signed
   // integer
-  g_autoptr(GError) error = NULL;
-  struct AggregateEvent *event;
-
-  event = create_aggregate_event (1001, uuids[0],
-                                  g_variant_new_string (""),
-                                  g_variant_new_string (""));
-
   emer_aggregate_tally_store_event (fixture->tally,
                                     EMER_TALLY_DAILY_EVENTS,
-                                    event->unix_user_id,
-                                    event->event_id,
-                                    event->aggregate_key,
-                                    event->payload,
+                                    1001,
+                                    uuids[0],
+                                    v,
+                                    v,
                                     (guint32) G_MAXINT32,
                                     datetime,
-                                    g_get_monotonic_time (),
                                     &error);
   g_assert_no_error (error);
 
   // Now add 1 to it
   emer_aggregate_tally_store_event (fixture->tally,
                                     EMER_TALLY_DAILY_EVENTS,
-                                    event->unix_user_id,
-                                    event->event_id,
-                                    event->aggregate_key,
-                                    event->payload,
+                                    1001,
+                                    uuids[0],
+                                    v,
+                                    v,
                                     1,
                                     datetime,
-                                    g_get_monotonic_time (),
                                     &error);
   g_assert_no_error (error);
 
-  aggregate_event_free (event);
-
-  data = (struct IterData) { 0, 0 };
   emer_aggregate_tally_iter (fixture->tally,
                              EMER_TALLY_DAILY_EVENTS,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             &data);
+                             events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 1);
-  g_assert_cmpuint (data.counter, ==, ((guint32) G_MAXINT32) + 1);
+  g_assert_cmpuint (events->len, ==, 1);
+  AggregateEvent *e = g_ptr_array_index (events, 0);
+  g_assert_cmpuint (e->counter, ==, ((guint32) G_MAXINT32) + 1);
 }
 
 static void
 test_aggregate_tally_large_counter_upper_bound (struct Fixture *fixture,
                                                 gconstpointer   dontuseme)
 {
-  g_autoptr(GDateTime) datetime = NULL;
+  g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+  g_autoptr(GVariant) v = v_str (G_STRFUNC);
   size_t i;
-  struct IterData data;
-
-  datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+  g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
+  g_autoptr(GError) error = NULL;
 
   // The upper bound of an event's timer is 2 ** 32 - 1. Check that trying to
   // count above this limit is clamped at the limit.
   for (i = 0; i < 10; i++)
     {
-      g_autoptr(GError) error = NULL;
-      struct AggregateEvent *event;
-
-      event = create_aggregate_event (1001, uuids[0],
-                                      g_variant_new_string (""),
-                                      g_variant_new_string (""));
 
       emer_aggregate_tally_store_event (fixture->tally,
                                         EMER_TALLY_DAILY_EVENTS,
-                                        event->unix_user_id,
-                                        event->event_id,
-                                        event->aggregate_key,
-                                        event->payload,
+                                        1001,
+                                        uuids[0],
+                                        v,
+                                        v,
                                         G_MAXUINT32,
                                         datetime,
-                                        g_get_monotonic_time (),
                                         &error);
       g_assert_no_error (error);
-
-      aggregate_event_free (event);
     }
 
-  data = (struct IterData) { 0, 0 };
   emer_aggregate_tally_iter (fixture->tally,
                              EMER_TALLY_DAILY_EVENTS,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             &data);
+                             events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 1);
-  g_assert_cmpuint (data.counter, ==, G_MAXUINT32);
-}
-
-static EmerTallyIterResult
-tally_iter_before_func (guint32     unix_user_id,
-                        GVariant   *event_id,
-                        GVariant   *aggregate_key,
-                        GVariant   *payload,
-                        guint32     counter,
-                        const char *date,
-                        gpointer    user_data)
-{
-  struct IterData *data = user_data;
-
-  data->n_iterations++;
-  data->counter += counter;
-
-  return EMER_TALLY_ITER_CONTINUE;
+  g_assert_cmpuint (events->len, ==, 1);
+  AggregateEvent *e = g_ptr_array_index (events, 0);
+  g_assert_cmpuint (e->counter, ==, G_MAXUINT32);
 }
 
 static void
-test_aggregate_tally_iter_before (struct Fixture *fixture,
-                                  gconstpointer   dontuseme)
+test_aggregate_tally_iter_before_daily (struct Fixture *fixture,
+                                        gconstpointer   dontuseme)
 {
-  g_autoptr(GDateTime) datetime = NULL;
-  struct IterData data;
-  int i;
+  g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+  g_autoptr(GVariant) v = v_str (G_STRFUNC);
+  g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
+  size_t i;
+  g_autoptr(GError) error = NULL;
 
-  datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
-
-  // Add the same aggregate event to different days in the past
-  for (i = 0; i < 25; i++)
+  // Add the same aggregate event to different days in the past and future
+  for (i = 0; i < 50; i++)
     {
-      g_autoptr(GDateTime) past_datetime = NULL;
-      g_autoptr(GError) error = NULL;
-      struct AggregateEvent *event;
-
-      past_datetime = g_date_time_add_days (datetime, -(i + 1));
-
-      event = create_aggregate_event (1001, uuids[0],
-                                      g_variant_new_string (""),
-                                      g_variant_new_string (""));
+      g_autoptr(GDateTime) dt = g_date_time_add_days (datetime, i - 25);
 
       emer_aggregate_tally_store_event (fixture->tally,
                                         EMER_TALLY_DAILY_EVENTS,
-                                        event->unix_user_id,
-                                        event->event_id,
-                                        event->aggregate_key,
-                                        event->payload,
+                                        1001,
+                                        uuids[0],
+                                        v,
+                                        v,
                                         1,
-                                        past_datetime,
-                                        g_get_monotonic_time (),
+                                        dt,
                                         &error);
 
       g_assert_no_error (error);
-
-      aggregate_event_free (event);
     }
 
-  // ... and in the future as well
-  for (i = 0; i < 25; i++)
+  // Add a monthly event, which should be ignored in the queries below
     {
-      g_autoptr(GDateTime) future_datetime = NULL;
-      g_autoptr(GError) error = NULL;
-      struct AggregateEvent *event;
-
-      future_datetime = g_date_time_add_days (datetime, i + 1);
-
-      event = create_aggregate_event (1001, uuids[0],
-                                      g_variant_new_string (""),
-                                      g_variant_new_string (""));
+      g_autoptr(GDateTime) dt = g_date_time_add_months (datetime, -1);
 
       emer_aggregate_tally_store_event (fixture->tally,
-                                        EMER_TALLY_DAILY_EVENTS,
-                                        event->unix_user_id,
-                                        event->event_id,
-                                        event->aggregate_key,
-                                        event->payload,
+                                        EMER_TALLY_MONTHLY_EVENTS,
+                                        1001,
+                                        uuids[0],
+                                        v,
+                                        v,
                                         1,
-                                        future_datetime,
-                                        g_get_monotonic_time (),
+                                        dt,
                                         &error);
 
       g_assert_no_error (error);
-
-      aggregate_event_free (event);
     }
 
   /* Iterate but don't delete */
-  data = (struct IterData) { 0, 0 };
   emer_aggregate_tally_iter_before (fixture->tally,
                                     EMER_TALLY_DAILY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
-                                    tally_iter_before_func,
-                                    &data);
+                                    tally_iter_func,
+                                    events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 25);
-  g_assert_cmpuint (data.counter, ==, 25);
+  g_assert_cmpuint (events->len, ==, 25);
+  for (i = 0; i < events->len; i++)
+    {
+      AggregateEvent *e = g_ptr_array_index (events, i);
+
+      g_assert_cmpuint (e->counter, ==, 1);
+      /* All returned dates should be before the requested date */
+      g_assert_cmpstr (e->date, <, "2021-09-22");
+    }
 
   /* Iterate again, and delete entries this time */
-  data = (struct IterData) { 0, 0 };
+  g_ptr_array_set_size (events, 0);
   emer_aggregate_tally_iter_before (fixture->tally,
                                     EMER_TALLY_DAILY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DELETE,
-                                    tally_iter_before_func,
-                                    &data);
+                                    tally_iter_func,
+                                    events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 25);
-  g_assert_cmpuint (data.counter, ==, 25);
+  g_assert_cmpuint (events->len, ==, 25);
+  for (i = 0; i < events->len; i++)
+    {
+      AggregateEvent *e = g_ptr_array_index (events, i);
 
-  /* There should be nothing else iterate now */
-  data = (struct IterData) { 0, 0 };
+      g_assert_cmpuint (e->counter, ==, 1);
+    }
+
+  /* There should be nothing else to iterate now */
+  g_ptr_array_set_size (events, 0);
   emer_aggregate_tally_iter_before (fixture->tally,
                                     EMER_TALLY_DAILY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
-                                    tally_iter_before_func,
-                                    &data);
+                                    tally_iter_func,
+                                    events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 0);
-  g_assert_cmpuint (data.counter, ==, 0);
+  g_assert_cmpuint (events->len, ==, 0);
+}
 
-  // Now test previous months - add as much as 1 year to
-  // the past
-  for (i = 0; i < 12; i++)
+static void
+test_aggregate_tally_iter_before_monthly (struct Fixture *fixture,
+                                          gconstpointer   dontuseme)
+{
+  g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+  g_autoptr(GVariant) v = v_str (G_STRFUNC);
+  g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
+  size_t i;
+  g_autoptr(GError) error = NULL;
+
+  // Add the same event in different months of the past and future
+  for (i = 0; i < 24; i++)
     {
-      g_autoptr(GDateTime) past_datetime = NULL;
-      g_autoptr(GError) error = NULL;
-      struct AggregateEvent *event;
-
-      past_datetime = g_date_time_add_months (datetime, -(i + 1));
-
-      event = create_aggregate_event (1001, uuids[0],
-                                      g_variant_new_string (""),
-                                      g_variant_new_string (""));
+      g_autoptr(GDateTime) dt = g_date_time_add_months (datetime, i - 12);
 
       emer_aggregate_tally_store_event (fixture->tally,
                                         EMER_TALLY_MONTHLY_EVENTS,
-                                        event->unix_user_id,
-                                        event->event_id,
-                                        event->aggregate_key,
-                                        event->payload,
+                                        1001,
+                                        uuids[0],
+                                        v,
+                                        v,
                                         1,
-                                        past_datetime,
-                                        g_get_monotonic_time (),
+                                        dt,
                                         &error);
 
       g_assert_no_error (error);
-
-      aggregate_event_free (event);
     }
 
-  // ... and to the future as well
-  for (i = 0; i < 12; i++)
+  // Add a daily event which should be ignored in the queries below
     {
-      g_autoptr(GDateTime) future_datetime = NULL;
-      g_autoptr(GError) error = NULL;
-      struct AggregateEvent *event;
-
-      future_datetime = g_date_time_add_months (datetime, i + 1);
-
-      event = create_aggregate_event (1001, uuids[0],
-                                      g_variant_new_string (""),
-                                      g_variant_new_string (""));
+      g_autoptr(GDateTime) dt = g_date_time_add_months (datetime, -1);
 
       emer_aggregate_tally_store_event (fixture->tally,
-                                        EMER_TALLY_MONTHLY_EVENTS,
-                                        event->unix_user_id,
-                                        event->event_id,
-                                        event->aggregate_key,
-                                        event->payload,
+                                        EMER_TALLY_DAILY_EVENTS,
+                                        1001,
+                                        uuids[0],
+                                        v,
+                                        v,
                                         1,
-                                        future_datetime,
-                                        g_get_monotonic_time (),
+                                        dt,
                                         &error);
 
       g_assert_no_error (error);
-
-      aggregate_event_free (event);
     }
 
   /* Iterate but don't delete */
-  data = (struct IterData) { 0, 0 };
   emer_aggregate_tally_iter_before (fixture->tally,
                                     EMER_TALLY_MONTHLY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
-                                    tally_iter_before_func,
-                                    &data);
+                                    tally_iter_func,
+                                    events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 12);
-  g_assert_cmpuint (data.counter, ==, 12);
+  g_assert_cmpuint (events->len, ==, 12);
+  for (i = 0; i < events->len; i++)
+    {
+      AggregateEvent *e = g_ptr_array_index (events, i);
+
+      g_assert_cmpuint (e->counter, ==, 1);
+      /* All returned dates should be before the requested date */
+      g_assert_cmpstr (e->date, <, "2021-09");
+    }
 
   /* Iterate again, and delete entries this time */
-  data = (struct IterData) { 0, 0 };
+  g_ptr_array_set_size (events, 0);
   emer_aggregate_tally_iter_before (fixture->tally,
                                     EMER_TALLY_MONTHLY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DELETE,
-                                    tally_iter_before_func,
-                                    &data);
+                                    tally_iter_func,
+                                    events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 12);
-  g_assert_cmpuint (data.counter, ==, 12);
+  g_assert_cmpuint (events->len, ==, 12);
+  for (i = 0; i < events->len; i++)
+    {
+      AggregateEvent *e = g_ptr_array_index (events, i);
+
+      g_assert_cmpuint (e->counter, ==, 1);
+    }
 
   /* There should be nothing else iterate now */
-  data = (struct IterData) { 0, 0 };
+  g_ptr_array_set_size (events, 0);
   emer_aggregate_tally_iter_before (fixture->tally,
                                     EMER_TALLY_MONTHLY_EVENTS,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
-                                    tally_iter_before_func,
-                                    &data);
+                                    tally_iter_func,
+                                    events);
 
-  g_assert_cmpuint (data.n_iterations, ==, 0);
-  g_assert_cmpuint (data.counter, ==, 0);
+  g_assert_cmpuint (events->len, ==, 0);
 }
 
 gint
 main (gint                argc,
       const gchar * const argv[])
 {
+  for (size_t i = 0; i < G_N_ELEMENTS (uuid_strs); i++)
+    g_assert_cmpint (0, ==, uuid_parse (uuid_strs[i], uuids[i]));
+
   g_test_init (&argc, (gchar ***) &argv, G_TEST_OPTION_ISOLATE_DIRS, NULL);
 
 #define ADD_AGGREGATE_TALLY_TEST_FUNC(path, func) \
@@ -618,18 +622,35 @@ main (gint                argc,
 
   ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/new-succeeds",
                                  test_aggregate_tally_new_succeeds);
+  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/new-succeeds-twice",
+                                 test_aggregate_tally_new_succeeds_twice);
   ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/store-events",
                                  test_aggregate_tally_store_events);
-  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/iter",
-                                 test_aggregate_tally_iter);
+  g_test_add ("/aggregate-tally/iter/null-payload",
+              struct Fixture,
+              NULL,
+              setup,
+              test_aggregate_tally_iter,
+              teardown);
+  g_test_add ("/aggregate-tally/iter/nonnull-payload",
+              struct Fixture,
+              "what a big payload you have, grandma",
+              setup,
+              test_aggregate_tally_iter,
+              teardown);
+
+  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/permutations",
+                                 test_aggregate_tally_permutations);
   ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/large-counter/single",
                                  test_aggregate_tally_large_counter_single);
   ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/large-counter/add",
                                  test_aggregate_tally_large_counter_add);
   ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/large-counter/upper-bound",
                                  test_aggregate_tally_large_counter_upper_bound);
-  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/iter-before",
-                                 test_aggregate_tally_iter_before);
+  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/iter-before/daily",
+                                 test_aggregate_tally_iter_before_daily);
+  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/iter-before/monthly",
+                                 test_aggregate_tally_iter_before_monthly);
 
 #undef ADD_AGGREGATE_TALLY_TEST_FUNC
 

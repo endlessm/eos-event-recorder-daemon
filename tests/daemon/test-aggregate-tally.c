@@ -42,7 +42,6 @@ typedef struct
 {
   guint32     unix_user_id;
   uuid_t      event_id;
-  GVariant   *aggregate_key;
   GVariant   *payload;
   guint32     counter;
   char *      date;
@@ -51,7 +50,6 @@ typedef struct
 static AggregateEvent *
 aggregate_event_new (guint32     unix_user_id,
                      uuid_t      event_id,
-                     GVariant   *aggregate_key,
                      GVariant   *payload,
                      guint32     counter,
                      const char *date)
@@ -60,7 +58,6 @@ aggregate_event_new (guint32     unix_user_id,
 
   e->unix_user_id = unix_user_id;
   uuid_copy (e->event_id, event_id);
-  e->aggregate_key = g_variant_ref (aggregate_key);
   e->payload = payload ? g_variant_ref (payload) : NULL;
   e->counter = counter;
   e->date = g_strdup (date);
@@ -76,7 +73,6 @@ aggregate_event_free (gpointer e_)
 {
   AggregateEvent *e = e_;
 
-  g_clear_pointer (&e->aggregate_key, g_variant_unref);
   g_clear_pointer (&e->payload, g_variant_unref);
   g_clear_pointer (&e->date, g_free);
 
@@ -95,6 +91,9 @@ struct Fixture
 static GVariant *
 v_str (const gchar *str)
 {
+  if (str == NULL)
+    return NULL;
+
   return g_variant_ref_sink (g_variant_new_variant (g_variant_new_string (str)));
 }
 
@@ -137,14 +136,12 @@ test_aggregate_tally_store_events (struct Fixture *fixture,
 {
   g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
   g_autoptr(GError) error = NULL;
-  g_autoptr(GVariant) aggregate_key = v_str (G_STRFUNC);
-  GVariant *payload = aggregate_key;
+  GVariant *payload = v_str (G_STRFUNC);
 
   emer_aggregate_tally_store_event (fixture->tally,
                                     EMER_TALLY_DAILY_EVENTS,
                                     1001,
                                     uuids[0],
-                                    aggregate_key,
                                     payload,
                                     1,
                                     datetime,
@@ -155,7 +152,6 @@ test_aggregate_tally_store_events (struct Fixture *fixture,
                                     EMER_TALLY_DAILY_EVENTS,
                                     1001,
                                     uuids[0],
-                                    aggregate_key,
                                     payload,
                                     2,
                                     datetime,
@@ -166,7 +162,6 @@ test_aggregate_tally_store_events (struct Fixture *fixture,
 static EmerTallyIterResult
 tally_iter_func (guint32     unix_user_id,
                  uuid_t      event_id,
-                 GVariant   *aggregate_key,
                  GVariant   *payload,
                  guint32     counter,
                  const char *date,
@@ -174,7 +169,7 @@ tally_iter_func (guint32     unix_user_id,
 {
   GPtrArray *events = user_data;
 
-  g_ptr_array_add (events, aggregate_event_new (unix_user_id, event_id, aggregate_key, payload, counter, date));
+  g_ptr_array_add (events, aggregate_event_new (unix_user_id, event_id, payload, counter, date));
 
   return EMER_TALLY_ITER_CONTINUE;
 }
@@ -184,8 +179,7 @@ test_aggregate_tally_iter (struct Fixture *fixture,
                            gconstpointer   payload_str)
 {
   g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
-  g_autoptr(GVariant) aggregate_key = v_str (G_STRFUNC);
-  g_autoptr(GVariant) payload = payload_str ? v_str (payload_str) : NULL;
+  g_autoptr(GVariant) payload = v_str (payload_str);
   g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
   int i;
 
@@ -200,7 +194,6 @@ test_aggregate_tally_iter (struct Fixture *fixture,
                                         EMER_TALLY_DAILY_EVENTS,
                                         1001,
                                         uuids[0],
-                                        aggregate_key,
                                         payload,
                                         1,
                                         datetime,
@@ -222,7 +215,6 @@ test_aggregate_tally_iter (struct Fixture *fixture,
   g_assert_cmpuint (e->unix_user_id, ==, 1001);
   g_assert_cmpstr (e->date, ==, "2021-09-22");
   g_assert_cmpmem (e->event_id, sizeof (uuid_t), uuids[0], sizeof (uuid_t));
-  g_assert_cmpvariant (e->aggregate_key, aggregate_key);
   if (payload_str == NULL)
     g_assert_null (e->payload);
   else
@@ -243,7 +235,7 @@ test_aggregate_tally_permutations (struct Fixture *fixture,
                                    gconstpointer   data)
 {
   g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
-  char *aggregate_keys[] = { "a", "b", "c" };
+  char *payloads[] = { NULL, "a", "b", "c" };
   g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
   g_autoptr(GError) error = NULL;
   const guint32 n_unix_uids = 3;
@@ -251,31 +243,28 @@ test_aggregate_tally_permutations (struct Fixture *fixture,
 
   for (guint32 unix_uid = 0; unix_uid < n_unix_uids; unix_uid++)
     for (size_t uuid_ix = 0; uuid_ix < G_N_ELEMENTS (uuids); uuid_ix++)
-      for (size_t agg_ix = 0; agg_ix < G_N_ELEMENTS (aggregate_keys); agg_ix++)
-        for (gboolean has_payload = FALSE; has_payload <= TRUE; has_payload++)
-          for (int datetime_offset = 0; datetime_offset < 3; datetime_offset++)
-            for (EmerTallyType tally_type = EMER_TALLY_DAILY_EVENTS;
-                 tally_type <= EMER_TALLY_MONTHLY_EVENTS;
-                 tally_type++)
-              {
-                g_autoptr(GDateTime) dt = g_date_time_add_days (datetime, datetime_offset);
-                g_autoptr(GVariant) aggregate_key = v_str (aggregate_keys[agg_ix]);
-                GVariant *payload = has_payload ? aggregate_key : NULL;
+      for (size_t payload_ix = 0; payload_ix < G_N_ELEMENTS (payloads); payload_ix++)
+        for (int datetime_offset = 0; datetime_offset < 3; datetime_offset++)
+          for (EmerTallyType tally_type = EMER_TALLY_DAILY_EVENTS;
+               tally_type <= EMER_TALLY_MONTHLY_EVENTS;
+               tally_type++)
+            {
+              g_autoptr(GDateTime) dt = g_date_time_add_days (datetime, datetime_offset);
+              g_autoptr(GVariant) payload = v_str (payloads[payload_ix]);
 
-                for (int i = 1; i <= iterations_per_permutation; i++)
-                  {
-                    emer_aggregate_tally_store_event (fixture->tally,
-                                                      tally_type,
-                                                      unix_uid,
-                                                      uuids[uuid_ix],
-                                                      aggregate_key,
-                                                      payload,
-                                                      i,
-                                                      dt,
-                                                      &error);
-                    g_assert_no_error (error);
-                  }
-              }
+              for (int i = 1; i <= iterations_per_permutation; i++)
+                {
+                  emer_aggregate_tally_store_event (fixture->tally,
+                                                    tally_type,
+                                                    unix_uid,
+                                                    uuids[uuid_ix],
+                                                    payload,
+                                                    i,
+                                                    dt,
+                                                    &error);
+                  g_assert_no_error (error);
+                }
+            }
 
   emer_aggregate_tally_iter (fixture->tally,
                              EMER_TALLY_DAILY_EVENTS,
@@ -284,7 +273,7 @@ test_aggregate_tally_permutations (struct Fixture *fixture,
                              tally_iter_func,
                              events);
 
-  g_assert_cmpuint (events->len, ==, n_unix_uids * G_N_ELEMENTS (uuids) * G_N_ELEMENTS (aggregate_keys) * 2);
+  g_assert_cmpuint (events->len, ==, n_unix_uids * G_N_ELEMENTS (uuids) * G_N_ELEMENTS (payloads));
   for (size_t i = 0; i < events->len; i++)
     {
       AggregateEvent *e = events->pdata[i];
@@ -321,7 +310,6 @@ test_aggregate_tally_large_counter_single (struct Fixture *fixture,
                                     1001,
                                     uuids[0],
                                     v,
-                                    v,
                                     ((guint32) G_MAXINT32) + 1,
                                     datetime,
                                     &error);
@@ -355,7 +343,6 @@ test_aggregate_tally_large_counter_add (struct Fixture *fixture,
                                     1001,
                                     uuids[0],
                                     v,
-                                    v,
                                     (guint32) G_MAXINT32,
                                     datetime,
                                     &error);
@@ -366,7 +353,6 @@ test_aggregate_tally_large_counter_add (struct Fixture *fixture,
                                     EMER_TALLY_DAILY_EVENTS,
                                     1001,
                                     uuids[0],
-                                    v,
                                     v,
                                     1,
                                     datetime,
@@ -404,7 +390,6 @@ test_aggregate_tally_large_counter_upper_bound (struct Fixture *fixture,
                                         EMER_TALLY_DAILY_EVENTS,
                                         1001,
                                         uuids[0],
-                                        v,
                                         v,
                                         G_MAXUINT32,
                                         datetime,
@@ -444,7 +429,6 @@ test_aggregate_tally_iter_before_daily (struct Fixture *fixture,
                                         1001,
                                         uuids[0],
                                         v,
-                                        v,
                                         1,
                                         dt,
                                         &error);
@@ -460,7 +444,6 @@ test_aggregate_tally_iter_before_daily (struct Fixture *fixture,
                                         EMER_TALLY_MONTHLY_EVENTS,
                                         1001,
                                         uuids[0],
-                                        v,
                                         v,
                                         1,
                                         dt,
@@ -536,7 +519,6 @@ test_aggregate_tally_iter_before_monthly (struct Fixture *fixture,
                                         1001,
                                         uuids[0],
                                         v,
-                                        v,
                                         1,
                                         dt,
                                         &error);
@@ -552,7 +534,6 @@ test_aggregate_tally_iter_before_monthly (struct Fixture *fixture,
                                         EMER_TALLY_DAILY_EVENTS,
                                         1001,
                                         uuids[0],
-                                        v,
                                         v,
                                         1,
                                         dt,

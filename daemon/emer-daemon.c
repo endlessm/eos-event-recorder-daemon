@@ -1197,7 +1197,6 @@ split_aggregate_timers (EmerDaemon *self,
 static EmerTallyIterResult
 buffer_aggregate_event_to_queue (guint32     unix_user_id,
                                  uuid_t      event_uuid,
-                                 GVariant   *aggregate_key,
                                  GVariant   *payload,
                                  guint32     counter,
                                  const char *date,

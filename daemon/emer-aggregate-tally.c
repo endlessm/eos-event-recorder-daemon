@@ -264,14 +264,18 @@ emer_aggregate_tally_init_db (EmerAggregateTally  *self,
 
   switch (user_version)
     {
+    case -1:
+      /* Indicates an error from the user_version query above. */
+      return FALSE;
+
     case 0:
+      /* New, empty database. Just create the desired final schema. */
       if (!CHECK (sqlite3_exec (self->db,
                                 "CREATE TABLE IF NOT EXISTS tally (\n"
                                 "    id INTEGER PRIMARY KEY ASC,\n"
                                 "    date TEXT NOT NULL,\n"
                                 "    event_id BLOB NOT NULL CHECK (length(event_id) = 16),\n"
                                 "    unix_user_id INT NOT NULL,\n"
-                                "    aggregate_key BLOB NOT NULL,\n"
                                 "    payload BLOB NOT NULL,\n"
                                 "    counter INT NOT NULL\n"
                                 ")",
@@ -282,25 +286,37 @@ emer_aggregate_tally_init_db (EmerAggregateTally  *self,
                                 "    date,\n"
                                 "    event_id,\n"
                                 "    unix_user_id,\n"
-                                "    aggregate_key,\n"
                                 "    payload\n"
                                 ")",
                                 NULL, NULL, NULL)) ||
-          !CHECK (sqlite3_exec (self->db, "PRAGMA user_version = 1", NULL, NULL, NULL)))
+          !CHECK (sqlite3_exec (self->db, "PRAGMA user_version = 2", NULL, NULL, NULL)))
         return FALSE;
-      G_GNUC_FALLTHROUGH;
+
+      return TRUE;
+
     case 1:
-      break;
-    case -1:
+      /* This version of the schema had an aggregate_key column. Unfortunately
+       * the SQLite library version in the current Endless OS does not support
+       * ALTER TABLE _ DROP COLUMN _. Happily this schema version did not
+       * enter a released version of the OS.
+       */
+      g_set_error (error, EMER_SQLITE_ERROR, SQLITE_ERROR,
+                   "Can't migrate from schema version 1");
       return FALSE;
+
+    /* If future schema changes can be done non-destructively, add
+     * additional cases to ALTER TABLE etc. to make the existing data
+     * match the 'case 0' schema above.
+     */
+    case 2:
+      return TRUE;
+
     default:
       g_set_error (error, EMER_SQLITE_ERROR, SQLITE_ERROR,
                    "Unexpected user_version %" G_GINT64_FORMAT,
                    (gint64) user_version);
       return FALSE;
     }
-
-  return TRUE;
 }
 
 static void
@@ -449,22 +465,18 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
                                   EmerTallyType        tally_type,
                                   guint32              unix_user_id,
                                   uuid_t               event_id,
-                                  GVariant            *aggregate_key,
                                   GVariant            *payload,
                                   guint32              counter,
                                   GDateTime           *datetime,
                                   GError             **error)
 {
-  g_return_val_if_fail (g_variant_is_of_type (aggregate_key, G_VARIANT_TYPE_VARIANT), FALSE);
   g_return_val_if_fail (payload == NULL || g_variant_is_of_type (payload, G_VARIANT_TYPE_VARIANT), FALSE);
 
   const char *UPSERT_SQL =
     "INSERT INTO tally (date, event_id, unix_user_id, "
-    "                   aggregate_key, "
     "                   payload, counter) "
-    "VALUES (?, ?, ?, ?, ?, ?) "
+    "VALUES (?, ?, ?, ?, ?) "
     "ON CONFLICT (date, event_id, unix_user_id, "
-    "             aggregate_key, "
     "             payload) "
     "DO UPDATE SET counter = tally.counter + excluded.counter;";
 
@@ -479,14 +491,10 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
       CHECK (sqlite3_bind_blob (stmt, 2, event_id, sizeof (uuid_t), SQLITE_STATIC)) &&
       CHECK (sqlite3_bind_int64 (stmt, 3, unix_user_id)) &&
       CHECK (sqlite3_bind_blob (stmt, 4,
-                                g_variant_get_data (aggregate_key),
-                                g_variant_get_size (aggregate_key),
-                                SQLITE_TRANSIENT)) &&
-      CHECK (sqlite3_bind_blob (stmt, 5,
                                 payload ? g_variant_get_data (payload) : "",
                                 payload ? g_variant_get_size (payload) : 0,
                                 SQLITE_TRANSIENT)) &&
-      CHECK (sqlite3_bind_int64 (stmt, 6, counter)) &&
+      CHECK (sqlite3_bind_int64 (stmt, 5, counter)) &&
       CHECK (sqlite3_step (stmt)) &&
       CHECK (sqlite3_finalize (stmt));
 }
@@ -521,17 +529,16 @@ emer_aggregate_tally_iter_internal (EmerAggregateTally *self,
   while ((ret = sqlite3_step (stmt)) == SQLITE_ROW)
     {
       guint32 unix_user_id = column_to_uint32 (stmt, 2);
-      g_autoptr(GVariant) aggregate_key = column_to_variant (stmt, 3);
-      g_autoptr(GVariant) payload = column_to_variant (stmt, 4);
-      guint32 counter = column_to_uint32 (stmt, 5);
-      const char *event_date = (const char *) sqlite3_column_text (stmt, 6);
+      g_autoptr(GVariant) payload = column_to_variant (stmt, 3);
+      guint32 counter = column_to_uint32 (stmt, 4);
+      const char *event_date = (const char *) sqlite3_column_text (stmt, 5);
       uuid_t event_id = { 0 };
       EmerTallyIterResult result;
 
       column_to_uuid (stmt, 1, event_id);
 
       result = func (unix_user_id, event_id,
-                     aggregate_key, payload,
+                     payload,
                      counter, event_date, user_data);
 
       if (flags & EMER_TALLY_ITER_FLAG_DELETE)
@@ -560,7 +567,6 @@ emer_aggregate_tally_iter (EmerAggregateTally *self,
 {
   const char *SELECT_SQL =
     "SELECT id, event_id, unix_user_id, "
-    "       aggregate_key, "
     "       payload, counter, date "
     "FROM tally "
     "WHERE date = ?";
@@ -587,7 +593,6 @@ emer_aggregate_tally_iter_before (EmerAggregateTally *self,
 {
   const char *SELECT_SQL =
     "SELECT id, event_id, unix_user_id, "
-    "       aggregate_key, "
     "       payload, counter, date "
     "FROM tally "
     "WHERE length(date) = length(?1) AND date < ?1;";

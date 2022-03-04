@@ -288,7 +288,7 @@ emer_aggregate_tally_init_db (EmerAggregateTally  *self,
                                 NULL, NULL, NULL)) ||
           !CHECK (sqlite3_exec (self->db, "PRAGMA user_version = 1", NULL, NULL, NULL)))
         return FALSE;
-      /* fallthrough: */
+      G_GNUC_FALLTHROUGH;
     case 1:
       break;
     case -1:

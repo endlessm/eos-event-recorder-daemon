@@ -104,46 +104,26 @@ on_set_enabled (EmerEventRecorderServer *server,
 static gboolean
 on_start_aggregate_timer (EmerEventRecorderServer *object,
                           GDBusMethodInvocation   *invocation,
+                          guint32                  unix_user_id,
                           GVariant                *event_id,
-                          GVariant                *aggregate_key,
                           gboolean                 has_payload,
                           GVariant                *payload,
                           EmerDaemon              *daemon)
 {
   g_autofree gchar *timer_object_path = NULL;
-  g_autoptr(GVariant) result = NULL;
   g_autoptr(GError) error = NULL;
   GDBusConnection *system_bus;
   const gchar *sender;
-  guint32 unix_user_id;
 
   system_bus = g_dbus_method_invocation_get_connection (invocation);
   sender = g_dbus_method_invocation_get_sender (invocation);
-  result = g_dbus_connection_call_sync (system_bus,
-                                        "org.freedesktop.DBus",
-                                        "/org/freedesktop/DBus",
-                                        "org.freedesktop.DBus",
-                                        "GetConnectionUnixUser",
-                                        g_variant_new ("(s)", sender),
-                                        G_VARIANT_TYPE ("(u)"),
-                                        G_DBUS_CALL_FLAGS_NONE,
-                                        -1, NULL, &error);
-  if (error)
-    {
-      g_warning ("Could not get unix user for bus name '%s': %s.",
-                 sender, error->message);
-      g_dbus_method_invocation_return_gerror (invocation, error);
-      return TRUE;
-    }
-
-  g_variant_get (result, "(u)", &unix_user_id);
 
   emer_daemon_start_aggregate_timer (daemon,
                                      system_bus,
                                      sender,
                                      unix_user_id,
                                      event_id,
-                                     aggregate_key,
+                                     payload,
                                      has_payload,
                                      payload,
                                      &timer_object_path,

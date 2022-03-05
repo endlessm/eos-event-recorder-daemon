@@ -34,7 +34,6 @@ struct _EmerAggregateTimerImpl
   EmerAggregateTimer *timer; /* owned */
   EmerAggregateTally *tally; /* unowned */
   gint64 start_monotonic_us;
-  gint64 end_monotonic_us;
 
   guint32 unix_user_id;
   uuid_t event_id;

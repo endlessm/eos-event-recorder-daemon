@@ -40,10 +40,10 @@
  * @path: (allow-none): the path to the file where the maximum persistent
  *  cache size is stored.
  *
- * Returns the maximum persistent cache size in bytes. If @path is %NULL, it
+ * Returns the maximum persistent cache size in bytes. If @path is %NULL, not
  * defaults to DEFAULT_CACHE_SIZE_FILE_PATH. If the underlying configuration
- * file doesn't exist yet, or is corrupt, it is recreated with a default value
- * of DEFAULT_MAX_CACHE_SIZE.
+ * file doesn't exist, is corrupt, or does not contain this key,
+ * %DEFAULT_MAX_CACHE_SIZE is returned.
  */
 guint64
 emer_cache_size_provider_get_max_cache_size (const gchar *path)
@@ -55,8 +55,7 @@ emer_cache_size_provider_get_max_cache_size (const gchar *path)
   if (path == NULL)
     path = DEFAULT_CACHE_SIZE_FILE_PATH;
 
-  if (g_key_file_load_from_file (key_file, path, G_KEY_FILE_NONE,
-                                  &error))
+  if (g_key_file_load_from_file (key_file, path, G_KEY_FILE_NONE, &error))
     {
       cache_size = g_key_file_get_uint64 (key_file, CACHE_SIZE_GROUP,
                                           MAX_CACHE_SIZE_KEY, &error);
@@ -76,16 +75,8 @@ emer_cache_size_provider_get_max_cache_size (const gchar *path)
           g_warning ("Error reading cache size from %s: %s", path,
                      error->message);
         }
-      g_clear_error (&error);
 
       cache_size = DEFAULT_MAX_CACHE_SIZE;
-      g_key_file_set_uint64 (key_file, CACHE_SIZE_GROUP,
-                             MAX_CACHE_SIZE_KEY, cache_size);
-      if (!g_key_file_save_to_file (key_file, path, &error))
-        {
-          g_warning ("Failed to write default cache size file to %s. Error: %s.",
-                     path, error->message);
-        }
     }
 
   return cache_size;

@@ -60,13 +60,6 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         self.config_file = os.path.join(self.test_dir.name, 'permissions.conf')
         config_file_arg = '--config-file-path={}'.format(self.config_file)
 
-        # TODO: The daemon attempts to create CONFIG_DIR / cache-size.conf when
-        # launched; this will typically fail while running this test because
-        # either CONFIG_DIR does not exist, or it exists and is not owned by
-        # the user running the test. The daemon logs a warning in this case.
-        # (If the test is running as root or the metrics user, and the
-        # directory exists, then the test will overwrite the file within!)
-
         # TODO: The daemon assumes it is running on an OSTree system and
         # attempts to open /ostree/repo/config to determine whether to adjust
         # the environment in its own configuration (self.config_file above).

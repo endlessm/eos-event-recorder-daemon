@@ -34,7 +34,6 @@ struct _EmerAggregateTimerImpl
   EmerAggregateTimer *timer; /* owned */
   EmerAggregateTally *tally; /* unowned */
   gint64 start_monotonic_us;
-  gint64 end_monotonic_us;
 
   guint32 unix_user_id;
   uuid_t event_id;
@@ -163,7 +162,6 @@ emer_aggregate_timer_impl_store (EmerAggregateTimerImpl  *self,
                                            tally_type,
                                            self->unix_user_id,
                                            *event_id,
-                                           self->aggregate_key,
                                            self->payload,
                                            counter,
                                            datetime,
@@ -198,7 +196,6 @@ emer_aggregate_timer_impl_stop (EmerAggregateTimerImpl  *self,
                                     EMER_TALLY_DAILY_EVENTS,
                                     self->unix_user_id,
                                     self->event_id,
-                                    self->aggregate_key,
                                     self->payload,
                                     counter,
                                     datetime,
@@ -214,7 +211,6 @@ emer_aggregate_timer_impl_stop (EmerAggregateTimerImpl  *self,
                                     EMER_TALLY_MONTHLY_EVENTS,
                                     self->unix_user_id,
                                     self->monthly_event_id,
-                                    self->aggregate_key,
                                     self->payload,
                                     counter,
                                     datetime,

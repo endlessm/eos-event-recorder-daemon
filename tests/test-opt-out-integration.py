@@ -60,13 +60,6 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         self.config_file = os.path.join(self.test_dir.name, 'permissions.conf')
         config_file_arg = '--config-file-path={}'.format(self.config_file)
 
-        # TODO: The daemon assumes it is running on an OSTree system and
-        # attempts to open /ostree/repo/config to determine whether to adjust
-        # the environment in its own configuration (self.config_file above).
-        # When running on a non-OSTree system such as a build server or
-        # development container, this fails, and logs a warning. (This could
-        # be addressed by, for example, checking ostree_sysroot_is_booted().)
-
         # TODO: Address both issues above, then enable fatal warnings.
         daemon_path = os.environ.get('EMER_PATH', './eos-metrics-event-recorder')
         self.daemon = subprocess.Popen([daemon_path,

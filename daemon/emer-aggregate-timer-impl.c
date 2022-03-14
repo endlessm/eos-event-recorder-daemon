@@ -38,7 +38,6 @@ struct _EmerAggregateTimerImpl
   guint32 unix_user_id;
   uuid_t event_id;
   uuid_t monthly_event_id;
-  GVariant *aggregate_key; /* owned */
   GVariant *payload; /* owned */
   gchar *cache_key_string; /* owned */
   gchar *sender_name; /* owned */
@@ -55,7 +54,6 @@ emer_aggregate_timer_impl_finalize (GObject *object)
 
   g_dbus_interface_skeleton_unexport (G_DBUS_INTERFACE_SKELETON (self->timer));
 
-  g_clear_pointer (&self->aggregate_key, g_variant_unref);
   g_clear_pointer (&self->payload, g_variant_unref);
   g_clear_pointer (&self->cache_key_string, g_free);
   g_clear_pointer (&self->sender_name, g_free);
@@ -83,7 +81,6 @@ emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
                                const gchar        *sender_name,
                                guint32             unix_user_id,
                                GVariant           *event_id,
-                               GVariant           *aggregate_key,
                                GVariant           *payload,
                                gint64              monotonic_time_us)
 {
@@ -94,13 +91,11 @@ emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
 
   /* TODO: factor this out */
   g_return_val_if_fail (g_variant_is_of_type (event_id, G_VARIANT_TYPE_BYTESTRING), NULL);
-  g_return_val_if_fail (g_variant_is_of_type (aggregate_key, G_VARIANT_TYPE_VARIANT), NULL);
   g_return_val_if_fail (payload == NULL || g_variant_is_of_type (payload, G_VARIANT_TYPE_VARIANT), NULL);
 
   event_id_bytes = g_variant_get_fixed_array (event_id, &event_id_len, sizeof (event_uuid[0]));
   g_return_val_if_fail (event_id_len == sizeof (event_uuid), NULL);
 
-  g_variant_take_ref (aggregate_key);
   if (payload)
     g_variant_take_ref (payload);
 
@@ -113,14 +108,12 @@ emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
   memcpy (self->event_id, event_id_bytes, event_id_len);
   uuid_generate_sha1 (self->monthly_event_id, self->event_id, "monthly", strlen ("monthly"));
 
-  self->aggregate_key = g_variant_ref (aggregate_key);
   self->payload = payload ? g_variant_ref (payload) : NULL;
   self->start_monotonic_us = monotonic_time_us;
   self->cache_key_string =
     emer_aggregate_timer_impl_compose_hash_string (sender_name,
                                                    unix_user_id,
                                                    event_id,
-                                                   aggregate_key,
                                                    payload);
   self->run_count = 1;
 
@@ -244,16 +237,14 @@ gchar *
 emer_aggregate_timer_impl_compose_hash_string (const gchar *sender_name,
                                                guint32      unix_user_id,
                                                GVariant    *event_id,
-                                               GVariant    *aggregate_key,
                                                GVariant    *payload)
 {
   g_autoptr(GVariant) cache_key = NULL;
 
-  cache_key = g_variant_new ("(su@ayvmv)",
+  cache_key = g_variant_new ("(su@aymv)",
                              sender_name,
                              unix_user_id,
                              g_variant_take_ref (event_id),
-                             g_variant_take_ref (aggregate_key),
                              payload ? g_variant_take_ref (payload) : NULL);
 
   return g_variant_print (cache_key, TRUE);

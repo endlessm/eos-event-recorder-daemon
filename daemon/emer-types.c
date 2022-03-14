@@ -31,6 +31,7 @@ static const GDBusErrorEntry emer_error_entries[] = {
     { EMER_ERROR_METRICS_DISABLED, EMER_ERROR_DOMAIN ".MetricsDisabled" },
     { EMER_ERROR_UPLOADING_DISABLED, EMER_ERROR_DOMAIN ".UploadingDisabled" },
     { EMER_ERROR_INVALID_MACHINE_ID, EMER_ERROR_DOMAIN ".InvalidMachineId" },
+    { EMER_ERROR_INVALID_EVENT_ID, EMER_ERROR_DOMAIN ".InvalidEventId" },
 };
 
 G_STATIC_ASSERT (G_N_ELEMENTS (emer_error_entries) == EMER_ERROR_LAST + 1);

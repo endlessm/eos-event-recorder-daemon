@@ -2007,14 +2007,14 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
 
   if (!priv->recording_enabled)
     {
-      g_set_error (error, G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
-                   "Metrics are disabled");
+      g_set_error (error, EMER_ERROR, EMER_ERROR_METRICS_DISABLED,
+                   METRICS_DISABLED_MESSAGE);
       return FALSE;
     }
 
   if (!is_uuid (event_id))
     {
-      g_set_error (error, G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
+      g_set_error (error, EMER_ERROR, EMER_ERROR_INVALID_EVENT_ID,
                    "Event ID must be a UUID represented as an array of %"
                    G_GSIZE_FORMAT " bytes. Dropping event.",
                    UUID_LENGTH);

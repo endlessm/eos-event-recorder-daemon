@@ -36,15 +36,20 @@ simple_tests = {
 }
 
 foreach name, sources : simple_tests
-    test(name, executable(name,
-        sources + ['daemon/@0@.c'.format(name)],
-        dependencies: [
-            emer_required_modules,
-            emer_shared_dep,
-        ],
-        include_directories: include_directories('../daemon'),
-        install: false,
-    ))
+    test(name,
+        executable(name,
+            sources + ['daemon/@0@.c'.format(name)],
+            dependencies: [
+                emer_required_modules,
+                emer_shared_dep,
+            ],
+            include_directories: include_directories('../daemon'),
+            install: false,
+        ),
+        env: {
+            'G_DEBUG': 'fatal-warnings',
+        },
+    )
 endforeach
 
 test_daemon = executable('test-daemon',
@@ -80,6 +85,9 @@ test_daemon = executable('test-daemon',
 test('test-daemon',
     find_program('launch-mock-dbus-tests.sh'),
     args: [test_daemon],
+    env: {
+        'G_DEBUG': 'fatal-warnings',
+    },
     # TODO: These tests are slow because they set the daemon's upload interval
     # to 2 seconds and constantly wait for this time to elapse, rather than
     # mocking the clock or telling the daemon to upload. Sure, *some* of them
@@ -91,5 +99,6 @@ test('test-opt-out-integration',
     find_program('test-opt-out-integration.py'),
     env: {
         'EMER_PATH': daemon.full_path(),
+        'G_DEBUG': 'fatal-warnings',
     },
 )

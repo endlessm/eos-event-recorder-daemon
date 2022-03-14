@@ -44,6 +44,11 @@ install_data(
     install_dir: config_dir,
     install_mode: ['rwxrwsr-x', 'metrics', 'metrics'],
 )
+install_data(
+    'cache-size.conf',
+    install_dir: config_dir,
+    install_mode: ['rw-r--r--'],
+)
 
 # Polkit policy
 install_data(

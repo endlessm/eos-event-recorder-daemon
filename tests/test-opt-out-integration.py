@@ -27,10 +27,12 @@ import taptestrunner
 import tempfile
 import time
 import unittest
+import uuid
 
 import dbusmock
 
 _METRICS_IFACE = 'com.endlessm.Metrics.EventRecorderServer'
+_TIMER_IFACE = "com.endlessm.Metrics.AggregateTimer"
 
 
 class TestOptOutIntegration(dbusmock.DBusTestCase):
@@ -148,6 +150,32 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         with self.assertRaisesRegex(dbus.exceptions.DBusException,
                                     r'metrics system is disabled') as context:
             self.interface.UploadEvents()
+        self.assertEqual(context.exception.get_dbus_name(),
+                         "com.endlessm.Metrics.Error.MetricsDisabled")
+
+    def test_StartAggregateEvent_succeeds_if_enabled(self):
+        self.polkit_obj.SetAllowed(['com.endlessm.Metrics.SetEnabled'])
+        self.interface.SetEnabled(True)
+        timer_path = self.interface.StartAggregateTimer(
+            0,
+            uuid.UUID("350ac4ff-3026-4c25-9e7e-e8103b4fd5d8").bytes,
+            False,
+            False,
+        )
+        timer = self.dbus_con.get_object('com.endlessm.Metrics', timer_path)
+        timer.StopTimer(dbus_interface=_TIMER_IFACE)
+
+    def test_StartAggregateEvent_fails_if_disabled(self):
+        self.polkit_obj.SetAllowed(['com.endlessm.Metrics.SetEnabled'])
+        self.interface.SetEnabled(False)
+        with self.assertRaisesRegex(dbus.exceptions.DBusException,
+                                    r'metrics system is disabled') as context:
+            self.interface.StartAggregateTimer(
+                0,
+                uuid.UUID("350ac4ff-3026-4c25-9e7e-e8103b4fd5d8").bytes,
+                False,
+                False,
+            ),
         self.assertEqual(context.exception.get_dbus_name(),
                          "com.endlessm.Metrics.Error.MetricsDisabled")
 

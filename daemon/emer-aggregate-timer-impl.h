@@ -40,7 +40,6 @@ emer_aggregate_timer_impl_new (EmerAggregateTally *tally,
                                const gchar        *sender_name,
                                guint32             unix_user_id,
                                GVariant           *event_id,
-                               GVariant           *aggregate_key,
                                GVariant           *payload,
                                gint64              monotonic_time_us);
 
@@ -67,7 +66,6 @@ gchar *
 emer_aggregate_timer_impl_compose_hash_string (const gchar *sender_name,
                                                guint32      unix_user_id,
                                                GVariant    *event_id,
-                                               GVariant    *aggregate_key,
                                                GVariant    *payload);
 
 void emer_aggregate_timer_impl_push_run_count (EmerAggregateTimerImpl *self);

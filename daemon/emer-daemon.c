@@ -1987,7 +1987,6 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
                                    const gchar      *sender_name,
                                    guint32           unix_user_id,
                                    GVariant         *event_id,
-                                   GVariant         *aggregate_key,
                                    gboolean          has_payload,
                                    GVariant         *payload,
                                    gchar           **out_timer_object_path,
@@ -2001,20 +2000,19 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
 
   g_return_val_if_fail (EMER_IS_DAEMON (self), FALSE);
   g_return_val_if_fail (event_id != NULL, FALSE);
-  g_return_val_if_fail (aggregate_key != NULL, FALSE);
 
   priv = emer_daemon_get_instance_private (self);
 
   if (!priv->recording_enabled)
     {
-      g_set_error (error, G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
-                   "Metrics are disabled");
+      g_set_error (error, EMER_ERROR, EMER_ERROR_METRICS_DISABLED,
+                   METRICS_DISABLED_MESSAGE);
       return FALSE;
     }
 
   if (!is_uuid (event_id))
     {
-      g_set_error (error, G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
+      g_set_error (error, EMER_ERROR, EMER_ERROR_INVALID_EVENT_ID,
                    "Event ID must be a UUID represented as an array of %"
                    G_GSIZE_FORMAT " bytes. Dropping event.",
                    UUID_LENGTH);
@@ -2026,7 +2024,6 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
     emer_aggregate_timer_impl_compose_hash_string (sender_name,
                                                    unix_user_id,
                                                    event_id,
-                                                   aggregate_key,
                                                    nullable_payload);
   timer_impl = g_hash_table_lookup (priv->aggregate_timers, timer_hash_string);
 
@@ -2059,7 +2056,6 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
                                                   sender_name,
                                                   unix_user_id,
                                                   event_id,
-                                                  aggregate_key,
                                                   nullable_payload,
                                                   g_get_monotonic_time ());
       g_object_set_data_full (G_OBJECT (timer_impl),

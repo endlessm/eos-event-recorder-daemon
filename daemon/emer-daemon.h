@@ -121,7 +121,6 @@ gboolean                 emer_daemon_start_aggregate_timer    (EmerDaemon       
                                                                const gchar             *sender_name,
                                                                guint32                  unix_user_id,
                                                                GVariant                *event_id,
-                                                               GVariant                *aggregate_key,
                                                                gboolean                 has_payload,
                                                                GVariant                *payload,
                                                                gchar                  **out_timer_object_path,

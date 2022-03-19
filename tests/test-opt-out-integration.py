@@ -21,6 +21,7 @@
 import configparser
 import dbus
 import os
+import sqlite3
 import subprocess
 import taptestrunner
 import tempfile
@@ -72,12 +73,16 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
             '/com/endlessm/Metrics')
         self.interface = dbus.Interface(metrics_object, _METRICS_IFACE)
 
+        self.db = sqlite3.connect(os.path.join(persistent_cache_directory, "metrics.db"))
+
     def tearDown(self):
         self.polkit_popen.terminate()
         self.daemon.terminate()
 
         self.polkit_popen.wait()
         self.assertEqual(self.daemon.wait(), 0)
+
+        self.db.close()
 
         self.test_dir.cleanup()
 
@@ -161,6 +166,28 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         )
         timer = self.dbus_con.get_object('com.endlessm.Metrics', timer_path)
         timer.StopTimer(dbus_interface=_TIMER_IFACE)
+
+    def test_cancels_running_timer_when_disabled(self):
+        self.polkit_obj.SetAllowed(['com.endlessm.Metrics.SetEnabled'])
+        self.interface.SetEnabled(True)
+        event_id = uuid.UUID("350ac4ff-3026-4c25-9e7e-e8103b4fd5d8")
+        timer_path = self.interface.StartAggregateTimer(
+            0,
+            event_id.bytes,
+            False,
+            False,
+        )
+        timer = self.dbus_con.get_object('com.endlessm.Metrics', timer_path)
+
+        self.interface.SetEnabled(False)
+        with self.assertRaises(dbus.exceptions.DBusException) as context:
+            timer.StopTimer(dbus_interface=_TIMER_IFACE)
+
+        self.assertEqual(context.exception.get_dbus_name(),
+                         "org.freedesktop.DBus.Error.UnknownMethod")
+
+        rows = self.db.execute("select event_id from tally").fetchall()
+        self.assertEqual(rows, [])
 
     def test_StartAggregateEvent_fails_if_disabled(self):
         self.polkit_obj.SetAllowed(['com.endlessm.Metrics.SetEnabled'])

@@ -155,17 +155,26 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         self.assertEqual(context.exception.get_dbus_name(),
                          "com.endlessm.Metrics.Error.MetricsDisabled")
 
-    def test_StartAggregateEvent_succeeds_if_enabled(self):
+    def test_clears_tally_when_disabled(self):
         self.polkit_obj.SetAllowed(['com.endlessm.Metrics.SetEnabled'])
         self.interface.SetEnabled(True)
+        event_id = uuid.UUID("350ac4ff-3026-4c25-9e7e-e8103b4fd5d8")
+        monthly_event_id = uuid.uuid5(event_id, "monthly")
         timer_path = self.interface.StartAggregateTimer(
             0,
-            uuid.UUID("350ac4ff-3026-4c25-9e7e-e8103b4fd5d8").bytes,
+            event_id.bytes,
             False,
             False,
         )
         timer = self.dbus_con.get_object('com.endlessm.Metrics', timer_path)
         timer.StopTimer(dbus_interface=_TIMER_IFACE)
+
+        rows = self.db.execute("select event_id from tally order by event_id asc").fetchall()
+        self.assertEqual(rows, sorted([(event_id.bytes,), (monthly_event_id.bytes,)]))
+
+        self.interface.SetEnabled(False)
+        rows = self.db.execute("select event_id from tally").fetchall()
+        self.assertEqual(rows, [])
 
     def test_cancels_running_timer_when_disabled(self):
         self.polkit_obj.SetAllowed(['com.endlessm.Metrics.SetEnabled'])

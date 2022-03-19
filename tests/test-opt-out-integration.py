@@ -21,7 +21,6 @@
 import configparser
 import dbus
 import os
-import shlex
 import subprocess
 import taptestrunner
 import tempfile
@@ -55,9 +54,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
             prefix='eos-event-recorder-daemon-test.')
 
         persistent_cache_directory = os.path.join(self.test_dir.name, 'cache')
-        os.mkdir(persistent_cache_directory)
-        escaped_dir = shlex.quote(persistent_cache_directory)
-        persistent_cache_dir_arg = '--persistent-cache-directory=' + escaped_dir
+        persistent_cache_dir_arg = '--persistent-cache-directory=' + persistent_cache_directory
 
         self.config_file = os.path.join(self.test_dir.name, 'permissions.conf')
         config_file_arg = '--config-file-path={}'.format(self.config_file)

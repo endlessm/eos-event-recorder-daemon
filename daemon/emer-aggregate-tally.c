@@ -608,3 +608,15 @@ emer_aggregate_tally_iter_before (EmerAggregateTally *self,
                                            &error))
     g_critical ("%s: %s", G_STRFUNC, error->message);
 }
+
+gboolean
+emer_aggregate_tally_clear (EmerAggregateTally  *self,
+                            GError             **error)
+{
+  g_return_val_if_fail (EMER_IS_AGGREGATE_TALLY (self), FALSE);
+  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+  return CHECK (sqlite3_exec (self->db,
+                              "DELETE FROM tally",
+                              NULL, NULL, NULL));
+}

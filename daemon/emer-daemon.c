@@ -1042,6 +1042,12 @@ on_permissions_changed (EmerPermissionsProvider *permissions_provider,
           g_clear_error (&error);
         }
 
+      if (!emer_aggregate_tally_clear (priv->aggregate_tally, &error))
+        {
+          g_warning ("failed to clear tally: %s", error->message);
+          g_clear_error (&error);
+        }
+
       /* If NULL (because no upload is in progress), this is a no-op. */
       g_cancellable_cancel (priv->current_upload_cancellable);
     }

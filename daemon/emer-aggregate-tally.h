@@ -81,4 +81,7 @@ void emer_aggregate_tally_iter_before (EmerAggregateTally *self,
                                        EmerTallyIterFunc   func,
                                        gpointer            user_data);
 
+gboolean emer_aggregate_tally_clear (EmerAggregateTally  *self,
+                                     GError             **error);
+
 G_END_DECLS

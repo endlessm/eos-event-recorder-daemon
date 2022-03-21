@@ -72,6 +72,7 @@ typedef struct _Fixture
   EmerNetworkSendProvider *mock_network_send_provider;
   EmerPermissionsProvider *mock_permissions_provider;
   EmerPersistentCache *mock_persistent_cache;
+  EmerAggregateTally *mock_aggregate_tally;
 
   GSubprocess *mock_server;
   gchar *server_uri;
@@ -849,6 +850,7 @@ create_test_object (Fixture *fixture)
                           fixture->mock_network_send_provider,
                           fixture->mock_permissions_provider,
                           fixture->mock_persistent_cache,
+                          fixture->mock_aggregate_tally,
                           100000 /* max bytes buffered */);
 }
 
@@ -877,6 +879,8 @@ setup_most (Fixture      *fixture,
     emer_network_send_provider_new (NULL /* path */);
   fixture->mock_permissions_provider = emer_permissions_provider_new ();
   fixture->mock_persistent_cache = NULL;
+  /* Not actually a mock! */
+  fixture->mock_aggregate_tally = emer_aggregate_tally_new (g_get_user_cache_dir ());
 }
 
 static void

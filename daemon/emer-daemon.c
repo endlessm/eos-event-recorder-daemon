@@ -195,6 +195,7 @@ enum
   PROP_PERMISSIONS_PROVIDER,
   PROP_PERSISTENT_CACHE_DIRECTORY,
   PROP_PERSISTENT_CACHE,
+  PROP_AGGREGATE_TALLY,
   PROP_MAX_BYTES_BUFFERED,
   NPROPS
 };
@@ -1151,6 +1152,14 @@ set_persistent_cache (EmerDaemon          *self,
 }
 
 static void
+set_aggregate_tally (EmerDaemon         *self,
+                     EmerAggregateTally *tally)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+  g_set_object (&priv->aggregate_tally, tally);
+}
+
+static void
 set_max_bytes_buffered (EmerDaemon *self,
                         gsize       max_bytes_buffered)
 {
@@ -1475,8 +1484,11 @@ emer_daemon_constructed (GObject *object)
   schedule_upload (self, environment);
   g_free (environment);
 
-  priv->aggregate_tally =
-    emer_aggregate_tally_new (priv->persistent_cache_directory ?: g_get_user_cache_dir ());
+  if (priv->aggregate_tally == NULL)
+    {
+      priv->aggregate_tally =
+        emer_aggregate_tally_new (priv->persistent_cache_directory ?: g_get_user_cache_dir ());
+    }
   buffer_past_aggregate_events (self);
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->constructed (object);
@@ -1495,6 +1507,10 @@ emer_daemon_get_property (GObject      *object,
     {
     case PROP_PERSISTENT_CACHE:
       g_value_set_object (value, priv->persistent_cache);
+      break;
+
+    case PROP_AGGREGATE_TALLY:
+      g_value_set_object (value, priv->aggregate_tally);
       break;
 
     default:
@@ -1542,6 +1558,10 @@ emer_daemon_set_property (GObject      *object,
 
     case PROP_PERSISTENT_CACHE:
       set_persistent_cache (self, g_value_get_object (value));
+      break;
+
+    case PROP_AGGREGATE_TALLY:
+      set_aggregate_tally (self, g_value_get_object (value));
       break;
 
     case PROP_MAX_BYTES_BUFFERED:
@@ -1726,6 +1746,21 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                          G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE |
                          G_PARAM_STATIC_STRINGS);
 
+  /*
+   * EmerDaemon:aggregate-tally: (nullable)
+   *
+   * An #EmerAggregateTally for tallying up aggregates until the period ends
+   * and they are enqueued for upload.
+   * If this property is not specified, a default will be created with
+   * emer_aggregate_tally_new().
+   */
+  emer_daemon_props[PROP_AGGREGATE_TALLY] =
+    g_param_spec_object ("aggregate-tally", "Aggregate tally",
+                         "Tallies up aggregate events until they are enqueued",
+                         EMER_TYPE_AGGREGATE_TALLY,
+                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE |
+                         G_PARAM_STATIC_STRINGS);
+
   /* Blurb string is good enough default documentation for this */
   emer_daemon_props[PROP_MAX_BYTES_BUFFERED] =
     g_param_spec_ulong ("max-bytes-buffered", "Max bytes buffered",
@@ -1824,6 +1859,9 @@ emer_daemon_get_tracking_id (EmerDaemon *self)
  * @persistent_cache: (allow-none): The #EmerPersistentCache in which to store
  *   metrics locally when they can't be sent over the network, or %NULL to use
  *   the default.
+ * @aggregate_tally: (allow-none): The #EmerAggregateTally in which to tally
+ *   aggregate events until they can be enqueued, or %NULL to use
+ *   the default.
  * @max_bytes_buffered: The maximum number of bytes of event data that may be
  *   stored in memory. Does not include overhead.
  *
@@ -1838,6 +1876,7 @@ emer_daemon_new_full (GRand                   *rand,
                       EmerNetworkSendProvider *network_send_provider,
                       EmerPermissionsProvider *permissions_provider,
                       EmerPersistentCache     *persistent_cache,
+                      EmerAggregateTally      *aggregate_tally,
                       gulong                   max_bytes_buffered)
 {
   return g_object_new (EMER_TYPE_DAEMON,
@@ -1848,6 +1887,7 @@ emer_daemon_new_full (GRand                   *rand,
                        "network-send-provider", network_send_provider,
                        "permissions-provider", permissions_provider,
                        "persistent-cache", persistent_cache,
+                       "aggregate-tally", aggregate_tally,
                        "max-bytes-buffered", max_bytes_buffered,
                        NULL);
 }

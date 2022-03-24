@@ -572,18 +572,16 @@ record_singulars (EmerDaemon *daemon)
 static void
 record_aggregates (EmerDaemon *daemon)
 {
-  emer_daemon_record_aggregate_event (daemon,
-                                      make_event_id_variant (),
-                                      "2021-08-27",
-                                      NUM_EVENTS,
-                                      FALSE,
-                                      g_variant_new_variant (g_variant_new_string ("This must be ignored.")));
-  emer_daemon_record_aggregate_event (daemon,
-                                      make_event_id_variant (),
-                                      "2021-08",
-                                      NUM_EVENTS,
-                                      TRUE,
-                                      make_auxiliary_payload ());
+  emer_daemon_enqueue_aggregate_event (daemon,
+                                       make_event_id_variant (),
+                                       "2021-08-27",
+                                       NUM_EVENTS,
+                                       NULL);
+  emer_daemon_enqueue_aggregate_event (daemon,
+                                       make_event_id_variant (),
+                                       "2021-08",
+                                       NUM_EVENTS,
+                                       make_auxiliary_payload ());
 }
 
 static void
@@ -884,11 +882,9 @@ setup_most (Fixture      *fixture,
 }
 
 static void
-setup (Fixture      *fixture,
-       gconstpointer unused)
+setup_persistent_cache (Fixture *fixture)
 {
   g_autoptr(GError) error = NULL;
-  setup_most (fixture, unused);
 
   /* directory and max_cache_size are ignored by mock object. */
   fixture->mock_persistent_cache =
@@ -897,7 +893,14 @@ setup (Fixture      *fixture,
                                FALSE /* reinitialize_cache */,
                                &error);
   g_assert_no_error (error);
+}
 
+static void
+setup (Fixture      *fixture,
+       gconstpointer unused)
+{
+  setup_most (fixture, unused);
+  setup_persistent_cache (fixture);
   create_test_object (fixture);
 }
 
@@ -1285,6 +1288,50 @@ test_daemon_crashes_on_non_key_file_error (Fixture      *fixture,
   g_test_trap_assert_stderr ("*oh no*");
 }
 
+/* Aggregate tally entries from a previous day & month should be
+ * submitted when starting up on a new day & month.
+ */
+static void
+test_daemon_submits_aggregates_from_tally_on_startup (Fixture       *fixture,
+                                                      gconstpointer  unused)
+{
+  const guint32 uid = 12345;
+  g_autoptr(GDateTime) the_past = g_date_time_new_local (2021, 8, 27, 0, 0, 0);
+  g_autoptr(GError) error = NULL;
+  uuid_t uuid;
+  g_assert_cmpint (uuid_parse (MEANINGLESS_EVENT, uuid), ==, 0);
+
+  emer_aggregate_tally_store_event (fixture->mock_aggregate_tally,
+                                    EMER_TALLY_DAILY_EVENTS,
+                                    uid,
+                                    uuid,
+                                    NULL,
+                                    NUM_EVENTS,
+                                    the_past,
+                                    &error);
+  g_assert_no_error (error);
+
+  emer_aggregate_tally_store_event (fixture->mock_aggregate_tally,
+                                    EMER_TALLY_MONTHLY_EVENTS,
+                                    uid,
+                                    uuid,
+                                    make_auxiliary_payload (),
+                                    NUM_EVENTS,
+                                    the_past,
+                                    &error);
+  g_assert_no_error (error);
+
+  setup_persistent_cache (fixture);
+  create_test_object (fixture);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_aggregates_received);
+  wait_for_upload_to_finish (fixture);
+}
+
+/* TODO: as above, but add events to the tally while the daemon is running
+ * then simulate the day & month changing.
+ */
+
 gint
 main (gint                argc,
       const gchar * const argv[])
@@ -1337,6 +1384,10 @@ main (gint                argc,
   g_test_add ("/daemon/crashes-on-non-key-file-error",
               Fixture, NULL, setup_most,
               test_daemon_crashes_on_non_key_file_error,
+              teardown);
+  g_test_add ("/daemon/submits-aggregates-from-tally/on-startup",
+              Fixture, NULL, setup_most,
+              test_daemon_submits_aggregates_from_tally_on_startup,
               teardown);
 
   return g_test_run ();

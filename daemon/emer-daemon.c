@@ -800,6 +800,8 @@ static GVariant *
 get_nullable_payload (GVariant *payload,
                       gboolean  has_payload)
 {
+  g_return_val_if_fail (payload != NULL, NULL);
+
   if (!has_payload)
     {
       g_variant_ref_sink (payload);
@@ -1219,12 +1221,11 @@ buffer_aggregate_event_to_queue (guint32     unix_user_id,
 {
   EmerDaemon *self = user_data;
 
-  emer_daemon_record_aggregate_event (self,
-                                      get_uuid_as_variant (event_uuid),
-                                      date,
-                                      counter,
-                                      payload != NULL,
-                                      payload);
+  emer_daemon_enqueue_aggregate_event (self,
+                                       get_uuid_as_variant (event_uuid),
+                                       date,
+                                       counter,
+                                       payload);
 
   return EMER_TALLY_ITER_CONTINUE;
 }
@@ -1934,14 +1935,13 @@ emer_daemon_record_singular_event (EmerDaemon *self,
 }
 
 void
-emer_daemon_record_aggregate_event (EmerDaemon *self,
-                                    GVariant   *event_id,
-                                    const char *period_start,
-                                    guint32     count,
-                                    gboolean    has_payload,
-                                    GVariant   *payload)
+emer_daemon_enqueue_aggregate_event (EmerDaemon *self,
+                                     GVariant   *event_id,
+                                     const char *period_start,
+                                     guint32     count,
+                                     GVariant   *payload)
 {
-  g_return_if_fail (g_variant_is_of_type (payload, G_VARIANT_TYPE_VARIANT));
+  g_return_if_fail (payload == NULL || g_variant_is_of_type (payload, G_VARIANT_TYPE_VARIANT));
 
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   g_autofree gchar *os_version = emer_image_id_provider_get_os_version();
@@ -1956,10 +1956,9 @@ emer_daemon_record_aggregate_event (EmerDaemon *self,
       return;
     }
 
-  GVariant *nullable_payload = get_nullable_payload (payload, has_payload);
   GVariant *aggregate =
     g_variant_new ("(@ayssum@v)", event_id, os_version, period_start, count,
-                   nullable_payload);
+                   payload);
   buffer_event (self, aggregate);
 }
 

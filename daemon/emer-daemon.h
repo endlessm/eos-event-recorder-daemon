@@ -94,11 +94,10 @@ void                     emer_daemon_record_singular_event    (EmerDaemon       
                                                                gboolean                 has_payload,
                                                                GVariant                *payload);
 
-void                     emer_daemon_record_aggregate_event   (EmerDaemon              *self,
+void                     emer_daemon_enqueue_aggregate_event  (EmerDaemon              *self,
                                                                GVariant                *event_id,
                                                                const char              *period_start,
                                                                guint32                  count,
-                                                               gboolean                 has_payload,
                                                                GVariant                *payload);
 
 void                     emer_daemon_record_event_sequence    (EmerDaemon              *self,

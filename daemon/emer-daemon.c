@@ -1899,6 +1899,8 @@ emer_daemon_record_singular_event (EmerDaemon *self,
                                    gboolean    has_payload,
                                    GVariant   *payload)
 {
+  g_return_if_fail (g_variant_is_of_type (payload, G_VARIANT_TYPE_VARIANT));
+
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   g_autofree gchar *os_version = emer_image_id_provider_get_os_version();
 
@@ -1926,7 +1928,7 @@ emer_daemon_record_singular_event (EmerDaemon *self,
 
   GVariant *nullable_payload = get_nullable_payload (payload, has_payload);
   GVariant *singular =
-    g_variant_new ("(@aysxmv)", event_id, os_version, relative_timestamp,
+    g_variant_new ("(@aysxm@v)", event_id, os_version, relative_timestamp,
                    nullable_payload);
   buffer_event (self, singular);
 }
@@ -1939,6 +1941,8 @@ emer_daemon_record_aggregate_event (EmerDaemon *self,
                                     gboolean    has_payload,
                                     GVariant   *payload)
 {
+  g_return_if_fail (g_variant_is_of_type (payload, G_VARIANT_TYPE_VARIANT));
+
   EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   g_autofree gchar *os_version = emer_image_id_provider_get_os_version();
 
@@ -1954,7 +1958,7 @@ emer_daemon_record_aggregate_event (EmerDaemon *self,
 
   GVariant *nullable_payload = get_nullable_payload (payload, has_payload);
   GVariant *aggregate =
-    g_variant_new ("(@ayssumv)", event_id, os_version, period_start, count,
+    g_variant_new ("(@ayssum@v)", event_id, os_version, period_start, count,
                    nullable_payload);
   buffer_event (self, aggregate);
 }

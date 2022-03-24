@@ -500,7 +500,7 @@ assert_singular_matches_variant (GVariant *actual_variant,
                                  GVariant *expected_auxiliary_payload)
 {
   GVariant *expected_variant =
-    g_variant_new ("(@aysxmv)", make_event_id_variant (),
+    g_variant_new ("(@aysxm@v)", make_event_id_variant (),
                    emer_image_id_provider_get_os_version(),
                    OFFSET_TIMESTAMP, expected_auxiliary_payload);
   assert_variants_equal (actual_variant, expected_variant);
@@ -512,7 +512,7 @@ assert_aggregate_matches_variant (GVariant   *actual_variant,
                                   GVariant   *expected_auxiliary_payload)
 {
   GVariant *expected_variant =
-    g_variant_new ("(@ayssumv)", make_event_id_variant (),
+    g_variant_new ("(@ayssum@v)", make_event_id_variant (),
                    emer_image_id_provider_get_os_version(),
                    expected_period_start,
                    NUM_EVENTS, expected_auxiliary_payload);
@@ -553,8 +553,8 @@ record_singulars (EmerDaemon *daemon)
                                      make_event_id_variant (),
                                      RELATIVE_TIMESTAMP,
                                      FALSE,
-                                     g_variant_new_string ("This must be ignored."));
-  GVariant *auxiliary_payload = g_variant_new_boolean (FALSE);
+                                     g_variant_new_variant (g_variant_new_string ("This must be ignored.")));
+  GVariant *auxiliary_payload = g_variant_new_variant (g_variant_new_boolean (FALSE));
   g_variant_ref_sink (auxiliary_payload);
   emer_daemon_record_singular_event (daemon,
                                      make_event_id_variant (),
@@ -577,7 +577,7 @@ record_aggregates (EmerDaemon *daemon)
                                       "2021-08-27",
                                       NUM_EVENTS,
                                       FALSE,
-                                      g_variant_new_string ("This must be ignored."));
+                                      g_variant_new_variant (g_variant_new_string ("This must be ignored.")));
   emer_daemon_record_aggregate_event (daemon,
                                       make_event_id_variant (),
                                       "2021-08",

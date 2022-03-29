@@ -72,6 +72,7 @@ typedef struct _Fixture
   EmerNetworkSendProvider *mock_network_send_provider;
   EmerPermissionsProvider *mock_permissions_provider;
   EmerPersistentCache *mock_persistent_cache;
+  EmerAggregateTally *mock_aggregate_tally;
 
   GSubprocess *mock_server;
   gchar *server_uri;
@@ -499,7 +500,7 @@ assert_singular_matches_variant (GVariant *actual_variant,
                                  GVariant *expected_auxiliary_payload)
 {
   GVariant *expected_variant =
-    g_variant_new ("(@aysxmv)", make_event_id_variant (),
+    g_variant_new ("(@aysxm@v)", make_event_id_variant (),
                    emer_image_id_provider_get_os_version(),
                    OFFSET_TIMESTAMP, expected_auxiliary_payload);
   assert_variants_equal (actual_variant, expected_variant);
@@ -511,7 +512,7 @@ assert_aggregate_matches_variant (GVariant   *actual_variant,
                                   GVariant   *expected_auxiliary_payload)
 {
   GVariant *expected_variant =
-    g_variant_new ("(@ayssumv)", make_event_id_variant (),
+    g_variant_new ("(@ayssum@v)", make_event_id_variant (),
                    emer_image_id_provider_get_os_version(),
                    expected_period_start,
                    NUM_EVENTS, expected_auxiliary_payload);
@@ -552,8 +553,8 @@ record_singulars (EmerDaemon *daemon)
                                      make_event_id_variant (),
                                      RELATIVE_TIMESTAMP,
                                      FALSE,
-                                     g_variant_new_string ("This must be ignored."));
-  GVariant *auxiliary_payload = g_variant_new_boolean (FALSE);
+                                     g_variant_new_variant (g_variant_new_string ("This must be ignored.")));
+  GVariant *auxiliary_payload = g_variant_new_variant (g_variant_new_boolean (FALSE));
   g_variant_ref_sink (auxiliary_payload);
   emer_daemon_record_singular_event (daemon,
                                      make_event_id_variant (),
@@ -571,18 +572,16 @@ record_singulars (EmerDaemon *daemon)
 static void
 record_aggregates (EmerDaemon *daemon)
 {
-  emer_daemon_record_aggregate_event (daemon,
-                                      make_event_id_variant (),
-                                      "2021-08-27",
-                                      NUM_EVENTS,
-                                      FALSE,
-                                      g_variant_new_string ("This must be ignored."));
-  emer_daemon_record_aggregate_event (daemon,
-                                      make_event_id_variant (),
-                                      "2021-08",
-                                      NUM_EVENTS,
-                                      TRUE,
-                                      make_auxiliary_payload ());
+  emer_daemon_enqueue_aggregate_event (daemon,
+                                       make_event_id_variant (),
+                                       "2021-08-27",
+                                       NUM_EVENTS,
+                                       NULL);
+  emer_daemon_enqueue_aggregate_event (daemon,
+                                       make_event_id_variant (),
+                                       "2021-08",
+                                       NUM_EVENTS,
+                                       make_auxiliary_payload ());
 }
 
 static void
@@ -849,6 +848,7 @@ create_test_object (Fixture *fixture)
                           fixture->mock_network_send_provider,
                           fixture->mock_permissions_provider,
                           fixture->mock_persistent_cache,
+                          fixture->mock_aggregate_tally,
                           100000 /* max bytes buffered */);
 }
 
@@ -877,14 +877,14 @@ setup_most (Fixture      *fixture,
     emer_network_send_provider_new (NULL /* path */);
   fixture->mock_permissions_provider = emer_permissions_provider_new ();
   fixture->mock_persistent_cache = NULL;
+  /* Not actually a mock! */
+  fixture->mock_aggregate_tally = emer_aggregate_tally_new (g_get_user_cache_dir ());
 }
 
 static void
-setup (Fixture      *fixture,
-       gconstpointer unused)
+setup_persistent_cache (Fixture *fixture)
 {
   g_autoptr(GError) error = NULL;
-  setup_most (fixture, unused);
 
   /* directory and max_cache_size are ignored by mock object. */
   fixture->mock_persistent_cache =
@@ -893,7 +893,14 @@ setup (Fixture      *fixture,
                                FALSE /* reinitialize_cache */,
                                &error);
   g_assert_no_error (error);
+}
 
+static void
+setup (Fixture      *fixture,
+       gconstpointer unused)
+{
+  setup_most (fixture, unused);
+  setup_persistent_cache (fixture);
   create_test_object (fixture);
 }
 
@@ -1281,6 +1288,50 @@ test_daemon_crashes_on_non_key_file_error (Fixture      *fixture,
   g_test_trap_assert_stderr ("*oh no*");
 }
 
+/* Aggregate tally entries from a previous day & month should be
+ * submitted when starting up on a new day & month.
+ */
+static void
+test_daemon_submits_aggregates_from_tally_on_startup (Fixture       *fixture,
+                                                      gconstpointer  unused)
+{
+  const guint32 uid = 12345;
+  g_autoptr(GDateTime) the_past = g_date_time_new_local (2021, 8, 27, 0, 0, 0);
+  g_autoptr(GError) error = NULL;
+  uuid_t uuid;
+  g_assert_cmpint (uuid_parse (MEANINGLESS_EVENT, uuid), ==, 0);
+
+  emer_aggregate_tally_store_event (fixture->mock_aggregate_tally,
+                                    EMER_TALLY_DAILY_EVENTS,
+                                    uid,
+                                    uuid,
+                                    NULL,
+                                    NUM_EVENTS,
+                                    the_past,
+                                    &error);
+  g_assert_no_error (error);
+
+  emer_aggregate_tally_store_event (fixture->mock_aggregate_tally,
+                                    EMER_TALLY_MONTHLY_EVENTS,
+                                    uid,
+                                    uuid,
+                                    make_auxiliary_payload (),
+                                    NUM_EVENTS,
+                                    the_past,
+                                    &error);
+  g_assert_no_error (error);
+
+  setup_persistent_cache (fixture);
+  create_test_object (fixture);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_aggregates_received);
+  wait_for_upload_to_finish (fixture);
+}
+
+/* TODO: as above, but add events to the tally while the daemon is running
+ * then simulate the day & month changing.
+ */
+
 gint
 main (gint                argc,
       const gchar * const argv[])
@@ -1333,6 +1384,10 @@ main (gint                argc,
   g_test_add ("/daemon/crashes-on-non-key-file-error",
               Fixture, NULL, setup_most,
               test_daemon_crashes_on_non_key_file_error,
+              teardown);
+  g_test_add ("/daemon/submits-aggregates-from-tally/on-startup",
+              Fixture, NULL, setup_most,
+              test_daemon_submits_aggregates_from_tally_on_startup,
               teardown);
 
   return g_test_run ();

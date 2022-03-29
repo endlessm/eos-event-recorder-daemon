@@ -26,6 +26,7 @@
 #include <gio/gio.h>
 #include <glib-object.h>
 
+#include "emer-aggregate-tally.h"
 #include "emer-event-recorder-server.h"
 #include "emer-machine-id-provider.h"
 #include "emer-network-send-provider.h"
@@ -84,6 +85,7 @@ EmerDaemon *             emer_daemon_new_full                 (GRand            
                                                                EmerNetworkSendProvider *network_send_provider,
                                                                EmerPermissionsProvider *permissions_provider,
                                                                EmerPersistentCache     *persistent_cache,
+                                                               EmerAggregateTally      *aggregate_tally,
                                                                gulong                   max_bytes_buffered);
 
 void                     emer_daemon_record_singular_event    (EmerDaemon              *self,
@@ -92,11 +94,10 @@ void                     emer_daemon_record_singular_event    (EmerDaemon       
                                                                gboolean                 has_payload,
                                                                GVariant                *payload);
 
-void                     emer_daemon_record_aggregate_event   (EmerDaemon              *self,
+void                     emer_daemon_enqueue_aggregate_event  (EmerDaemon              *self,
                                                                GVariant                *event_id,
                                                                const char              *period_start,
                                                                guint32                  count,
-                                                               gboolean                 has_payload,
                                                                GVariant                *payload);
 
 void                     emer_daemon_record_event_sequence    (EmerDaemon              *self,

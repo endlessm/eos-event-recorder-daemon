@@ -1480,17 +1480,17 @@ emer_daemon_constructed (GObject *object)
       g_free (network_send_path);
     }
 
-  gchar *environment =
-    emer_permissions_provider_get_environment (priv->permissions_provider);
-  schedule_upload (self, environment);
-  g_free (environment);
-
   if (priv->aggregate_tally == NULL)
     {
       priv->aggregate_tally =
         emer_aggregate_tally_new (priv->persistent_cache_directory ?: g_get_user_cache_dir ());
     }
   buffer_past_aggregate_events (self);
+
+  gchar *environment =
+    emer_permissions_provider_get_environment (priv->permissions_provider);
+  schedule_upload (self, environment);
+  g_free (environment);
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->constructed (object);
 }

@@ -931,6 +931,19 @@ test_daemon_new_succeeds (Fixture      *fixture,
 }
 
 static void
+test_daemon_new_succeeds_if_disabled (Fixture       *fixture,
+                                      gconstpointer  unused)
+{
+  emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider, FALSE);
+
+  EmerDaemon *daemon = emer_daemon_new (NULL /* persistent cache directory */,
+                                        fixture->mock_permissions_provider,
+                                        NULL /* machine id provider */);
+  g_assert_nonnull (daemon);
+  g_object_unref (daemon);
+}
+
+static void
 test_daemon_new_full_succeeds (Fixture      *fixture,
                                gconstpointer unused)
 {
@@ -1345,6 +1358,7 @@ main (gint                argc,
   g_test_add ((path), Fixture, NULL, setup, (test_func), teardown)
 
   ADD_DAEMON_TEST ("/daemon/new-succeeds", test_daemon_new_succeeds);
+  ADD_DAEMON_TEST ("/daemon/new-succeeds-if-disabled", test_daemon_new_succeeds_if_disabled);
   ADD_DAEMON_TEST ("/daemon/new-full-succeeds", test_daemon_new_full_succeeds);
   ADD_DAEMON_TEST ("/daemon/records-singulars", test_daemon_records_singulars);
   ADD_DAEMON_TEST ("/daemon/records-aggregates",

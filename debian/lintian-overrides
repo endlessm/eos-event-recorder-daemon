@@ -1,0 +1,10 @@
+# The metrics permissions config file has a non-standard owner (metrics:metrics)
+# and non-standard permissions (2775).
+eos-event-recorder-daemon binary: wrong-file-owner-uid-or-gid
+eos-event-recorder-daemon binary: setgid-binary
+
+# TODO: Override bad-distribution-in-changes-file once that's possible. See
+# https://groups.google.com/forum/#!msg/linux.debian.bugs.dist/6bDgg9-o8W4/Z1QRsHMGBLcJ.
+# FIXME: Remove TODO once unstable is added to
+# /usr/share/lintian/vendors/ubuntu/main/data/changes-file/known-dists. See
+# https://bugs.launchpad.net/ubuntu/+source/lintian/+bug/1303603.

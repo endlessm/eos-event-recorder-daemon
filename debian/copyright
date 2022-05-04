@@ -1,0 +1,5 @@
+Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: eos-event-recorder-daemon
+Upstream-Contact: Endless OS Team <maintainers@endlessos.org>
+Copyright: Copyright 2013–2022 Endless OS Foundation LLC
+License: GPL-2+

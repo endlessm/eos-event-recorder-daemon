@@ -475,22 +475,10 @@ assert_variants_equal (GVariant *actual_variant,
                        GVariant *expected_variant)
 {
   g_assert_nonnull (actual_variant);
+  g_assert_nonnull (expected_variant);
 
-  if (!g_variant_equal (actual_variant, expected_variant))
-    {
-      /* Assertion failures of the form
-       *   ERROR:../tests/daemon/test-daemon.c:495:assert_variants_equal:
-       *   'g_variant_equal (actual_variant, expected_variant)' should be TRUE
-       * are not very helpful -- you want to see the actual variants!
-       */
-      g_autofree gchar *actual_str = g_variant_print (actual_variant, TRUE);
-      g_autofree gchar *expected_str = g_variant_print (expected_variant, TRUE);
-      g_assert_cmpstr (actual_str, ==, expected_str);
+  g_assert_cmpvariant (actual_variant, expected_variant);
 
-      /* Should not be reached: */
-      g_error ("variants compared non-equal, but their type-annotated "
-               "stringified representations compared equal!");
-    }
   g_variant_unref (actual_variant);
   g_variant_unref (expected_variant);
 }

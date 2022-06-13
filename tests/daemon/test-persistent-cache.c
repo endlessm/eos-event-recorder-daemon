@@ -402,7 +402,7 @@ assert_variants_equal (GVariant **actual_variants,
     }
 
   for (gsize i = 0; i < num_variants; i++)
-    g_assert_true (g_variant_equal (actual_variants[i], expected_variants[i]));
+    g_assert_cmpvariant (actual_variants[i], expected_variants[i]);
 }
 
 static void

@@ -93,7 +93,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
 
     def test_opt_out_not_writable(self):
         """Make sure the Enabled property is not writable."""
-        with self.assertRaisesRegex(dbus.DBusException, 'org\.freedesktop\.DBus\.Error\.InvalidArgs'):
+        with self.assertRaisesRegex(dbus.DBusException, r'org\.freedesktop\.DBus\.Error\.InvalidArgs'):
             self.interface.Set(_METRICS_IFACE, 'Enabled', False,
                 dbus_interface=dbus.PROPERTIES_IFACE)
 
@@ -122,7 +122,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         """
         Make sure that accessing SetEnabled fails if not explicitly authorized.
         """
-        with self.assertRaisesRegex(dbus.DBusException, 'org\.freedesktop\.DBus\.Error\.AuthFailed'):
+        with self.assertRaisesRegex(dbus.DBusException, r'org\.freedesktop\.DBus\.Error\.AuthFailed'):
             self.interface.SetEnabled(True)
 
     def test_upload_doesnt_change_config(self):

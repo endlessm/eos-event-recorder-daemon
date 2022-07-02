@@ -2159,3 +2159,34 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
 
   return TRUE;
 }
+
+void
+emer_daemon_shutdown (EmerDaemon  *self)
+{
+  EmerDaemonPrivate *priv;
+  g_autoptr(GDateTime) now = NULL;
+  gint64 now_monotonic_us;
+  GHashTableIter iter;
+  gpointer value;
+
+  g_return_if_fail (EMER_IS_DAEMON (self));
+
+  priv = emer_daemon_get_instance_private (self);
+  now = g_date_time_new_now_local ();
+  now_monotonic_us = g_get_monotonic_time ();
+
+  g_hash_table_iter_init (&iter, priv->aggregate_timers);
+  while (g_hash_table_iter_next (&iter, NULL, &value))
+    {
+      EmerAggregateTimerImpl *timer_impl = EMER_AGGREGATE_TIMER_IMPL (value);
+      g_autoptr(GError) local_error = NULL;
+
+      if (!emer_aggregate_timer_impl_stop (timer_impl, now, now_monotonic_us, &local_error))
+        g_warning ("Failed to stop timer: %s", local_error->message);
+
+      g_hash_table_iter_remove (&iter);
+    }
+
+  g_assert (g_hash_table_size (priv->aggregate_timers) == 0);
+  g_hash_table_remove_all (priv->monitored_senders);
+}

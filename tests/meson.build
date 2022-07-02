@@ -102,3 +102,11 @@ test('test-opt-out-integration',
         'G_DEBUG': 'fatal-warnings',
     },
 )
+
+test('test-timers',
+    find_program('test-timers.py'),
+    env: {
+        'EMER_PATH': daemon.full_path(),
+        'G_DEBUG': 'fatal-warnings',
+    },
+)

@@ -127,6 +127,8 @@ gboolean                 emer_daemon_start_aggregate_timer    (EmerDaemon       
                                                                gchar                  **out_timer_object_path,
                                                                GError                 **error);
 
+void                     emer_daemon_shutdown                 (EmerDaemon              *self);
+
 G_END_DECLS
 
 #endif /* EMER_DAEMON_H */

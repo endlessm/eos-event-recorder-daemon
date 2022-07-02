@@ -31,7 +31,7 @@ import uuid
 
 import dbusmock
 
-_METRICS_IFACE = 'com.endlessm.Metrics.EventRecorderServer'
+_METRICS_IFACE = "com.endlessm.Metrics.EventRecorderServer"
 _TIMER_IFACE = "com.endlessm.Metrics.AggregateTimer"
 
 
@@ -39,6 +39,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
     """
     Makes sure the Enabled property can be set and retrieved.
     """
+
     @classmethod
     def setUpClass(klass):
         """Set up a mock system bus."""
@@ -49,31 +50,38 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         """Start the event recorder on the mock system bus."""
 
         # Put polkitd mocks onto the mock system bus.
-        (self.polkit_popen, self.polkit_obj) = self.spawn_server_template('polkitd')
+        (self.polkit_popen, self.polkit_obj) = self.spawn_server_template("polkitd")
 
         self.test_dir = tempfile.TemporaryDirectory(
-            prefix='eos-event-recorder-daemon-test.')
+            prefix="eos-event-recorder-daemon-test."
+        )
 
-        persistent_cache_directory = os.path.join(self.test_dir.name, 'cache')
-        persistent_cache_dir_arg = '--persistent-cache-directory=' + persistent_cache_directory
+        persistent_cache_directory = os.path.join(self.test_dir.name, "cache")
+        persistent_cache_dir_arg = (
+            "--persistent-cache-directory=" + persistent_cache_directory
+        )
 
-        self.config_file = os.path.join(self.test_dir.name, 'permissions.conf')
-        config_file_arg = '--config-file-path={}'.format(self.config_file)
+        self.config_file = os.path.join(self.test_dir.name, "permissions.conf")
+        config_file_arg = "--config-file-path={}".format(self.config_file)
 
-        daemon_path = os.environ.get('EMER_PATH', './eos-metrics-event-recorder')
-        self.daemon = subprocess.Popen([daemon_path,
-                                        persistent_cache_dir_arg,
-                                        config_file_arg])
+        daemon_path = os.environ.get("EMER_PATH", "./eos-metrics-event-recorder")
+        self.daemon = subprocess.Popen(
+            [daemon_path, persistent_cache_dir_arg, config_file_arg]
+        )
 
         # Wait for the service to come up
-        self.wait_for_bus_object('com.endlessm.Metrics',
-            '/com/endlessm/Metrics', system_bus=True)
+        self.wait_for_bus_object(
+            "com.endlessm.Metrics", "/com/endlessm/Metrics", system_bus=True
+        )
 
-        metrics_object = self.dbus_con.get_object('com.endlessm.Metrics',
-            '/com/endlessm/Metrics')
+        metrics_object = self.dbus_con.get_object(
+            "com.endlessm.Metrics", "/com/endlessm/Metrics"
+        )
         self.interface = dbus.Interface(metrics_object, _METRICS_IFACE)
 
-        self.db = sqlite3.connect(os.path.join(persistent_cache_directory, "metrics.db"))
+        self.db = sqlite3.connect(
+            os.path.join(persistent_cache_directory, "metrics.db")
+        )
 
     def tearDown(self):
         self.polkit_popen.terminate()
@@ -88,14 +96,18 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
 
     def test_opt_out_readable(self):
         """Make sure the Enabled property exists."""
-        self.interface.Get(_METRICS_IFACE, 'Enabled',
-            dbus_interface=dbus.PROPERTIES_IFACE)
+        self.interface.Get(
+            _METRICS_IFACE, "Enabled", dbus_interface=dbus.PROPERTIES_IFACE
+        )
 
     def test_opt_out_not_writable(self):
         """Make sure the Enabled property is not writable."""
-        with self.assertRaisesRegex(dbus.DBusException, r'org\.freedesktop\.DBus\.Error\.InvalidArgs'):
-            self.interface.Set(_METRICS_IFACE, 'Enabled', False,
-                dbus_interface=dbus.PROPERTIES_IFACE)
+        with self.assertRaisesRegex(
+            dbus.DBusException, r"org\.freedesktop\.DBus\.Error\.InvalidArgs"
+        ):
+            self.interface.Set(
+                _METRICS_IFACE, "Enabled", False, dbus_interface=dbus.PROPERTIES_IFACE
+            )
 
     def test_set_enabled_authorized(self):
         """
@@ -103,26 +115,34 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         succeeds when it is set to allowed.
         """
         # Check defaults look good and erase the file before our next change
-        self._check_config_file(enabled='true', uploading_enabled='false')
+        self._check_config_file(enabled="true", uploading_enabled="false")
 
-        self.polkit_obj.SetAllowed(['com.endlessm.Metrics.SetEnabled'])
+        self.polkit_obj.SetAllowed(["com.endlessm.Metrics.SetEnabled"])
         self.interface.SetEnabled(True)
-        self.assertTrue(self.interface.Get(_METRICS_IFACE, 'Enabled',
-            dbus_interface=dbus.PROPERTIES_IFACE))
+        self.assertTrue(
+            self.interface.Get(
+                _METRICS_IFACE, "Enabled", dbus_interface=dbus.PROPERTIES_IFACE
+            )
+        )
 
-        self._check_config_file(enabled='true', uploading_enabled='true')
+        self._check_config_file(enabled="true", uploading_enabled="true")
 
         self.interface.SetEnabled(False)
-        self.assertFalse(self.interface.Get(_METRICS_IFACE, 'Enabled',
-            dbus_interface=dbus.PROPERTIES_IFACE))
+        self.assertFalse(
+            self.interface.Get(
+                _METRICS_IFACE, "Enabled", dbus_interface=dbus.PROPERTIES_IFACE
+            )
+        )
 
-        self._check_config_file(enabled='false', uploading_enabled='false')
+        self._check_config_file(enabled="false", uploading_enabled="false")
 
     def test_set_enabled_unauthorized(self):
         """
         Make sure that accessing SetEnabled fails if not explicitly authorized.
         """
-        with self.assertRaisesRegex(dbus.DBusException, r'org\.freedesktop\.DBus\.Error\.AuthFailed'):
+        with self.assertRaisesRegex(
+            dbus.DBusException, r"org\.freedesktop\.DBus\.Error\.AuthFailed"
+        ):
             self.interface.SetEnabled(True)
 
     def test_upload_doesnt_change_config(self):
@@ -136,27 +156,33 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         be set to TRUE.
         """
         # Check defaults look good and erase the file before our next change
-        self._check_config_file(enabled='true', uploading_enabled='false')
+        self._check_config_file(enabled="true", uploading_enabled="false")
 
-        with self.assertRaisesRegex(dbus.exceptions.DBusException,
-                                    r'uploading is disabled') as context:
+        with self.assertRaisesRegex(
+            dbus.exceptions.DBusException, r"uploading is disabled"
+        ) as context:
             self.interface.UploadEvents()
-        self.assertEqual(context.exception.get_dbus_name(),
-                         "com.endlessm.Metrics.Error.UploadingDisabled")
+        self.assertEqual(
+            context.exception.get_dbus_name(),
+            "com.endlessm.Metrics.Error.UploadingDisabled",
+        )
 
-        self._check_config_file(enabled='true', uploading_enabled='false')
+        self._check_config_file(enabled="true", uploading_enabled="false")
 
     def test_UploadEvents_fails_if_disabled(self):
-        self.polkit_obj.SetAllowed(['com.endlessm.Metrics.SetEnabled'])
+        self.polkit_obj.SetAllowed(["com.endlessm.Metrics.SetEnabled"])
         self.interface.SetEnabled(False)
-        with self.assertRaisesRegex(dbus.exceptions.DBusException,
-                                    r'metrics system is disabled') as context:
+        with self.assertRaisesRegex(
+            dbus.exceptions.DBusException, r"metrics system is disabled"
+        ) as context:
             self.interface.UploadEvents()
-        self.assertEqual(context.exception.get_dbus_name(),
-                         "com.endlessm.Metrics.Error.MetricsDisabled")
+        self.assertEqual(
+            context.exception.get_dbus_name(),
+            "com.endlessm.Metrics.Error.MetricsDisabled",
+        )
 
     def test_clears_tally_when_disabled(self):
-        self.polkit_obj.SetAllowed(['com.endlessm.Metrics.SetEnabled'])
+        self.polkit_obj.SetAllowed(["com.endlessm.Metrics.SetEnabled"])
         self.interface.SetEnabled(True)
         event_id = uuid.UUID("350ac4ff-3026-4c25-9e7e-e8103b4fd5d8")
         monthly_event_id = uuid.uuid5(event_id, "monthly")
@@ -166,10 +192,12 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
             False,
             False,
         )
-        timer = self.dbus_con.get_object('com.endlessm.Metrics', timer_path)
+        timer = self.dbus_con.get_object("com.endlessm.Metrics", timer_path)
         timer.StopTimer(dbus_interface=_TIMER_IFACE)
 
-        rows = self.db.execute("select event_id from tally order by event_id asc").fetchall()
+        rows = self.db.execute(
+            "select event_id from tally order by event_id asc"
+        ).fetchall()
         self.assertEqual(rows, sorted([(event_id.bytes,), (monthly_event_id.bytes,)]))
 
         self.interface.SetEnabled(False)
@@ -177,7 +205,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         self.assertEqual(rows, [])
 
     def test_cancels_running_timer_when_disabled(self):
-        self.polkit_obj.SetAllowed(['com.endlessm.Metrics.SetEnabled'])
+        self.polkit_obj.SetAllowed(["com.endlessm.Metrics.SetEnabled"])
         self.interface.SetEnabled(True)
         event_id = uuid.UUID("350ac4ff-3026-4c25-9e7e-e8103b4fd5d8")
         timer_path = self.interface.StartAggregateTimer(
@@ -186,31 +214,36 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
             False,
             False,
         )
-        timer = self.dbus_con.get_object('com.endlessm.Metrics', timer_path)
+        timer = self.dbus_con.get_object("com.endlessm.Metrics", timer_path)
 
         self.interface.SetEnabled(False)
         with self.assertRaises(dbus.exceptions.DBusException) as context:
             timer.StopTimer(dbus_interface=_TIMER_IFACE)
 
-        self.assertEqual(context.exception.get_dbus_name(),
-                         "org.freedesktop.DBus.Error.UnknownMethod")
+        self.assertEqual(
+            context.exception.get_dbus_name(),
+            "org.freedesktop.DBus.Error.UnknownMethod",
+        )
 
         rows = self.db.execute("select event_id from tally").fetchall()
         self.assertEqual(rows, [])
 
     def test_StartAggregateEvent_fails_if_disabled(self):
-        self.polkit_obj.SetAllowed(['com.endlessm.Metrics.SetEnabled'])
+        self.polkit_obj.SetAllowed(["com.endlessm.Metrics.SetEnabled"])
         self.interface.SetEnabled(False)
-        with self.assertRaisesRegex(dbus.exceptions.DBusException,
-                                    r'metrics system is disabled') as context:
+        with self.assertRaisesRegex(
+            dbus.exceptions.DBusException, r"metrics system is disabled"
+        ) as context:
             self.interface.StartAggregateTimer(
                 0,
                 uuid.UUID("350ac4ff-3026-4c25-9e7e-e8103b4fd5d8").bytes,
                 False,
                 False,
             ),
-        self.assertEqual(context.exception.get_dbus_name(),
-                         "com.endlessm.Metrics.Error.MetricsDisabled")
+        self.assertEqual(
+            context.exception.get_dbus_name(),
+            "com.endlessm.Metrics.Error.MetricsDisabled",
+        )
 
     def _check_config_file(self, enabled, uploading_enabled):
         # the config file is written asynchronously by the daemon,
@@ -232,5 +265,5 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         os.unlink(self.config_file)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main(testRunner=taptestrunner.TAPTestRunner())

@@ -204,6 +204,68 @@ class TestRunningTimersOnShutdown(dbusmock.DBusTestCase):
             "org.freedesktop.DBus.Error.UnknownMethod",
         )
 
+    def test_two_overlapping_timers_from_same_client(self):
+        """
+        It can legitimately happen that the same client calls
+        StartAggregateTimer() twice with the same arguments before stopping
+        the first timer. The real-world example is gnome-shell having one timer
+        per running app. Here's the sequence of events:
+
+        - App A starts.
+          - Shell starts a timer
+            - Within the metrics client library, this begins an asynchronous
+              call (1) to StartAggregateTimer()
+        - App A quits.
+          - Shell stops that timer (at the C API level)
+            - Within the metrics client library, it can't call StopTimer() yet
+              because (1) hasn't returned yet. So it sets a flag to call it
+              when it can.
+        - App A starts again.
+          - Shell starts a timer
+            - Within the metrics client library, this begins an asynchronous
+              call (2) to StartAggregateTimer()
+
+        Now the daemon will handle call 1, returning a path p, and handle call
+        2, returning a path q. In turn, Shell will call p.StopTimer(). Some
+        time later, app A will quit again, and Shell will call q.StopTimer().
+        """
+        event_id = uuid.UUID("350ac4ff-3026-4c25-9e7e-e8103b4fd5d8")
+        monthly_event_id = uuid.uuid5(event_id, "monthly")
+        p = self.interface.StartAggregateTimer(
+            0,
+            event_id.bytes,
+            False,
+            False,
+        )
+        q = self.interface.StartAggregateTimer(
+            0,
+            event_id.bytes,
+            False,
+            False,
+        )
+
+        # No assertion about whether p and q are different object paths -- this
+        # is not guaranteed.
+
+        self.dbus_con.get_object("com.endlessm.Metrics", p).StopTimer(dbus_interface=_TIMER_IFACE)
+        # No assertion here about something having been stored in the database.
+        # One possible implementation is to refcount identical timers from the
+        # same client.
+        self.dbus_con.get_object("com.endlessm.Metrics", q).StopTimer(dbus_interface=_TIMER_IFACE)
+
+        rows = self.db.execute(
+            "select event_id, date, counter from tally order by event_id asc"
+        ).fetchall()
+        event_ids, dates, counters = zip(*rows)
+        self.assertEqual(
+            [uuid.UUID(bytes=x) for x in event_ids],
+            [event_id, monthly_event_id],
+        )
+        today = datetime.date.today()
+        self.assertEqual(dates, (f"{today:%Y-%m-%d}", f"{today:%Y-%m}"))
+        self.assertEqual(counters[0], counters[1])
+        self.assertGreaterEqual(counters[0], 0)
+
 
 if __name__ == "__main__":
     unittest.main(testRunner=taptestrunner.TAPTestRunner())

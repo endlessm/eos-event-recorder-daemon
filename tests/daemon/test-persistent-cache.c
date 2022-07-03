@@ -33,8 +33,6 @@
 #include "mock-circular-file.h"
 #include "shared/metrics-util.h"
 
-#define TEST_DIRECTORY "/tmp/metrics_testing/"
-
 #define TEST_SYSTEM_BOOT_ID_FILE "system_boot_id_file"
 #define TEST_CACHE_VERSION_FILE "local_version_file"
 
@@ -65,20 +63,26 @@
 
 // ---- Helper functions come first ----
 
+typedef struct {
+  const char *cache_dir;
+  char *boot_id_path;
+  char *cache_version_path;
+  char *boot_offset_path;
+} Fixture;
+
 static void
-write_mock_system_boot_id_file (void)
+write_mock_system_boot_id_file (Fixture *fixture)
 {
-  GFile *file = g_file_new_for_path (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
   GError *error = NULL;
-  g_file_replace_contents (file, FAKE_SYSTEM_BOOT_ID, BOOT_FILE_LENGTH, NULL,
-                           FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL,
-                           NULL, &error);
+  g_file_set_contents (fixture->boot_id_path,
+                       FAKE_SYSTEM_BOOT_ID,
+                       BOOT_FILE_LENGTH,
+                       &error);
   g_assert_no_error (error);
-  g_object_unref (file);
 }
 
 static void
-write_default_cache_version_key_file (void)
+write_default_cache_version_key_file (Fixture *fixture)
 {
   GKeyFile *key_file = g_key_file_new ();
   gboolean load_succeeded =
@@ -87,42 +91,47 @@ write_default_cache_version_key_file (void)
   g_assert_true (load_succeeded);
 
   gboolean save_succeeded =
-    g_key_file_save_to_file (key_file, TEST_DIRECTORY TEST_CACHE_VERSION_FILE, NULL);
+    g_key_file_save_to_file (key_file, fixture->cache_version_path, NULL);
   g_assert_true (save_succeeded);
   g_key_file_unref (key_file);
 }
 
 static void
-teardown (gboolean     *unused,
+teardown (Fixture      *fixture,
           gconstpointer dontuseme)
 {
-  g_unlink (TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE);
-  g_unlink (TEST_DIRECTORY TEST_CACHE_VERSION_FILE);
-  g_unlink (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
-  g_rmdir (TEST_DIRECTORY);
+  g_free (fixture->boot_id_path);
+  g_free (fixture->cache_version_path);
+  g_free (fixture->boot_offset_path);
 }
 
 static void
-setup (gboolean     *unused,
-       gconstpointer dontuseme)
+setup (Fixture       *fixture,
+       gconstpointer  dontuseme)
 {
-  teardown (unused, dontuseme);
-  g_mkdir (TEST_DIRECTORY, 0777); // All permissions are granted by 0777.
-  write_mock_system_boot_id_file ();
-  write_default_cache_version_key_file ();
+  fixture->cache_dir = g_get_user_cache_dir ();
+  fixture->boot_id_path = g_build_filename (fixture->cache_dir, TEST_SYSTEM_BOOT_ID_FILE, NULL);
+  fixture->cache_version_path = g_build_filename (fixture->cache_dir, TEST_CACHE_VERSION_FILE, NULL);
+  fixture->boot_offset_path = g_build_filename (fixture->cache_dir, BOOT_OFFSET_METADATA_FILE, NULL);
+
+  g_mkdir (fixture->cache_dir, 0755);
+
+  write_mock_system_boot_id_file (fixture);
+  write_default_cache_version_key_file (fixture);
 }
 
 static EmerPersistentCache *
-make_testing_cache_full (gboolean reinitialize_cache,
-                         GError **error)
+make_testing_cache_full (Fixture   *fixture,
+                         gboolean   reinitialize_cache,
+                         GError   **error)
 {
   g_autoptr(EmerBootIdProvider) boot_id_provider =
-    emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
+    emer_boot_id_provider_new_full (fixture->boot_id_path);
   g_autoptr(EmerCacheVersionProvider) cache_version_provider =
     emer_cache_version_provider_new (NULL);
 
   EmerPersistentCache *cache =
-    emer_persistent_cache_new_full (TEST_DIRECTORY, MAX_CACHE_SIZE,
+    emer_persistent_cache_new_full (fixture->cache_dir, MAX_CACHE_SIZE,
                                     boot_id_provider, cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL,
                                     reinitialize_cache, error);
@@ -130,10 +139,10 @@ make_testing_cache_full (gboolean reinitialize_cache,
 }
 
 static EmerPersistentCache *
-make_testing_cache (void)
+make_testing_cache (Fixture *fixture)
 {
   g_autoptr(GError) error = NULL;
-  EmerPersistentCache *cache = make_testing_cache_full (FALSE, &error);
+  EmerPersistentCache *cache = make_testing_cache_full (fixture, FALSE, &error);
 
   g_assert_no_error (error);
   g_assert_nonnull (cache);
@@ -146,12 +155,12 @@ make_testing_cache (void)
  * Keyfile should be unref'd via g_key_file_unref().
  */
 static GKeyFile *
-load_boot_offset_key_file (void)
+load_boot_offset_key_file (Fixture *fixture)
 {
   GKeyFile *boot_offset_key_file = g_key_file_new ();
   gboolean load_succeeded =
     g_key_file_load_from_file (boot_offset_key_file,
-                               TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE,
+                               fixture->boot_offset_path,
                                G_KEY_FILE_NONE,
                                NULL);
   g_assert_true (load_succeeded);
@@ -163,16 +172,17 @@ load_boot_offset_key_file (void)
  * given new_offset.
  */
 static void
-set_boot_offset_in_metadata_file (gint64 new_offset)
+set_boot_offset_in_metadata_file (Fixture *fixture,
+                                  gint64   new_offset)
 {
-  GKeyFile *boot_offset_key_file = load_boot_offset_key_file ();
+  GKeyFile *boot_offset_key_file = load_boot_offset_key_file (fixture);
 
   g_key_file_set_int64 (boot_offset_key_file, CACHE_TIMING_GROUP_NAME,
                         CACHE_BOOT_OFFSET_KEY, new_offset);
 
   gboolean save_succeeded =
     g_key_file_save_to_file (boot_offset_key_file,
-                             TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE, NULL);
+                             fixture->boot_offset_path, NULL);
   g_assert_true (save_succeeded);
   g_key_file_unref (boot_offset_key_file);
 }
@@ -181,16 +191,17 @@ set_boot_offset_in_metadata_file (gint64 new_offset)
  * Overwrites the metadata file's boot id with the given boot id.
  */
 static void
-set_boot_id_in_metadata_file (const gchar *boot_id)
+set_boot_id_in_metadata_file (Fixture     *fixture,
+                              const gchar *boot_id)
 {
-  GKeyFile *boot_offset_key_file = load_boot_offset_key_file ();
+  GKeyFile *boot_offset_key_file = load_boot_offset_key_file (fixture);
 
   g_key_file_set_string (boot_offset_key_file, CACHE_TIMING_GROUP_NAME,
                          CACHE_LAST_BOOT_ID_KEY, boot_id);
 
   gboolean save_succeeded =
     g_key_file_save_to_file (boot_offset_key_file,
-                             TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE, NULL);
+                             fixture->boot_offset_path, NULL);
   g_assert_true (save_succeeded);
   g_key_file_unref (boot_offset_key_file);
 }
@@ -199,9 +210,9 @@ set_boot_id_in_metadata_file (const gchar *boot_id)
  * Gets the stored offset from the metadata file.
  */
 static gint64
-read_offset (void)
+read_offset (Fixture *fixture)
 {
-  GKeyFile *boot_offset_key_file = load_boot_offset_key_file ();
+  GKeyFile *boot_offset_key_file = load_boot_offset_key_file (fixture);
   GError *error = NULL;
   gint64 stored_offset =
     g_key_file_get_int64 (boot_offset_key_file, CACHE_TIMING_GROUP_NAME,
@@ -216,25 +227,25 @@ read_offset (void)
  * Also ensures the reset value is 0.
  */
 static gboolean
-boot_offset_was_reset (void)
+boot_offset_was_reset (Fixture *fixture)
 {
-  GKeyFile *boot_offset_key_file = load_boot_offset_key_file ();
+  GKeyFile *boot_offset_key_file = load_boot_offset_key_file (fixture);
   GError *error = NULL;
   gboolean was_reset =
     g_key_file_get_boolean (boot_offset_key_file, CACHE_TIMING_GROUP_NAME,
                             CACHE_WAS_RESET_KEY, &error);
   g_key_file_unref (boot_offset_key_file);
   g_assert_no_error (error);
-  return was_reset && (read_offset() == 0);
+  return was_reset && (read_offset (fixture) == 0);
 }
 
 /*
  * Gets the stored relative time from the metadata file.
  */
 static gint64
-read_relative_time (void)
+read_relative_time (Fixture *fixture)
 {
-  GKeyFile *boot_offset_key_file = load_boot_offset_key_file ();
+  GKeyFile *boot_offset_key_file = load_boot_offset_key_file (fixture);
   GError *error = NULL;
   gint64 stored_offset =
     g_key_file_get_int64 (boot_offset_key_file, CACHE_TIMING_GROUP_NAME,
@@ -248,9 +259,9 @@ read_relative_time (void)
  * Gets the stored absolute time from the metadata file.
  */
 static gint64
-read_absolute_time (void)
+read_absolute_time (Fixture *fixture)
 {
-  GKeyFile *boot_offset_key_file = load_boot_offset_key_file ();
+  GKeyFile *boot_offset_key_file = load_boot_offset_key_file (fixture);
   GError *error = NULL;
   gint64 stored_offset =
     g_key_file_get_int64 (boot_offset_key_file, CACHE_TIMING_GROUP_NAME,
@@ -266,11 +277,12 @@ read_absolute_time (void)
  * subsequently generated timestamps. Returns FALSE otherwise.
  */
 static gboolean
-boot_timestamp_is_valid (gint64 previous_relative_time,
-                         gint64 previous_absolute_time)
+boot_timestamp_is_valid (Fixture *fixture,
+                         gint64   previous_relative_time,
+                         gint64   previous_absolute_time)
 {
-  gint64 stored_relative_time = read_relative_time ();
-  gint64 stored_absolute_time = read_absolute_time ();
+  gint64 stored_relative_time = read_relative_time (fixture);
+  gint64 stored_absolute_time = read_absolute_time (fixture);
 
   gint64 after_relative_time;
   gboolean get_succeeded =
@@ -502,15 +514,15 @@ assert_variants_removed (EmerPersistentCache *cache,
 /* ----- Actual Test Cases below ------ */
 
 static void
-test_persistent_cache_new (gboolean     *unused,
+test_persistent_cache_new (Fixture      *fixture,
                            gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
   g_object_unref (cache);
 }
 
 static void
-test_persistent_cache_cost (gboolean     *unused,
+test_persistent_cache_cost (Fixture      *fixture,
                             gconstpointer dontuseme)
 {
   GPtrArray *variants = make_many_variants ();
@@ -529,10 +541,10 @@ test_persistent_cache_cost (gboolean     *unused,
 }
 
 static void
-test_persistent_cache_store_none (gboolean     *unused,
+test_persistent_cache_store_none (Fixture      *fixture,
                                   gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
 
   assert_variants_stored (cache, NULL /* variants */, 0);
 
@@ -540,10 +552,10 @@ test_persistent_cache_store_none (gboolean     *unused,
 }
 
 static void
-test_persistent_cache_store_one (gboolean     *unused,
+test_persistent_cache_store_one (Fixture      *fixture,
                                  gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
 
   GVariant *variants[] = { make_variant (0) };
   gsize num_variants = G_N_ELEMENTS (variants);
@@ -553,10 +565,10 @@ test_persistent_cache_store_one (gboolean     *unused,
 }
 
 static void
-test_persistent_cache_store_many (gboolean     *unused,
+test_persistent_cache_store_many (Fixture      *fixture,
                                   gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
 
   GPtrArray *variants = make_many_variants ();
   assert_variants_stored (cache, (GVariant **) variants->pdata, variants->len);
@@ -566,16 +578,16 @@ test_persistent_cache_store_many (gboolean     *unused,
 }
 
 static void
-test_persistent_cache_store_when_full (gboolean     *unused,
+test_persistent_cache_store_when_full (Fixture      *fixture,
                                        gconstpointer dontuseme)
 {
   EmerBootIdProvider *boot_id_provider =
-    emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
+    emer_boot_id_provider_new_full (fixture->boot_id_path);
   EmerCacheVersionProvider *cache_version_provider =
     emer_cache_version_provider_new (NULL);
   GError *error = NULL;
   EmerPersistentCache *cache =
-    emer_persistent_cache_new_full (TEST_DIRECTORY, MAX_CACHE_SIZE,
+    emer_persistent_cache_new_full (fixture->cache_dir, MAX_CACHE_SIZE,
                                     boot_id_provider, cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL, FALSE,
                                     &error);
@@ -610,10 +622,10 @@ test_persistent_cache_store_when_full (gboolean     *unused,
 }
 
 static void
-test_persistent_cache_read_none (gboolean     *unused,
+test_persistent_cache_read_none (Fixture      *fixture,
                                  gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
 
   assert_variants_stored (cache, NULL /* variants */, 0);
   assert_variants_read (cache, NULL /* variants */, 0);
@@ -622,10 +634,10 @@ test_persistent_cache_read_none (gboolean     *unused,
 }
 
 static void
-test_persistent_cache_read_one (gboolean     *unused,
+test_persistent_cache_read_one (Fixture      *fixture,
                                 gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
 
   GVariant *variant = make_variant (0);
   g_variant_ref_sink (variant);
@@ -639,10 +651,10 @@ test_persistent_cache_read_one (gboolean     *unused,
 }
 
 static void
-test_persistent_cache_read_many (gboolean     *unused,
+test_persistent_cache_read_many (Fixture      *fixture,
                                  gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
 
   GPtrArray *variants = make_many_variants ();
 
@@ -654,19 +666,19 @@ test_persistent_cache_read_many (gboolean     *unused,
 }
 
 static void
-test_persistent_cache_read_when_empty (gboolean     *unused,
+test_persistent_cache_read_when_empty (Fixture      *fixture,
                                        gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
   assert_cache_is_empty (cache);
   g_object_unref (cache);
 }
 
 static void
-test_persistent_cache_has_more (gboolean     *unused,
+test_persistent_cache_has_more (Fixture      *fixture,
                                 gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
 
   assert_cache_is_empty (cache);
 
@@ -717,10 +729,10 @@ test_persistent_cache_has_more (gboolean     *unused,
 }
 
 static void
-test_persistent_cache_remove_none (gboolean     *unused,
+test_persistent_cache_remove_none (Fixture      *fixture,
                                    gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
 
   assert_variants_stored (cache, NULL /* variants */, 0);
   assert_variants_removed (cache, NULL /* variants */, 0);
@@ -730,10 +742,10 @@ test_persistent_cache_remove_none (gboolean     *unused,
 }
 
 static void
-test_persistent_cache_remove_one (gboolean     *unused,
+test_persistent_cache_remove_one (Fixture      *fixture,
                                   gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
 
   GVariant *variant = make_variant (0);
   g_variant_ref_sink (variant);
@@ -748,10 +760,10 @@ test_persistent_cache_remove_one (gboolean     *unused,
 }
 
 static void
-test_persistent_cache_remove_many (gboolean     *unused,
+test_persistent_cache_remove_many (Fixture      *fixture,
                                    gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
 
   GPtrArray *variants = make_many_variants ();
 
@@ -764,10 +776,10 @@ test_persistent_cache_remove_many (gboolean     *unused,
 }
 
 static void
-test_persistent_cache_remove_when_empty (gboolean     *unused,
+test_persistent_cache_remove_when_empty (Fixture      *fixture,
                                          gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
 
   assert_variants_removed (cache, NULL /* variants */, 0);
   assert_cache_is_empty (cache);
@@ -776,16 +788,16 @@ test_persistent_cache_remove_when_empty (gboolean     *unused,
 }
 
 static void
-test_persistent_cache_purges_when_out_of_date (gboolean     *unused,
+test_persistent_cache_purges_when_out_of_date (Fixture      *fixture,
                                                gconstpointer dontuseme)
 {
   EmerBootIdProvider *boot_id_provider =
-    emer_boot_id_provider_new_full (TEST_DIRECTORY TEST_SYSTEM_BOOT_ID_FILE);
+    emer_boot_id_provider_new_full (fixture->boot_id_path);
   EmerCacheVersionProvider *cache_version_provider =
     emer_cache_version_provider_new (NULL);
   GError *error = NULL;
   EmerPersistentCache *cache =
-    emer_persistent_cache_new_full (TEST_DIRECTORY, MAX_CACHE_SIZE,
+    emer_persistent_cache_new_full (fixture->cache_dir, MAX_CACHE_SIZE,
                                     boot_id_provider, cache_version_provider,
                                     TEST_UPDATE_OFFSET_INTERVAL, FALSE,
                                     &error);
@@ -813,7 +825,7 @@ test_persistent_cache_purges_when_out_of_date (gboolean     *unused,
   g_object_unref (cache_version_provider);
   g_object_unref (cache);
 
-  EmerPersistentCache *cache2 = make_testing_cache ();
+  EmerPersistentCache *cache2 = make_testing_cache (fixture);
   assert_cache_is_empty (cache2);
   g_object_unref (cache2);
 }
@@ -827,20 +839,20 @@ test_persistent_cache_purges_when_out_of_date (gboolean     *unused,
  * cached in memory to, 0.
  */
 static void
-test_persistent_cache_builds_boot_metadata_file (gboolean     *unused,
+test_persistent_cache_builds_boot_metadata_file (Fixture      *fixture,
                                                  gconstpointer dontuseme)
 {
   gint64 absolute_time, relative_time;
   g_assert_true (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time));
   g_assert_true (emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
 
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
 
-  gint64 offset = read_offset ();
+  gint64 offset = read_offset (fixture);
 
-  g_assert_true (boot_timestamp_is_valid (relative_time, absolute_time));
+  g_assert_true (boot_timestamp_is_valid (fixture, relative_time, absolute_time));
   g_assert_cmpint (offset, ==, 0);
-  g_assert_true (boot_offset_was_reset ());
+  g_assert_true (boot_offset_was_reset (fixture));
 
   g_object_unref (cache);
 }
@@ -854,12 +866,12 @@ test_persistent_cache_builds_boot_metadata_file (gboolean     *unused,
  * boot offset that should be approximately 0.
  */
 static void
-test_persistent_cache_computes_reasonable_offset (gboolean     *unused,
+test_persistent_cache_computes_reasonable_offset (Fixture      *fixture,
                                                   gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
-  gint64 first_offset = read_offset ();
-  g_assert_true (boot_offset_was_reset ());
+  EmerPersistentCache *cache = make_testing_cache (fixture);
+  gint64 first_offset = read_offset (fixture);
+  g_assert_true (boot_offset_was_reset (fixture));
 
   gint64 absolute_time, relative_time;
   g_assert_true (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time));
@@ -868,19 +880,19 @@ test_persistent_cache_computes_reasonable_offset (gboolean     *unused,
   g_object_unref (cache);
 
   // Mutate boot id directly because we cannot actually reboot in a test case.
-  set_boot_id_in_metadata_file (FAKE_BOOT_ID);
+  set_boot_id_in_metadata_file (fixture, FAKE_BOOT_ID);
 
-  EmerPersistentCache *cache2 = make_testing_cache ();
+  EmerPersistentCache *cache2 = make_testing_cache (fixture);
 
-  g_assert_true (boot_timestamp_is_valid (relative_time, absolute_time));
-  gint64 second_offset = read_offset ();
+  g_assert_true (boot_timestamp_is_valid (fixture, relative_time, absolute_time));
+  gint64 second_offset = read_offset (fixture);
   gint64 max_second_offset = first_offset + ACCEPTABLE_OFFSET_VARIANCE;
   gint64 min_second_offset = first_offset - ACCEPTABLE_OFFSET_VARIANCE;
   g_assert_cmpint (second_offset, <=, max_second_offset);
   g_assert_cmpint (second_offset, >=, min_second_offset);
 
   // This should not have simply reset the metadata file again.
-  g_assert_false (boot_offset_was_reset ());
+  g_assert_false (boot_offset_was_reset (fixture));
 
   g_object_unref (cache2);
 }
@@ -897,15 +909,15 @@ test_persistent_cache_computes_reasonable_offset (gboolean     *unused,
  * prompting it to detect the unchanged boot ID and preserve the boot offset.
  */
 static void
-test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean     *unused,
+test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (Fixture      *fixture,
                                                                     gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
 
-  g_assert_true (boot_offset_was_reset ());
+  g_assert_true (boot_offset_was_reset (fixture));
 
   g_object_unref (cache);
-  set_boot_id_in_metadata_file (FAKE_BOOT_ID);
+  set_boot_id_in_metadata_file (fixture, FAKE_BOOT_ID);
 
   gint64 relative_time;
   g_assert_true (emtr_util_get_current_time (CLOCK_BOOTTIME, &relative_time));
@@ -913,18 +925,18 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
   g_assert_true (emtr_util_get_current_time (CLOCK_REALTIME, &absolute_time));
 
   // This call should have to compute the boot offset itself.
-  EmerPersistentCache *cache2 = make_testing_cache ();
+  EmerPersistentCache *cache2 = make_testing_cache (fixture);
 
-  g_assert_true (boot_timestamp_is_valid (relative_time, absolute_time));
-  gint64 second_offset = read_offset ();
+  g_assert_true (boot_timestamp_is_valid (fixture, relative_time, absolute_time));
+  gint64 second_offset = read_offset (fixture);
 
   // This should not have simply reset the metadata file again.
-  g_assert_false (boot_offset_was_reset ());
+  g_assert_false (boot_offset_was_reset (fixture));
 
   g_object_unref (cache2);
-  EmerPersistentCache *cache3 = make_testing_cache ();
+  EmerPersistentCache *cache3 = make_testing_cache (fixture);
 
-  gint64 third_offset = read_offset ();
+  gint64 third_offset = read_offset (fixture);
   g_assert_cmpint (third_offset, ==, second_offset);
 
   g_object_unref (cache3);
@@ -935,10 +947,10 @@ test_persistent_cache_does_not_compute_offset_when_boot_id_is_same (gboolean    
  * offset on disk between calls to the same instance of a persistent cache.
  */
 static void
-test_persistent_cache_reads_cached_boot_offset_when_file_changed (gboolean     *unused,
+test_persistent_cache_reads_cached_boot_offset_when_file_changed (Fixture      *fixture,
                                                                   gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
 
   gint64 first_offset;
   GError *error = NULL;
@@ -951,7 +963,7 @@ test_persistent_cache_reads_cached_boot_offset_when_file_changed (gboolean     *
    * This value should never be read because the persistent cache should read
    * from its in-memory cache instead.
    */
-  set_boot_offset_in_metadata_file (FAKE_BOOT_OFFSET);
+  set_boot_offset_in_metadata_file (fixture, FAKE_BOOT_OFFSET);
 
   gint64 second_offset;
 
@@ -976,10 +988,10 @@ test_persistent_cache_reads_cached_boot_offset_when_file_changed (gboolean     *
  * test_persistent_cache_reads_cached_boot_offset_when_file_changed().
  */
 static void
-test_persistent_cache_reads_cached_boot_offset_when_file_missing (gboolean     *unused,
+test_persistent_cache_reads_cached_boot_offset_when_file_missing (Fixture      *fixture,
                                                                   gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
 
   gint64 first_offset;
   GError *error = NULL;
@@ -989,7 +1001,7 @@ test_persistent_cache_reads_cached_boot_offset_when_file_missing (gboolean     *
   g_assert_true (get_succeeded);
 
   // Remove the boot offset file.
-  g_assert_cmpint (g_unlink (TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE), ==, 0);
+  g_assert_cmpint (g_unlink (fixture->boot_offset_path), ==, 0);
 
   gint64 second_offset;
 
@@ -1009,13 +1021,13 @@ test_persistent_cache_reads_cached_boot_offset_when_file_missing (gboolean     *
  * timestamps in the metadata file.
  */
 static void
-test_persistent_cache_updates_timestamps_on_finalize (gboolean     *unused,
+test_persistent_cache_updates_timestamps_on_finalize (Fixture      *fixture,
                                                       gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
 
-  gint64 relative_time = read_relative_time ();
-  gint64 absolute_time = read_absolute_time ();
+  gint64 relative_time = read_relative_time (fixture);
+  gint64 absolute_time = read_absolute_time (fixture);
 
   // Make a little time pass.
   g_usleep (75000); // 0.075 seconds
@@ -1024,8 +1036,8 @@ test_persistent_cache_updates_timestamps_on_finalize (gboolean     *unused,
   g_object_unref (cache);
 
   // These timestamps should have increased.
-  g_assert_cmpint (relative_time, <, read_relative_time ());
-  g_assert_cmpint (absolute_time, <, read_absolute_time ());
+  g_assert_cmpint (relative_time, <, read_relative_time (fixture));
+  g_assert_cmpint (absolute_time, <, read_absolute_time (fixture));
 }
 
 /*
@@ -1033,16 +1045,16 @@ test_persistent_cache_updates_timestamps_on_finalize (gboolean     *unused,
  * one isn't found.
  */
 static void
-test_persistent_cache_can_build_boot_metadata_file (gboolean     *unused,
+test_persistent_cache_can_build_boot_metadata_file (Fixture      *fixture,
                                                     gconstpointer dontuseme)
 {
-  EmerPersistentCache *cache = make_testing_cache ();
+  EmerPersistentCache *cache = make_testing_cache (fixture);
   g_object_unref (cache);
 
   // Remove the boot offset file.
-  g_assert_cmpint (g_unlink (TEST_DIRECTORY BOOT_OFFSET_METADATA_FILE), ==, 0);
+  g_assert_cmpint (g_unlink (fixture->boot_offset_path), ==, 0);
 
-  cache = make_testing_cache ();
+  cache = make_testing_cache (fixture);
 
   GError *error = NULL;
   gboolean get_succeeded =
@@ -1052,14 +1064,14 @@ test_persistent_cache_can_build_boot_metadata_file (gboolean     *unused,
   g_assert_true (get_succeeded);
 
   // The previous request should have reset the metadata file.
-  g_assert_true (boot_offset_was_reset ());
+  g_assert_true (boot_offset_was_reset (fixture));
 
   g_object_unref (cache);
 }
 
 /* Ensures that errors from emer_circular_file_new() are propagated. */
 static void
-test_persistent_cache_propagates_circular_file_error (gboolean     *unused,
+test_persistent_cache_propagates_circular_file_error (Fixture      *fixture,
                                                       gconstpointer dontuseme)
 {
   g_autoptr(GError) construct_error =
@@ -1069,7 +1081,7 @@ test_persistent_cache_propagates_circular_file_error (gboolean     *unused,
 
   mock_circular_file_set_construct_error (construct_error);
 
-  cache = make_testing_cache_full (FALSE, &error);
+  cache = make_testing_cache_full (fixture, FALSE, &error);
   g_assert_null (cache);
   g_assert_error (error, construct_error->domain, construct_error->code);
 
@@ -1080,13 +1092,13 @@ test_persistent_cache_propagates_circular_file_error (gboolean     *unused,
  * emer_circular_file_new().
  */
 static void
-test_persistent_cache_propagates_reinitialize (gboolean     *unused,
+test_persistent_cache_propagates_reinitialize (Fixture      *fixture,
                                                gconstpointer dontuseme)
 {
   g_autoptr(GError) error = NULL;
   EmerPersistentCache *cache = NULL;
 
-  cache = make_testing_cache_full (TRUE, &error);
+  cache = make_testing_cache_full (fixture, TRUE, &error);
   g_assert_no_error (error);
   g_assert_nonnull (cache);
 
@@ -1097,11 +1109,10 @@ gint
 main (gint                argc,
       const gchar * const argv[])
 {
-  g_test_init (&argc, (gchar ***) &argv, NULL);
+  g_test_init (&argc, (gchar ***) &argv, G_TEST_OPTION_ISOLATE_DIRS, NULL);
 
-// We are using a gboolean as a fixture type, but it will go unused.
 #define ADD_CACHE_TEST_FUNC(path, func) \
-  g_test_add((path), gboolean, NULL, setup, (func), teardown)
+  g_test_add((path), Fixture, NULL, setup, (func), teardown)
 
   ADD_CACHE_TEST_FUNC ("/persistent-cache/new", test_persistent_cache_new);
   ADD_CACHE_TEST_FUNC ("/persistent-cache/cost", test_persistent_cache_cost);

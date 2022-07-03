@@ -1326,6 +1326,23 @@ schedule_next_midnight_tick (EmerDaemon *self)
   priv->current_aggregate_tally_date = g_date_time_ref (now);
 }
 
+static void
+remove_timer (EmerDaemon             *self,
+              EmerAggregateTimerImpl *timer_impl)
+{
+  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+  const gchar *cache_key;
+
+  cache_key = emer_aggregate_timer_impl_get_cache_key (timer_impl);
+  if (!g_hash_table_remove (priv->aggregate_timers, cache_key))
+    {
+      g_warning ("Stopped timer %s %p was not in the set of %d running timers",
+                 cache_key,
+                 timer_impl,
+                 g_hash_table_size (priv->aggregate_timers));
+    }
+}
+
 static gboolean
 on_timer_stopped_cb (EmerAggregateTimer     *timer,
                      GDBusMethodInvocation  *invocation,
@@ -1338,7 +1355,6 @@ on_timer_stopped_cb (EmerAggregateTimer     *timer,
   g_autoptr(GError) error = NULL;
   const gchar *sender_name;
   gint64 now_monotonic_us;
-  const gchar *cache_key;
 
   if (!emer_aggregate_timer_impl_pop_run_count (timer_impl))
     {
@@ -1362,9 +1378,7 @@ on_timer_stopped_cb (EmerAggregateTimer     *timer,
   if (sender_data->aggregate_timers->len == 0)
     g_hash_table_remove (priv->monitored_senders, sender_name);
 
-  cache_key = emer_aggregate_timer_impl_get_cache_key (timer_impl);
-  if (!g_hash_table_remove (priv->aggregate_timers, cache_key))
-    g_warning ("Stopped timer was not in the set of running timers");
+  remove_timer (self, timer_impl);
 
   return TRUE;
 }
@@ -1402,8 +1416,7 @@ sender_name_vanished_cb (GDBusConnection *connection,
         g_warning ("Error stopping aggregate timer after sender disappeared: %s",
                    error->message);
 
-      if (!g_hash_table_remove (priv->aggregate_timers, timer_impl))
-        g_warning ("Stopped timer was not in the set of running timers");
+      remove_timer (self, timer_impl);
     }
 
   g_hash_table_remove (priv->monitored_senders, sender_name);

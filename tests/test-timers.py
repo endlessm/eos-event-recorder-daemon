@@ -30,6 +30,11 @@ import uuid
 
 import dbusmock
 
+from dbus.mainloop.glib import DBusGMainLoop
+from gi.repository import GLib
+
+DBusGMainLoop(set_as_default=True)
+
 _METRICS_IFACE = "com.endlessm.Metrics.EventRecorderServer"
 _TIMER_IFACE = "com.endlessm.Metrics.AggregateTimer"
 
@@ -125,6 +130,79 @@ class TestRunningTimersOnShutdown(dbusmock.DBusTestCase):
         self.assertEqual(dates, (f"{today:%Y-%m-%d}", f"{today:%Y-%m}"))
         self.assertEqual(counters[0], counters[1])
         self.assertGreaterEqual(counters[0], 0)
+
+    def test_timer_saved_after_client_disconnects(self):
+        """
+        If a client starts a timer, then disconnects from the bus without
+        stopping that timer, the daemon should notice the client has gone
+        away and save its running timer.
+        """
+        # Get a fresh connection to the (mock) system bus.
+        bus = self.get_dbus(system_bus=True)
+        self.assertIsNot(self.dbus_con, bus)
+
+        # On the fresh connection, start a timer.
+        metrics_object = bus.get_object("com.endlessm.Metrics", "/com/endlessm/Metrics")
+        interface = dbus.Interface(metrics_object, _METRICS_IFACE)
+        event_id = uuid.UUID("350ac4ff-3026-4c25-9e7e-e8103b4fd5d8")
+        monthly_event_id = uuid.uuid5(event_id, "monthly")
+        timer_path = interface.StartAggregateTimer(
+            0,
+            event_id.bytes,
+            False,
+            False,
+        )
+
+        # Close that connection, and wait to be told by the D-Bus daemon that
+        # it has happened.
+        loop = GLib.MainLoop()
+
+        def name_owner_changed_cb(owner):
+            loop.quit()
+
+        watch = self.dbus_con.watch_name_owner(
+            bus.get_unique_name(),
+            name_owner_changed_cb,
+        )
+        bus.close()
+        loop.run()
+
+        # We know that the D-Bus daemon has sent the NameOwnerChanged signal
+        # to all interested clients. In order to be sure that the daemon has
+        # received & processed it, send a message to the daemon and wait for the
+        # reply. When we receive the reply, we know that the daemon has
+        # processed every earlier message from the bus, including
+        # NameOwnerChanged.
+        self.metrics_object.Get(
+            _METRICS_IFACE, "Enabled", dbus_interface=dbus.PROPERTIES_IFACE
+        )
+
+        # By now we are sure that the daemon has received and processed the
+        # NameOwnerChanged signal that notifies it that a client with a running
+        # timer has disconnected. Check that it has saved its in-progress timer
+        # to the database.
+        rows = self.db.execute(
+            "select event_id, date, counter from tally order by event_id asc"
+        ).fetchall()
+        event_ids, dates, counters = zip(*rows)
+        self.assertEqual(
+            [uuid.UUID(bytes=x) for x in event_ids],
+            [event_id, monthly_event_id],
+        )
+        today = datetime.date.today()
+        self.assertEqual(dates, (f"{today:%Y-%m-%d}", f"{today:%Y-%m}"))
+        self.assertEqual(counters[0], counters[1])
+        self.assertGreaterEqual(counters[0], 0)
+
+        # And that the timer has been stopped.
+        timer = self.dbus_con.get_object("com.endlessm.Metrics", timer_path)
+        with self.assertRaises(dbus.exceptions.DBusException) as context:
+            timer.StopTimer(dbus_interface=_TIMER_IFACE)
+
+        self.assertEqual(
+            context.exception.get_dbus_name(),
+            "org.freedesktop.DBus.Error.UnknownMethod",
+        )
 
 
 if __name__ == "__main__":

@@ -22,14 +22,15 @@ import gzip
 import http.server
 import sys
 
+
 class PrintingHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
     def do_PUT(self):
         print(self.path, flush=True)
 
-        content_encoding = self.headers['X-Endless-Content-Encoding']
+        content_encoding = self.headers["X-Endless-Content-Encoding"]
         print(content_encoding, flush=True)
 
-        content_length = int(self.headers['Content-Length'])
+        content_length = int(self.headers["Content-Length"])
         compressed_request_body = self.rfile.read(content_length)
         decompressed_request_body = gzip.decompress(compressed_request_body)
         print(len(decompressed_request_body), flush=True)
@@ -41,13 +42,15 @@ class PrintingHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(status_code)
         self.end_headers()
 
+
 # A metrics server that simply prints the requests it receives to stdout
 class MockServer(http.server.HTTPServer):
     def __init__(self):
-        SERVER_ADDRESS = ('localhost', 0)
+        SERVER_ADDRESS = ("localhost", 0)
         super().__init__(SERVER_ADDRESS, PrintingHTTPRequestHandler)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     mock_server = MockServer()
     print(mock_server.server_port, flush=True)
     mock_server.serve_forever()

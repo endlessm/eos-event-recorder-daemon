@@ -272,10 +272,20 @@ on_authorize_method_check (GDBusInterfaceSkeleton *interface,
   return authorized;
 }
 
+typedef struct {
+  EmerDaemon *daemon;
+  GMainLoop  *main_loop;
+} ShutdownSignalData;
+
 static gboolean
-quit_main_loop (GMainLoop *main_loop)
+quit_main_loop (ShutdownSignalData *data)
 {
-  g_main_loop_quit (main_loop);
+  g_assert (data != NULL);
+  g_assert (EMER_IS_DAEMON (data->daemon));
+  g_assert (data->main_loop != NULL);
+
+  emer_daemon_shutdown (data->daemon);
+  g_main_loop_quit (data->main_loop);
   return G_SOURCE_REMOVE;
 }
 
@@ -449,13 +459,14 @@ main (gint                argc,
     return EXIT_FAILURE;
 
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
+  ShutdownSignalData data = { daemon, main_loop };
 
   // Shut down on any of these signals.
-  g_unix_signal_add (SIGHUP, (GSourceFunc) quit_main_loop, main_loop);
-  g_unix_signal_add (SIGINT, (GSourceFunc) quit_main_loop, main_loop);
-  g_unix_signal_add (SIGTERM, (GSourceFunc) quit_main_loop, main_loop);
-  g_unix_signal_add (SIGUSR1, (GSourceFunc) quit_main_loop, main_loop);
-  g_unix_signal_add (SIGUSR2, (GSourceFunc) quit_main_loop, main_loop);
+  g_unix_signal_add (SIGHUP, (GSourceFunc) quit_main_loop, &data);
+  g_unix_signal_add (SIGINT, (GSourceFunc) quit_main_loop, &data);
+  g_unix_signal_add (SIGTERM, (GSourceFunc) quit_main_loop, &data);
+  g_unix_signal_add (SIGUSR1, (GSourceFunc) quit_main_loop, &data);
+  g_unix_signal_add (SIGUSR2, (GSourceFunc) quit_main_loop, &data);
 
   guint name_id = g_bus_own_name (G_BUS_TYPE_SYSTEM, "com.endlessm.Metrics",
                                   G_BUS_NAME_OWNER_FLAGS_NONE,

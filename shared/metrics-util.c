@@ -20,6 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "metrics-util.h"
 
 #include <byteswap.h>
@@ -59,17 +60,10 @@ swap_bytes_if_big_endian (GVariant *variant)
   return g_variant_ref_sink (variant);
 }
 
-/*
- * Initializes the given uuid_builder and populates it with the contents of
- * uuid.
- */
-void
-get_uuid_builder (uuid_t           uuid,
-                  GVariantBuilder *uuid_builder)
+GVariant *
+get_uuid_as_variant (uuid_t uuid)
 {
-  g_variant_builder_init (uuid_builder, G_VARIANT_TYPE_BYTESTRING);
-  for (size_t i = 0; i < UUID_LENGTH; ++i)
-    g_variant_builder_add (uuid_builder, "y", uuid[i]);
+  return g_variant_new_fixed_array (G_VARIANT_TYPE_BYTE, uuid, UUID_LENGTH, sizeof (uuid[0]));
 }
 
 GVariant *

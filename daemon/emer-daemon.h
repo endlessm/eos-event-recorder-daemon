@@ -26,6 +26,8 @@
 #include <gio/gio.h>
 #include <glib-object.h>
 
+#include "emer-aggregate-tally.h"
+#include "emer-event-recorder-server.h"
 #include "emer-machine-id-provider.h"
 #include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
@@ -83,6 +85,7 @@ EmerDaemon *             emer_daemon_new_full                 (GRand            
                                                                EmerNetworkSendProvider *network_send_provider,
                                                                EmerPermissionsProvider *permissions_provider,
                                                                EmerPersistentCache     *persistent_cache,
+                                                               EmerAggregateTally      *aggregate_tally,
                                                                gulong                   max_bytes_buffered);
 
 void                     emer_daemon_record_singular_event    (EmerDaemon              *self,
@@ -91,15 +94,14 @@ void                     emer_daemon_record_singular_event    (EmerDaemon       
                                                                gboolean                 has_payload,
                                                                GVariant                *payload);
 
-void                     emer_daemon_record_aggregate_event   (EmerDaemon              *self,
-                                                               guint32                  user_id,
+void                     emer_daemon_enqueue_aggregate_event  (EmerDaemon              *self,
                                                                GVariant                *event_id,
-                                                               gint64                   count,
-                                                               gint64                   relative_timestamp,
-                                                               gboolean                 has_payload,
+                                                               const char              *period_start,
+                                                               guint32                  count,
                                                                GVariant                *payload);
 
 void                     emer_daemon_record_event_sequence    (EmerDaemon              *self,
+
                                                                guint32                  user_id,
                                                                GVariant                *event_id,
                                                                GVariant                *events);
@@ -114,6 +116,18 @@ gboolean                 emer_daemon_upload_events_finish     (EmerDaemon       
 gchar *                  emer_daemon_get_tracking_id          (EmerDaemon              *self);
 
 EmerPermissionsProvider *emer_daemon_get_permissions_provider (EmerDaemon              *self);
+
+gboolean                 emer_daemon_start_aggregate_timer    (EmerDaemon              *self,
+                                                               GDBusConnection         *connection,
+                                                               const gchar             *sender_name,
+                                                               guint32                  unix_user_id,
+                                                               GVariant                *event_id,
+                                                               gboolean                 has_payload,
+                                                               GVariant                *payload,
+                                                               gchar                  **out_timer_object_path,
+                                                               GError                 **error);
+
+void                     emer_daemon_shutdown                 (EmerDaemon              *self);
 
 G_END_DECLS
 

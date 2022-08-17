@@ -20,6 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "emer-permissions-provider.h"
 #include "mock-permissions-provider.h"
 
@@ -100,6 +101,15 @@ emer_permissions_provider_get_uploading_enabled (EmerPermissionsProvider *self)
 gchar *
 emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
 {
+  /* The real class emits these signals whenever this function is called,
+   * regardless of whether the values have changed. This weird behaviour
+   * led to a bug where the daemon would crash on startup if it was disabled.
+   *
+   * Replicate this behaviour here.
+   */
+  g_signal_emit_by_name (self, "notify::daemon-enabled", NULL);
+  g_signal_emit_by_name (self, "notify::uploading-enabled", NULL);
+
   return g_strdup ("test");
 }
 

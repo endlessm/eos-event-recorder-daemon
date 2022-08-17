@@ -20,6 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "emer-daemon.h"
 
 #include <signal.h>
@@ -50,10 +51,8 @@
 #define MOCK_SERVER_PATH TEST_DIR "daemon/mock-server.py"
 
 #define MEANINGLESS_EVENT "350ac4ff-3026-4c25-9e7e-e8103b4fd5d8"
-#define CACHE_METADATA_IS_CORRUPT_EVENT_ID "f0e8a206-3bc2-405e-90d0-ef6fe6dd7edc"
 
-#define USER_ID 4200u
-#define NUM_EVENTS G_GINT64_CONSTANT (101)
+#define NUM_EVENTS 101u
 #define RELATIVE_TIMESTAMP G_GINT64_CONSTANT (123456789)
 #define OFFSET_TIMESTAMP (RELATIVE_TIMESTAMP + BOOT_TIME_OFFSET)
 
@@ -73,6 +72,7 @@ typedef struct _Fixture
   EmerNetworkSendProvider *mock_network_send_provider;
   EmerPermissionsProvider *mock_permissions_provider;
   EmerPersistentCache *mock_persistent_cache;
+  EmerAggregateTally *mock_aggregate_tally;
 
   GSubprocess *mock_server;
   gchar *server_uri;
@@ -383,9 +383,7 @@ make_variant_for_event_id (const gchar *event_id)
 {
   uuid_t uuid;
   g_assert_cmpint (uuid_parse (event_id, uuid), ==, 0);
-  GVariantBuilder event_id_builder;
-  get_uuid_builder (uuid, &event_id_builder);
-  return g_variant_builder_end (&event_id_builder);
+  return get_uuid_as_variant (uuid);
 }
 
 static GVariant *
@@ -399,24 +397,6 @@ make_auxiliary_payload (void)
 {
   GVariant *sword_of_a_thousand = g_variant_new_boolean (TRUE);
   return g_variant_new_variant (sword_of_a_thousand);
-}
-
-static GVariant *
-make_event_values_variant (void)
-{
-  GVariantBuilder builder;
-  g_variant_builder_init (&builder, G_VARIANT_TYPE ("a(xbv)"));
-  g_variant_builder_add (&builder,
-                         "(xbv)",
-                         RELATIVE_TIMESTAMP,
-                         FALSE,
-                         g_variant_new_boolean (FALSE));
-  g_variant_builder_add (&builder,
-                         "(xbv)",
-                         RELATIVE_TIMESTAMP,
-                         TRUE,
-                         g_variant_new_boolean (TRUE));
-  return g_variant_builder_end (&builder);
 }
 
 static GVariant *
@@ -495,22 +475,10 @@ assert_variants_equal (GVariant *actual_variant,
                        GVariant *expected_variant)
 {
   g_assert_nonnull (actual_variant);
+  g_assert_nonnull (expected_variant);
 
-  if (!g_variant_equal (actual_variant, expected_variant))
-    {
-      /* Assertion failures of the form
-       *   ERROR:../tests/daemon/test-daemon.c:495:assert_variants_equal:
-       *   'g_variant_equal (actual_variant, expected_variant)' should be TRUE
-       * are not very helpful -- you want to see the actual variants!
-       */
-      g_autofree gchar *actual_str = g_variant_print (actual_variant, TRUE);
-      g_autofree gchar *expected_str = g_variant_print (expected_variant, TRUE);
-      g_assert_cmpstr (actual_str, ==, expected_str);
+  g_assert_cmpvariant (actual_variant, expected_variant);
 
-      /* Should not be reached: */
-      g_error ("variants compared non-equal, but their type-annotated "
-               "stringified representations compared equal!");
-    }
   g_variant_unref (actual_variant);
   g_variant_unref (expected_variant);
 }
@@ -520,18 +488,23 @@ assert_singular_matches_variant (GVariant *actual_variant,
                                  GVariant *expected_auxiliary_payload)
 {
   GVariant *expected_variant =
-    g_variant_new ("(@aysxmv)", make_event_id_variant (),
+    g_variant_new ("(@aysxm@v)", make_event_id_variant (),
                    emer_image_id_provider_get_os_version(),
                    OFFSET_TIMESTAMP, expected_auxiliary_payload);
   assert_variants_equal (actual_variant, expected_variant);
 }
 
 static void
-assert_aggregate_matches_variant (GVariant *actual_variant,
-                                  GVariant *expected_auxiliary_payload)
+assert_aggregate_matches_variant (GVariant   *actual_variant,
+                                  const char *expected_period_start,
+                                  GVariant   *expected_auxiliary_payload)
 {
-  /* Not defined yet */
-  g_assert_null (NULL);
+  GVariant *expected_variant =
+    g_variant_new ("(@ayssum@v)", make_event_id_variant (),
+                   emer_image_id_provider_get_os_version(),
+                   expected_period_start,
+                   NUM_EVENTS, expected_auxiliary_payload);
+  assert_variants_equal (actual_variant, expected_variant);
 }
 
 static void
@@ -544,10 +517,11 @@ assert_singular_matches_next_value (GVariantIter *singular_iterator,
 
 static void
 assert_aggregate_matches_next_value (GVariantIter *aggregate_iterator,
+                                     const gchar  *expected_period_start,
                                      GVariant     *expected_auxiliary_payload)
 {
   GVariant *aggregate = g_variant_iter_next_value (aggregate_iterator);
-  assert_aggregate_matches_variant (aggregate, expected_auxiliary_payload);
+  assert_aggregate_matches_variant (aggregate, expected_period_start, expected_auxiliary_payload);
 }
 
 static void
@@ -567,8 +541,8 @@ record_singulars (EmerDaemon *daemon)
                                      make_event_id_variant (),
                                      RELATIVE_TIMESTAMP,
                                      FALSE,
-                                     g_variant_new_string ("This must be ignored."));
-  GVariant *auxiliary_payload = g_variant_new_boolean (FALSE);
+                                     g_variant_new_variant (g_variant_new_string ("This must be ignored.")));
+  GVariant *auxiliary_payload = g_variant_new_variant (g_variant_new_boolean (FALSE));
   g_variant_ref_sink (auxiliary_payload);
   emer_daemon_record_singular_event (daemon,
                                      make_event_id_variant (),
@@ -586,29 +560,16 @@ record_singulars (EmerDaemon *daemon)
 static void
 record_aggregates (EmerDaemon *daemon)
 {
-  emer_daemon_record_aggregate_event (daemon,
-                                      USER_ID,
-                                      make_event_id_variant (),
-                                      NUM_EVENTS,
-                                      RELATIVE_TIMESTAMP,
-                                      FALSE,
-                                      g_variant_new_string ("This must be ignored."));
-  emer_daemon_record_aggregate_event (daemon,
-                                      USER_ID,
-                                      make_event_id_variant (),
-                                      NUM_EVENTS,
-                                      RELATIVE_TIMESTAMP,
-                                      TRUE,
-                                      make_auxiliary_payload ());
-}
-
-static void
-record_sequence (EmerDaemon *daemon)
-{
-  emer_daemon_record_event_sequence (daemon,
-                                     USER_ID,
-                                     make_event_id_variant (),
-                                     make_event_values_variant ());
+  emer_daemon_enqueue_aggregate_event (daemon,
+                                       make_event_id_variant (),
+                                       "2021-08-27",
+                                       NUM_EVENTS,
+                                       NULL);
+  emer_daemon_enqueue_aggregate_event (daemon,
+                                       make_event_id_variant (),
+                                       "2021-08",
+                                       NUM_EVENTS,
+                                       make_auxiliary_payload ());
 }
 
 static void
@@ -637,7 +598,7 @@ get_events_from_request (GByteArray    *request,
   g_free (expected_request_path);
 
   const GVariantType *REQUEST_FORMAT =
-    G_VARIANT_TYPE ("(xxsa{ss}ya(aysxmv)a(ayssxmv))");
+    G_VARIANT_TYPE ("(xxsa{ss}ya(aysxmv)a(ayssumv))");
   GVariant *request_variant =
     g_variant_new_from_bytes (REQUEST_FORMAT, request_bytes, FALSE);
 
@@ -655,7 +616,7 @@ get_events_from_request (GByteArray    *request,
   GVariant *site_id;
   guint8 boot_type;
   g_variant_get (native_endian_request,
-                 "(xx&s@a{ss}ya(aysxmv)a(ayssxmv))",
+                 "(xx&s@a{ss}ya(aysxmv)a(ayssumv))",
                  &client_relative_time, &client_absolute_time, &image_version,
                  &site_id, &boot_type, singular_iterator, aggregate_iterator);
 
@@ -742,32 +703,13 @@ assert_aggregates_received (GByteArray *request,
   g_assert_cmpuint (g_variant_iter_n_children (singular_iterator), ==, 0u);
   g_variant_iter_free (singular_iterator);
 
-  /* The aggregate event has not defined yet. So, the array is empty right now.
-   * Will restore/re-define the test plan here in the future.
-   */
-  g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 0u);
-  if (g_variant_iter_n_children (aggregate_iterator) > 0)
-    {
-      assert_aggregate_matches_next_value (aggregate_iterator,
-                                           NULL /* auxiliary_payload */);
-      assert_aggregate_matches_next_value (aggregate_iterator,
+  g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 2u);
+  assert_aggregate_matches_next_value (aggregate_iterator,
+                                       "2021-08-27",
+                                       NULL /* auxiliary_payload */);
+  assert_aggregate_matches_next_value (aggregate_iterator,
+                                       "2021-08",
                                        make_auxiliary_payload ());
-    }
-  g_variant_iter_free (aggregate_iterator);
-}
-
-static void
-assert_sequence_received (GByteArray *request,
-                          Fixture    *fixture)
-{
-  GVariantIter *singular_iterator, *aggregate_iterator;
-  get_events_from_request (request, fixture, &singular_iterator,
-                           &aggregate_iterator);
-
-  g_assert_cmpuint (g_variant_iter_n_children (singular_iterator), ==, 0u);
-  g_variant_iter_free (singular_iterator);
-
-  g_assert_cmpuint (g_variant_iter_n_children (aggregate_iterator), ==, 0u);
   g_variant_iter_free (aggregate_iterator);
 }
 
@@ -894,6 +836,7 @@ create_test_object (Fixture *fixture)
                           fixture->mock_network_send_provider,
                           fixture->mock_permissions_provider,
                           fixture->mock_persistent_cache,
+                          fixture->mock_aggregate_tally,
                           100000 /* max bytes buffered */);
 }
 
@@ -922,14 +865,14 @@ setup_most (Fixture      *fixture,
     emer_network_send_provider_new (NULL /* path */);
   fixture->mock_permissions_provider = emer_permissions_provider_new ();
   fixture->mock_persistent_cache = NULL;
+  /* Not actually a mock! */
+  fixture->mock_aggregate_tally = emer_aggregate_tally_new (g_get_user_cache_dir ());
 }
 
 static void
-setup (Fixture      *fixture,
-       gconstpointer unused)
+setup_persistent_cache (Fixture *fixture)
 {
   g_autoptr(GError) error = NULL;
-  setup_most (fixture, unused);
 
   /* directory and max_cache_size are ignored by mock object. */
   fixture->mock_persistent_cache =
@@ -938,7 +881,14 @@ setup (Fixture      *fixture,
                                FALSE /* reinitialize_cache */,
                                &error);
   g_assert_no_error (error);
+}
 
+static void
+setup (Fixture      *fixture,
+       gconstpointer unused)
+{
+  setup_most (fixture, unused);
+  setup_persistent_cache (fixture);
   create_test_object (fixture);
 }
 
@@ -969,6 +919,19 @@ test_daemon_new_succeeds (Fixture      *fixture,
 }
 
 static void
+test_daemon_new_succeeds_if_disabled (Fixture       *fixture,
+                                      gconstpointer  unused)
+{
+  emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider, FALSE);
+
+  EmerDaemon *daemon = emer_daemon_new (NULL /* persistent cache directory */,
+                                        fixture->mock_permissions_provider,
+                                        NULL /* machine id provider */);
+  g_assert_nonnull (daemon);
+  g_object_unref (daemon);
+}
+
+static void
 test_daemon_new_full_succeeds (Fixture      *fixture,
                                gconstpointer unused)
 {
@@ -992,16 +955,6 @@ test_daemon_records_aggregates (Fixture      *fixture,
   record_aggregates (fixture->test_object);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_aggregates_received);
-  wait_for_upload_to_finish (fixture);
-}
-
-static void
-test_daemon_records_sequence (Fixture      *fixture,
-                              gconstpointer unused)
-{
-  record_sequence (fixture->test_object);
-  read_network_request (fixture,
-                        (ProcessBytesSourceFunc) assert_sequence_received);
   wait_for_upload_to_finish (fixture);
 }
 
@@ -1044,25 +997,6 @@ test_daemon_retries_aggregate_uploads (Fixture      *fixture,
 }
 
 static void
-test_daemon_retries_sequence_uploads (Fixture      *fixture,
-                                      gconstpointer unused)
-{
-  record_sequence (fixture->test_object);
-
-  read_network_request (fixture,
-                        (ProcessBytesSourceFunc) assert_sequence_received);
-  send_http_response (fixture->mock_server, SOUP_STATUS_INTERNAL_SERVER_ERROR);
-
-  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
-                         "Attempt to upload metrics failed: Internal Server "
-                         "Error.");
-  read_network_request (fixture,
-                        (ProcessBytesSourceFunc) assert_sequence_received);
-  wait_for_upload_to_finish (fixture);
-  g_test_assert_expected_messages ();
-}
-
-static void
 test_daemon_only_reports_singulars_when_uploading_enabled (Fixture      *fixture,
                                                            gconstpointer unused)
 {
@@ -1095,22 +1029,6 @@ test_daemon_only_reports_aggregates_when_uploading_enabled (Fixture      *fixtur
 }
 
 static void
-test_daemon_only_reports_sequences_when_uploading_enabled (Fixture      *fixture,
-                                                           gconstpointer unused)
-{
-  emer_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
-                                                   FALSE);
-  record_sequence (fixture->test_object);
-  assert_uploading_disabled (fixture);
-
-  emer_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
-                                                   TRUE);
-  read_network_request (fixture,
-                        (ProcessBytesSourceFunc) assert_sequence_received);
-  wait_for_upload_to_finish (fixture);
-}
-
-static void
 test_daemon_does_not_record_singulars_when_daemon_disabled (Fixture      *fixture,
                                                             gconstpointer unused)
 {
@@ -1133,22 +1051,6 @@ test_daemon_does_not_record_aggregates_when_daemon_disabled (Fixture      *fixtu
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 FALSE);
   record_aggregates (fixture->test_object);
-  assert_metrics_disabled (fixture);
-
-  emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
-                                                TRUE);
-  read_network_request (fixture,
-                        (ProcessBytesSourceFunc) assert_no_events_received);
-  wait_for_upload_to_finish (fixture);
-}
-
-static void
-test_daemon_does_not_record_sequences_when_daemon_disabled (Fixture      *fixture,
-                                                            gconstpointer unused)
-{
-  emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
-                                                FALSE);
-  record_sequence (fixture->test_object);
   assert_metrics_disabled (fixture);
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
@@ -1204,9 +1106,9 @@ test_daemon_discards_in_flight_singulars_when_daemon_disabled (Fixture      *fix
   wait_for_upload_to_finish (fixture);
 
   /* Record some different events, and ensure they're submitted correctly */
-  record_sequence (fixture->test_object);
+  record_aggregates (fixture->test_object);
   read_network_request (fixture,
-                        (ProcessBytesSourceFunc) assert_sequence_received);
+                        (ProcessBytesSourceFunc) assert_aggregates_received);
   wait_for_upload_to_finish (fixture);
 }
 
@@ -1228,7 +1130,7 @@ test_daemon_discards_failed_in_flight_singulars_when_daemon_disabled (Fixture   
   /* Re-enable the daemon, and send some different events */
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 TRUE);
-  record_sequence (fixture->test_object);
+  record_aggregates (fixture->test_object);
 
   /* Now send back an error to the first batch  */
   send_http_response (fixture->mock_server, SOUP_STATUS_INTERNAL_SERVER_ERROR);
@@ -1241,7 +1143,7 @@ test_daemon_discards_failed_in_flight_singulars_when_daemon_disabled (Fixture   
    * have been discarded; the new batch should be sent.
    */
   read_network_request (fixture,
-                        (ProcessBytesSourceFunc) assert_sequence_received);
+                        (ProcessBytesSourceFunc) assert_aggregates_received);
   /* By now it should have warned about the first attempt */
   g_test_assert_expected_messages ();
   wait_for_upload_to_finish (fixture);
@@ -1387,39 +1289,80 @@ test_daemon_crashes_on_non_key_file_error (Fixture      *fixture,
   g_test_trap_assert_stderr ("*oh no*");
 }
 
+/* Aggregate tally entries from a previous day & month should be
+ * submitted when starting up on a new day & month.
+ */
+static void
+test_daemon_submits_aggregates_from_tally_on_startup (Fixture       *fixture,
+                                                      gconstpointer  unused)
+{
+  const guint32 uid = 12345;
+  g_autoptr(GDateTime) the_past = g_date_time_new_local (2021, 8, 27, 0, 0, 0);
+  g_autoptr(GError) error = NULL;
+  uuid_t uuid;
+  g_assert_cmpint (uuid_parse (MEANINGLESS_EVENT, uuid), ==, 0);
+
+  emer_aggregate_tally_store_event (fixture->mock_aggregate_tally,
+                                    EMER_TALLY_DAILY_EVENTS,
+                                    uid,
+                                    uuid,
+                                    NULL,
+                                    NUM_EVENTS,
+                                    the_past,
+                                    &error);
+  g_assert_no_error (error);
+
+  emer_aggregate_tally_store_event (fixture->mock_aggregate_tally,
+                                    EMER_TALLY_MONTHLY_EVENTS,
+                                    uid,
+                                    uuid,
+                                    make_auxiliary_payload (),
+                                    NUM_EVENTS,
+                                    the_past,
+                                    &error);
+  g_assert_no_error (error);
+
+  setup_persistent_cache (fixture);
+  create_test_object (fixture);
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_aggregates_received);
+  wait_for_upload_to_finish (fixture);
+}
+
+/* TODO: as above, but add events to the tally while the daemon is running
+ * then simulate the day & month changing.
+ */
+
 gint
 main (gint                argc,
       const gchar * const argv[])
 {
-  g_test_init (&argc, (gchar ***) &argv, NULL);
+  /* TODO: without this, when the daemon uses GNetworkMonitor, Gio tries to load a module. But it fails to load because G_TEST_OPTION_ISOLATE_DIRS overwrites $XDG_DATA_DIRS, so the module cannot find the schemas installed in /usr.
+   */
+  g_setenv ("GIO_MODULE_DIR", "/dev/null", TRUE);
+  g_test_init (&argc, (gchar ***) &argv, G_TEST_OPTION_ISOLATE_DIRS, NULL);
 
 #define ADD_DAEMON_TEST(path, test_func) \
   g_test_add ((path), Fixture, NULL, setup, (test_func), teardown)
 
   ADD_DAEMON_TEST ("/daemon/new-succeeds", test_daemon_new_succeeds);
+  ADD_DAEMON_TEST ("/daemon/new-succeeds-if-disabled", test_daemon_new_succeeds_if_disabled);
   ADD_DAEMON_TEST ("/daemon/new-full-succeeds", test_daemon_new_full_succeeds);
   ADD_DAEMON_TEST ("/daemon/records-singulars", test_daemon_records_singulars);
   ADD_DAEMON_TEST ("/daemon/records-aggregates",
                    test_daemon_records_aggregates);
-  ADD_DAEMON_TEST ("/daemon/records-sequence", test_daemon_records_sequence);
   ADD_DAEMON_TEST ("/daemon/retries-singular-uploads",
                    test_daemon_retries_singular_uploads);
   ADD_DAEMON_TEST ("/daemon/retries-aggregate-uploads",
                    test_daemon_retries_aggregate_uploads);
-  ADD_DAEMON_TEST ("/daemon/retries-sequence-uploads",
-                   test_daemon_retries_sequence_uploads);
   ADD_DAEMON_TEST ("/daemon/only-reports-singulars-when-uploading-enabled",
                    test_daemon_only_reports_singulars_when_uploading_enabled);
   ADD_DAEMON_TEST ("/daemon/only-reports-aggregates-when-uploading-enabled",
                    test_daemon_only_reports_aggregates_when_uploading_enabled);
-  ADD_DAEMON_TEST ("/daemon/only-reports-sequences-when-uploading-enabled",
-                   test_daemon_only_reports_sequences_when_uploading_enabled);
   ADD_DAEMON_TEST ("/daemon/does-not-record-singulars-when-daemon-disabled",
                    test_daemon_does_not_record_singulars_when_daemon_disabled);
   ADD_DAEMON_TEST ("/daemon/does-not-record-aggregates-when-daemon-disabled",
                    test_daemon_does_not_record_aggregates_when_daemon_disabled);
-  ADD_DAEMON_TEST ("/daemon/does-not-record-sequences-when-daemon-disabled",
-                   test_daemon_does_not_record_sequences_when_daemon_disabled);
   ADD_DAEMON_TEST ("/daemon/discards/in-memory-singulars-when-daemon-disabled",
                    test_daemon_discards_in_memory_singulars_when_daemon_disabled);
   ADD_DAEMON_TEST ("/daemon/discards/in-flight-singulars-when-daemon-disabled",
@@ -1443,6 +1386,10 @@ main (gint                argc,
   g_test_add ("/daemon/crashes-on-non-key-file-error",
               Fixture, NULL, setup_most,
               test_daemon_crashes_on_non_key_file_error,
+              teardown);
+  g_test_add ("/daemon/submits-aggregates-from-tally/on-startup",
+              Fixture, NULL, setup_most,
+              test_daemon_submits_aggregates_from_tally_on_startup,
               teardown);
 
   return g_test_run ();

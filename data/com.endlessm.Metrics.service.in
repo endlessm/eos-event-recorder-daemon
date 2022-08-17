@@ -2,3 +2,4 @@
 Name=com.endlessm.Metrics
 Exec=@libexecdir@/eos-metrics-event-recorder
 User=metrics
+SystemdService=eos-metrics-event-recorder.service

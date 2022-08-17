@@ -20,6 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include <string.h>
 
 #include <gio/gio.h>
@@ -66,8 +67,6 @@ on_record_aggregate_event (EmerEventRecorderServer *server,
                            GVariant                *payload,
                            EmerDaemon              *daemon)
 {
-  emer_daemon_record_aggregate_event (daemon, user_id, event_id, count,
-                                      relative_timestamp, has_payload, payload);
   emer_event_recorder_server_complete_record_aggregate_event (server,
                                                               invocation);
   return TRUE;
@@ -99,6 +98,46 @@ on_set_enabled (EmerEventRecorderServer *server,
   emer_permissions_provider_set_daemon_enabled (permissions, enabled);
   emer_permissions_provider_set_uploading_enabled (permissions, enabled);
   emer_event_recorder_server_complete_set_enabled (server, invocation);
+  return TRUE;
+}
+
+static gboolean
+on_start_aggregate_timer (EmerEventRecorderServer *object,
+                          GDBusMethodInvocation   *invocation,
+                          guint32                  unix_user_id,
+                          GVariant                *event_id,
+                          gboolean                 has_payload,
+                          GVariant                *payload,
+                          EmerDaemon              *daemon)
+{
+  g_autofree gchar *timer_object_path = NULL;
+  g_autoptr(GError) error = NULL;
+  GDBusConnection *system_bus;
+  const gchar *sender;
+
+  system_bus = g_dbus_method_invocation_get_connection (invocation);
+  sender = g_dbus_method_invocation_get_sender (invocation);
+
+  emer_daemon_start_aggregate_timer (daemon,
+                                     system_bus,
+                                     sender,
+                                     unix_user_id,
+                                     event_id,
+                                     has_payload,
+                                     payload,
+                                     &timer_object_path,
+                                     &error);
+
+  if (error)
+    {
+      g_dbus_method_invocation_return_gerror (invocation, error);
+      return TRUE;
+    }
+
+  emer_event_recorder_server_complete_start_aggregate_timer (object,
+                                                             invocation,
+                                                             timer_object_path);
+
   return TRUE;
 }
 
@@ -233,10 +272,20 @@ on_authorize_method_check (GDBusInterfaceSkeleton *interface,
   return authorized;
 }
 
+typedef struct {
+  EmerDaemon *daemon;
+  GMainLoop  *main_loop;
+} ShutdownSignalData;
+
 static gboolean
-quit_main_loop (GMainLoop *main_loop)
+quit_main_loop (ShutdownSignalData *data)
 {
-  g_main_loop_quit (main_loop);
+  g_assert (data != NULL);
+  g_assert (EMER_IS_DAEMON (data->daemon));
+  g_assert (data->main_loop != NULL);
+
+  emer_daemon_shutdown (data->daemon);
+  g_main_loop_quit (data->main_loop);
   return G_SOURCE_REMOVE;
 }
 
@@ -299,6 +348,8 @@ on_bus_acquired (GDBusConnection *system_bus,
                     G_CALLBACK (on_set_enabled), daemon);
   g_signal_connect (server, "handle-upload-events",
                     G_CALLBACK (on_upload_events), daemon);
+  g_signal_connect (server, "handle-start-aggregate-timer",
+                    G_CALLBACK (on_start_aggregate_timer), daemon);
   g_signal_connect (server, "g-authorize-method",
                     G_CALLBACK (on_authorize_method_check), daemon);
 
@@ -408,13 +459,14 @@ main (gint                argc,
     return EXIT_FAILURE;
 
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
+  ShutdownSignalData data = { daemon, main_loop };
 
   // Shut down on any of these signals.
-  g_unix_signal_add (SIGHUP, (GSourceFunc) quit_main_loop, main_loop);
-  g_unix_signal_add (SIGINT, (GSourceFunc) quit_main_loop, main_loop);
-  g_unix_signal_add (SIGTERM, (GSourceFunc) quit_main_loop, main_loop);
-  g_unix_signal_add (SIGUSR1, (GSourceFunc) quit_main_loop, main_loop);
-  g_unix_signal_add (SIGUSR2, (GSourceFunc) quit_main_loop, main_loop);
+  g_unix_signal_add (SIGHUP, (GSourceFunc) quit_main_loop, &data);
+  g_unix_signal_add (SIGINT, (GSourceFunc) quit_main_loop, &data);
+  g_unix_signal_add (SIGTERM, (GSourceFunc) quit_main_loop, &data);
+  g_unix_signal_add (SIGUSR1, (GSourceFunc) quit_main_loop, &data);
+  g_unix_signal_add (SIGUSR2, (GSourceFunc) quit_main_loop, &data);
 
   guint name_id = g_bus_own_name (G_BUS_TYPE_SYSTEM, "com.endlessm.Metrics",
                                   G_BUS_NAME_OWNER_FLAGS_NONE,

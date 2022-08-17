@@ -1,0 +1,30 @@
+Source: eos-event-recorder-daemon
+Priority: standard
+Maintainer: Endless OS Team <maintainers@endlessos.org>
+Build-Depends: ca-certificates,
+               debhelper-compat (= 13),
+               eos-metrics-0-dev (>= 0.2),
+               libglib2.0-dev (>= 2.38),
+               libostree-dev (>= 2013.7),
+               libpolkit-gobject-1-dev,
+               libsoup2.4-dev (>= 2.42),
+               meson (>= 0.52),
+               pkg-config,
+               python3-dbus,
+               python3-dbusmock,
+               systemd,
+               uuid-dev
+Standards-Version: 3.9.4
+Section: net
+Homepage: http://www.endlessm.com
+
+Package: eos-event-recorder-daemon
+Section: net
+Architecture: any
+Breaks: eos-metrics-event-recorder
+Replaces: eos-metrics-event-recorder
+Provides: eos-metrics-event-recorder
+Depends: ${shlibs:Depends},
+         ${misc:Depends}
+Description: Endless OS Event Recorder Daemon
+ Daemon for aggregating and recording metrics data in Endless OS.

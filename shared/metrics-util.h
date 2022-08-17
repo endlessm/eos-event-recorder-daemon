@@ -38,8 +38,7 @@ guint64   swap_bytes_64_if_big_endian (guint64          value);
 
 GVariant *swap_bytes_if_big_endian    (GVariant        *variant);
 
-void      get_uuid_builder            (uuid_t           uuid,
-                                       GVariantBuilder *uuid_builder);
+GVariant *get_uuid_as_variant         (uuid_t uuid);
 
 GVariant *deep_copy_variant           (GVariant        *variant);
 

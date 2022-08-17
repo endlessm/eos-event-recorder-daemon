@@ -18,6 +18,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "emer-cache-size-provider.h"
 
 #include <string.h>
@@ -33,10 +34,6 @@
 #define FIRST_CACHE_SIZE_FILE_CONTENTS \
  "[persistent_cache_size]\n" \
  "maximum=40\n"
-
-#define DEFAULT_CACHE_SIZE_FILE_CONTENTS \
- "[persistent_cache_size]\n" \
- "maximum=10000000\n"
 
 // Helper Functions
 
@@ -91,34 +88,11 @@ test_cache_size_provider_can_get_max_cache_size (Fixture      *fixture,
 }
 
 static void
-assert_file_has_default_contents (Fixture *fixture)
+assert_gets_default_max_cache_size (Fixture *fixture)
 {
-  gboolean ret;
-  g_autoptr(GError) error = NULL;
-  g_autofree gchar *contents = NULL;
-
   guint64 max_cache_size =
     emer_cache_size_provider_get_max_cache_size (fixture->tmp_path);
   g_assert_cmpint (max_cache_size, ==, DEFAULT_MAX_CACHE_SIZE);
-
-  ret = g_file_get_contents (fixture->tmp_path, &contents, NULL, &error);
-  g_assert_no_error (error);
-  g_assert_true (ret);
-
-  g_assert_cmpstr (contents, ==, DEFAULT_CACHE_SIZE_FILE_CONTENTS);
-
-  /* Re-reading the file should return the same value */
-  max_cache_size =
-    emer_cache_size_provider_get_max_cache_size (fixture->tmp_path);
-  g_assert_cmpint (max_cache_size, ==, DEFAULT_MAX_CACHE_SIZE);
-}
-
-static void
-assert_string_contains (const gchar *haystack,
-                        const gchar *needle)
-{
-  if (strstr (haystack, needle) == NULL)
-    g_error ("\"%s\" not in \"%s\"", needle, haystack);
 }
 
 static void
@@ -132,7 +106,7 @@ test_cache_size_provider_writes_file_if_missing (Fixture      *fixture,
   g_assert_no_error (error);
   g_assert_true (ret);
 
-  assert_file_has_default_contents (fixture);
+  assert_gets_default_max_cache_size (fixture);
 }
 
 static void
@@ -140,7 +114,7 @@ test_cache_size_provider_recovers_if_corrupt_empty (Fixture      *fixture,
                                                     gconstpointer unused)
 {
   write_cache_size_file (fixture, "", 0);
-  assert_file_has_default_contents (fixture);
+  assert_gets_default_max_cache_size (fixture);
 }
 
 static void
@@ -155,7 +129,7 @@ test_cache_size_provider_recovers_if_corrupt_nul (Fixture      *fixture,
    *
    * The key file appears to be empty when one tries to read it (since GKeyFile
    * reads the contents as a NUL-terminated string) so we should recover by
-   * re-initializing it in this case, silently.
+   * returning the default value.
    */
   g_test_bug ("T19953");
 
@@ -163,15 +137,16 @@ test_cache_size_provider_recovers_if_corrupt_nul (Fixture      *fixture,
   gchar *contents = g_malloc0 (41);
 
   write_cache_size_file (fixture, contents, size);
-  assert_file_has_default_contents (fixture);
+  assert_gets_default_max_cache_size (fixture);
 }
 
 static void
 test_cache_size_provider_recovers_if_corrupt_missing_key (Fixture      *fixture,
                                                           gconstpointer unused)
 {
-  /* If the file is not logically empty, we still want to fill in the 'maximum'
-   * key, but leave any other fields untouched. (Perhaps the file is destined
+  /* If the file is not logically empty, but does not contain the expected
+   * max_cache_size key, we still want to return the default value.
+   * (Perhaps the file is destined
    * for a future version of the daemon which accepts some new field.)
    */
   const gchar *contents = "[persistent_cache_size]\nunrelated_key=1";
@@ -181,32 +156,19 @@ test_cache_size_provider_recovers_if_corrupt_missing_key (Fixture      *fixture,
   guint64 max_cache_size =
     emer_cache_size_provider_get_max_cache_size (fixture->tmp_path);
   g_assert_cmpint (max_cache_size, ==, DEFAULT_MAX_CACHE_SIZE);
-
-  gboolean ret;
-  g_autoptr(GError) error = NULL;
-  g_autofree gchar *new_contents = NULL;
-
-  ret = g_file_get_contents (fixture->tmp_path, &new_contents, NULL, &error);
-  g_assert_no_error (error);
-  g_assert_true (ret);
-
-  assert_string_contains (new_contents, "maximum=10000000");
-  assert_string_contains (new_contents, "unrelated_key=1");
 }
 
 static void
 test_cache_size_provider_recovers_if_corrupt_garbage (Fixture      *fixture,
                                                       gconstpointer unused)
 {
-  /* If the file exists but is malformed, we should log a warning before
-   * reinitialising the file.
-   */
+  /* If the file exists but is malformed, we should log a warning */
   const gchar *contents = "i think i'm paranoid";
 
   write_cache_size_file (fixture, contents, -1);
 
   g_test_expect_message (NULL, G_LOG_LEVEL_WARNING, "*Key file*i think i'm paranoid*");
-  assert_file_has_default_contents (fixture);
+  assert_gets_default_max_cache_size (fixture);
   g_test_assert_expected_messages ();
 }
 

@@ -35,4 +35,4 @@ case "$1" in
         exit 2
 esac
 
-sed --in-place="s/\(uploading_enabled *= *\).*/\1"$UPLOADING_ENABLED"/" @permissions_file@
+sed --in-place -e "s/\(uploading_enabled *= *\).*/\1"$UPLOADING_ENABLED"/" @permissions_file@

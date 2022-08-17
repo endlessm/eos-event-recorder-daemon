@@ -20,6 +20,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "emer-permissions-provider.h"
 
 #include <string.h>
@@ -230,7 +231,10 @@ get_ostree_url_from_ostree_repo (void)
   GError *error = NULL;
   if (!ostree_repo_open (ostree_repo, NULL /* GCancellable */, &error))
     {
-      g_warning ("Unable to open OSTree repo. Error: %s.", error->message);
+      /* Don't warn if simply not on an OSTree system. */
+      if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
+       g_warning ("Unable to open OSTree repo: %s", error->message);
+
       g_clear_error (&error);
       g_object_unref (ostree_repo);
       return NULL;

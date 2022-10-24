@@ -41,7 +41,6 @@
 #include "emer-aggregate-timer-impl.h"
 #include "emer-gzip.h"
 #include "emer-image-id-provider.h"
-#include "emer-machine-id-provider.h"
 #include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
@@ -170,7 +169,6 @@ typedef struct _EmerDaemonPrivate
   GDateTime *current_aggregate_tally_date;
 
   EmerAggregateTally *aggregate_tally;
-  EmerMachineIdProvider *machine_id_provider;
   EmerNetworkSendProvider *network_send_provider;
   EmerPermissionsProvider *permissions_provider;
 
@@ -190,7 +188,6 @@ enum
   PROP_RANDOM_NUMBER_GENERATOR,
   PROP_SERVER_URI,
   PROP_NETWORK_SEND_INTERVAL,
-  PROP_MACHINE_ID_PROVIDER,
   PROP_NETWORK_SEND_PROVIDER,
   PROP_PERMISSIONS_PROVIDER,
   PROP_PERSISTENT_CACHE_DIRECTORY,
@@ -1094,18 +1091,6 @@ set_network_send_interval (EmerDaemon *self,
 }
 
 static void
-set_machine_id_provider (EmerDaemon            *self,
-                         EmerMachineIdProvider *machine_id_prov)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  if (machine_id_prov == NULL)
-    priv->machine_id_provider = emer_machine_id_provider_new ();
-  else
-    priv->machine_id_provider = g_object_ref (machine_id_prov);
-}
-
-static void
 set_network_send_provider (EmerDaemon              *self,
                            EmerNetworkSendProvider *network_send_prov)
 {
@@ -1545,10 +1530,6 @@ emer_daemon_set_property (GObject      *object,
       set_network_send_interval (self, g_value_get_uint (value));
       break;
 
-    case PROP_MACHINE_ID_PROVIDER:
-      set_machine_id_provider (self, g_value_get_object (value));
-      break;
-
     case PROP_NETWORK_SEND_PROVIDER:
       set_network_send_provider (self, g_value_get_object (value));
       break;
@@ -1612,7 +1593,6 @@ emer_daemon_finalize (GObject *object)
 
   g_rand_free (priv->rand);
   g_clear_pointer (&priv->server_uri, g_free);
-  g_clear_object (&priv->machine_id_provider);
   g_clear_object (&priv->network_send_provider);
   g_clear_object (&priv->permissions_provider);
   g_clear_object (&priv->aggregate_tally);
@@ -1674,20 +1654,6 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                        0, G_MAXUINT, 0,
                        G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                        G_PARAM_STATIC_STRINGS);
-
-  /*
-   * EmerDaemon:machine-id-provider:
-   *
-   * An #EmerMachineIdProvider for retrieving the UUID of this machine.
-   * If this property is not specified, the default machine ID provider (from
-   * emer_machine_id_provider_new()) will be used.
-   */
-  emer_daemon_props[PROP_MACHINE_ID_PROVIDER] =
-    g_param_spec_object ("machine-id-provider", "Machine ID provider",
-                         "Object providing machine ID",
-                         EMER_TYPE_MACHINE_ID_PROVIDER,
-                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
-                         G_PARAM_STATIC_STRINGS);
 
   /*
    * EmerDaemon:network-send-provider:
@@ -1821,27 +1787,12 @@ emer_daemon_init (EmerDaemon *self)
  */
 EmerDaemon *
 emer_daemon_new (const gchar             *persistent_cache_directory,
-                 EmerPermissionsProvider *permissions_provider,
-                 EmerMachineIdProvider   *machine_id_provider)
+                 EmerPermissionsProvider *permissions_provider)
 {
   return g_object_new (EMER_TYPE_DAEMON,
                        "persistent-cache-directory", persistent_cache_directory,
                        "permissions-provider", permissions_provider,
-                       "machine-id-provider", machine_id_provider,
                        NULL);
-}
-
-gchar *
-emer_daemon_get_tracking_id (EmerDaemon *self)
-{
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  g_autofree gchar *machine_id_hex = NULL;
-  uuid_t uuid;
-
-  if (emer_machine_id_provider_get_id (priv->machine_id_provider, &machine_id_hex, uuid))
-      return g_steal_pointer (&machine_id_hex);
-
-  return NULL;
 }
 
 /*
@@ -1854,8 +1805,6 @@ emer_daemon_get_tracking_id (EmerDaemon *self)
  *   defaults to 443 (the standard port used by SSL).
  * @network_send_interval: frequency in seconds with which the client will
  *   attempt a network send request.
- * @machine_id_provider: (allow-none): The #EmerMachineIdProvider to supply the
- *   machine ID, or %NULL to use the default.
  * @network_send_provider: (allow-none): The #EmerNetworkSendProvider to supply
  *   the network send metadata, or %NULL to use the default.
  * @permissions_provider: The #EmerPermissionsProvider to supply information
@@ -1877,7 +1826,6 @@ EmerDaemon *
 emer_daemon_new_full (GRand                   *rand,
                       const gchar             *server_uri,
                       guint                    network_send_interval,
-                      EmerMachineIdProvider   *machine_id_provider,
                       EmerNetworkSendProvider *network_send_provider,
                       EmerPermissionsProvider *permissions_provider,
                       EmerPersistentCache     *persistent_cache,
@@ -1888,7 +1836,6 @@ emer_daemon_new_full (GRand                   *rand,
                        "random-number-generator", rand,
                        "server-uri", server_uri,
                        "network-send-interval", network_send_interval,
-                       "machine-id-provider", machine_id_provider,
                        "network-send-provider", network_send_provider,
                        "permissions-provider", permissions_provider,
                        "persistent-cache", persistent_cache,

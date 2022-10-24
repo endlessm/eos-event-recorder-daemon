@@ -25,8 +25,6 @@ daemon_sources = [
     'emer-gzip.h',
     'emer-image-id-provider.c',
     'emer-image-id-provider.h',
-    'emer-machine-id-provider.c',
-    'emer-machine-id-provider.h',
     'emer-main.c',
     'emer-network-send-provider.c',
     'emer-network-send-provider.h',

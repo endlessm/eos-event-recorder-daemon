@@ -17,9 +17,6 @@ simple_tests = {
     'test-gzip': [
         '../daemon/emer-gzip.c',
     ],
-    'test-network-send-provider': [
-        '../daemon/emer-network-send-provider.c',
-    ],
     'test-permissions-provider': [
         '../daemon/emer-permissions-provider.c',
     ],
@@ -60,7 +57,6 @@ test_daemon = executable('test-daemon',
         '../daemon/emer-types.c',
         'daemon/mock-cache-size-provider.c',
         'daemon/mock-image-id-provider.c',
-        'daemon/mock-network-send-provider.c',
         'daemon/mock-permissions-provider.c',
         'daemon/mock-persistent-cache.c',
         'daemon/mock-site-id-provider.c',

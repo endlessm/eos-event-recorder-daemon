@@ -38,7 +38,6 @@
 #include <eosmetrics/eosmetrics.h>
 
 #include "emer-boot-id-provider.h"
-#include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
 #include "emer-types.h"
@@ -67,7 +66,6 @@
 typedef struct _Fixture
 {
   EmerDaemon *test_object;
-  EmerNetworkSendProvider *mock_network_send_provider;
   EmerPermissionsProvider *mock_permissions_provider;
   EmerPersistentCache *mock_persistent_cache;
   EmerAggregateTally *mock_aggregate_tally;
@@ -830,7 +828,6 @@ create_test_object (Fixture *fixture)
     emer_daemon_new_full (g_rand_new_with_seed (18),
                           fixture->server_uri,
                           2 /* network send interval */,
-                          fixture->mock_network_send_provider,
                           fixture->mock_permissions_provider,
                           fixture->mock_persistent_cache,
                           fixture->mock_aggregate_tally,
@@ -857,8 +854,6 @@ setup_most (Fixture      *fixture,
 
   fixture->server_uri = get_server_uri (fixture->mock_server);
 
-  fixture->mock_network_send_provider =
-    emer_network_send_provider_new (NULL /* path */);
   fixture->mock_permissions_provider = emer_permissions_provider_new ();
   fixture->mock_persistent_cache = NULL;
   /* Not actually a mock! */
@@ -893,7 +888,6 @@ teardown (Fixture      *fixture,
           gconstpointer unused)
 {
   g_clear_object (&fixture->test_object);
-  g_clear_object (&fixture->mock_network_send_provider);
   g_clear_object (&fixture->mock_permissions_provider);
   g_clear_object (&fixture->mock_persistent_cache);
   g_clear_pointer (&fixture->mock_server, terminate_subprocess_and_wait);

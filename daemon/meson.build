@@ -26,8 +26,6 @@ daemon_sources = [
     'emer-image-id-provider.c',
     'emer-image-id-provider.h',
     'emer-main.c',
-    'emer-network-send-provider.c',
-    'emer-network-send-provider.h',
     'emer-permissions-provider.c',
     'emer-permissions-provider.h',
     'emer-persistent-cache.c',

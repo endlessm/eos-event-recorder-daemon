@@ -27,7 +27,7 @@
  * The filepath to the metadata file containing the maximum persistent cache
  * size.
  */
-#define DEFAULT_CACHE_SIZE_FILE_PATH CONFIG_DIR "cache-size.conf"
+#define DEFAULT_CACHE_SIZE_FILE_PATH CONFIG_DIR "/cache-size.conf"
 
 /* This is the default maximum cache size in bytes. */
 #define DEFAULT_MAX_CACHE_SIZE G_GUINT64_CONSTANT (10000000)

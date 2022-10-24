@@ -42,8 +42,7 @@ default_metrics_server = get_option('default_metrics_server')
 
 prefix = get_option('prefix')
 libexec_dir = join_paths(prefix, get_option('libexecdir'))
-# TODO: remove trailing slash, inherited from Autotools build
-config_dir = get_option('sysconfdir') / 'metrics' + '/'
+config_dir = get_option('sysconfdir') / 'metrics'
 permissions_file = config_dir / 'eos-metrics-permissions.conf'
 persistent_cache_dir = get_option('localstatedir') / 'cache' / 'metrics' / 'v3'
 

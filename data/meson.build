@@ -8,7 +8,7 @@ configure_file(
     output: 'eos-metrics-event-recorder.service',
     configuration: libexecdir_config,
     install: true,
-    install_dir: systemd_dep.get_pkgconfig_variable('systemdsystemunitdir'),
+    install_dir: systemd_dep.get_variable(pkgconfig: 'systemdsystemunitdir'),
 )
 
 # D-Bus service
@@ -35,7 +35,7 @@ configure_file(
         'persistentcachedir': persistent_cache_dir,
     }),
     install: true,
-    install_dir: systemd_dep.get_pkgconfig_variable('tmpfilesdir'),
+    install_dir: systemd_dep.get_variable(pkgconfig: 'tmpfilesdir'),
 )
 
 # Daemon configuration
@@ -53,5 +53,5 @@ install_data(
 # Polkit policy
 install_data(
     'com.endlessm.Metrics.policy',
-    install_dir: polkit_gobject_dep.get_pkgconfig_variable('policydir'),
+    install_dir: polkit_gobject_dep.get_variable(pkgconfig: 'policydir'),
 )

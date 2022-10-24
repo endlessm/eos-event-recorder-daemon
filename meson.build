@@ -36,7 +36,7 @@ py = import('python').find_installation('python3',
 )
 
 systemd_dep = dependency('systemd')
-event_recorder_server_xml = eosmetrics_dep.get_pkgconfig_variable('datadir') / 'eos-metrics' / 'com.endlessm.Metrics.xml'
+event_recorder_server_xml = eosmetrics_dep.get_variable(pkgconfig: 'datadir') / 'eos-metrics' / 'com.endlessm.Metrics.xml'
 
 default_metrics_server = get_option('default_metrics_server')
 

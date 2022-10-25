@@ -80,11 +80,6 @@ test('test-daemon',
     env: {
         'G_DEBUG': 'fatal-warnings',
     },
-    # TODO: These tests are slow because they set the daemon's upload interval
-    # to 2 seconds and constantly wait for this time to elapse, rather than
-    # mocking the clock or telling the daemon to upload. Sure, *some* of them
-    # should exercise the daemon's internal timer, but not all.
-    timeout: 60,
 )
 
 test('test-opt-out-integration',

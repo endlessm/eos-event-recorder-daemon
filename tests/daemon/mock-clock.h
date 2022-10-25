@@ -31,4 +31,7 @@ G_DECLARE_FINAL_TYPE (MockClock, mock_clock, MOCK, CLOCK, GObject)
 
 MockClock *mock_clock_new (void);
 
+void mock_clock_advance_monotonic (MockClock *self,
+                                   gint64     delta_us);
+
 G_END_DECLS

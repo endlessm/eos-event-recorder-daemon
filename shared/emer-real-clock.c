@@ -41,10 +41,18 @@ emer_real_clock_class_init (EmerRealClockClass *klass)
 {
 }
 
+static GSource *
+emer_real_clock_timeout_source_new_seconds (EmerClock *self,
+                                            guint      interval)
+{
+  return g_timeout_source_new_seconds (interval);
+}
+
 static void
 clock_iface_init (EmerClockInterface *iface,
                   gpointer            iface_data)
 {
+  iface->timeout_source_new_seconds = emer_real_clock_timeout_source_new_seconds;
 }
 
 static void

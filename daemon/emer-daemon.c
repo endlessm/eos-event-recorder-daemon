@@ -593,10 +593,12 @@ handle_http_response (SoupSession *http_session,
     {
       guint random_backoff_interval =
         get_random_backoff_interval (self->rand, callback_data->attempt_num);
+      g_debug ("Scheduling retry in %u seconds", random_backoff_interval);
       callback_data->backoff_timeout_source_id =
-        g_timeout_add_seconds (random_backoff_interval,
-                               (GSourceFunc) handle_backoff_timer,
-                               upload_task);
+        emer_clock_timeout_add_seconds (self->clock,
+                                        random_backoff_interval,
+                                        (GSourceFunc) handle_backoff_timer,
+                                        upload_task);
 
       g_signal_emit (self,
                      emer_daemon_signals[SIGNAL_TRANSIENT_UPLOAD_ERROR],
@@ -866,10 +868,12 @@ schedule_upload (EmerDaemon  *self,
   else
     network_send_interval = DEV_NETWORK_SEND_INTERVAL;
 
+  g_debug ("Scheduling upload in %u seconds", network_send_interval);
   self->upload_events_timeout_source_id =
-    g_timeout_add_seconds (network_send_interval,
-                           (GSourceFunc) handle_upload_timer,
-                           self);
+    emer_clock_timeout_add_seconds (self->clock,
+                                    network_send_interval,
+                                    (GSourceFunc) handle_upload_timer,
+                                    self);
 }
 
 static gboolean

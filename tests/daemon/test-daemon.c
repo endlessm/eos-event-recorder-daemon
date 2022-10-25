@@ -64,6 +64,9 @@
 
 #define TIMEOUT_SEC 5
 
+#define INTERVAL_SEC G_GUINT64_CONSTANT (3600)
+#define INTERVAL_USEC (INTERVAL_SEC * G_USEC_PER_SEC)
+
 typedef struct _Fixture
 {
   EmerDaemon *test_object;
@@ -846,7 +849,7 @@ create_test_object (Fixture *fixture)
   fixture->test_object =
     emer_daemon_new_full (g_rand_new_with_seed (18),
                           fixture->server_uri,
-                          2 /* network send interval */,
+                          INTERVAL_SEC /* network send interval */,
                           EMER_CLOCK (fixture->mock_clock),
                           fixture->mock_permissions_provider,
                           fixture->mock_persistent_cache,
@@ -960,6 +963,7 @@ test_daemon_records_singulars (Fixture      *fixture,
                                gconstpointer unused)
 {
   record_singulars (fixture->test_object);
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_singulars_received);
   wait_for_upload_to_finish (fixture);
@@ -970,6 +974,7 @@ test_daemon_records_aggregates (Fixture      *fixture,
                                 gconstpointer unused)
 {
   record_aggregates (fixture->test_object);
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_aggregates_received);
   wait_for_upload_to_finish (fixture);
@@ -980,7 +985,7 @@ test_daemon_retries_singular_uploads (Fixture      *fixture,
                                       gconstpointer unused)
 {
   record_singulars (fixture->test_object);
-
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_singulars_received);
   send_http_response (fixture->mock_server, SOUP_STATUS_INTERNAL_SERVER_ERROR);
@@ -988,6 +993,11 @@ test_daemon_retries_singular_uploads (Fixture      *fixture,
   while (!fixture->transient_upload_error_emitted)
     g_main_context_iteration (NULL, FALSE);
   g_assert_cmpstr (fixture->transient_upload_error_message, ==, "Internal Server Error");
+
+  /* The retry interval on a failed network request is very short, unrelated
+   * to the regular submission interval.
+   */
+  mock_clock_advance_monotonic (fixture->mock_clock, 2 * G_USEC_PER_SEC);
 
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_singulars_received);
@@ -999,7 +1009,7 @@ test_daemon_retries_aggregate_uploads (Fixture      *fixture,
                                        gconstpointer unused)
 {
   record_aggregates (fixture->test_object);
-
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_aggregates_received);
   send_http_response (fixture->mock_server, SOUP_STATUS_INTERNAL_SERVER_ERROR);
@@ -1007,6 +1017,11 @@ test_daemon_retries_aggregate_uploads (Fixture      *fixture,
   while (!fixture->transient_upload_error_emitted)
     g_main_context_iteration (NULL, FALSE);
   g_assert_cmpstr (fixture->transient_upload_error_message, ==, "Internal Server Error");
+
+  /* The retry interval on a failed network request is very short, unrelated
+   * to the regular submission interval.
+   */
+  mock_clock_advance_monotonic (fixture->mock_clock, 2 * G_USEC_PER_SEC);
 
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_aggregates_received);
@@ -1024,6 +1039,7 @@ test_daemon_only_reports_singulars_when_uploading_enabled (Fixture      *fixture
 
   emer_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
                                                    TRUE);
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_singulars_received);
   wait_for_upload_to_finish (fixture);
@@ -1040,6 +1056,7 @@ test_daemon_only_reports_aggregates_when_uploading_enabled (Fixture      *fixtur
 
   emer_permissions_provider_set_uploading_enabled (fixture->mock_permissions_provider,
                                                    TRUE);
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_aggregates_received);
   wait_for_upload_to_finish (fixture);
@@ -1056,6 +1073,7 @@ test_daemon_does_not_record_singulars_when_daemon_disabled (Fixture      *fixtur
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 TRUE);
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_no_events_received);
   wait_for_upload_to_finish (fixture);
@@ -1072,6 +1090,7 @@ test_daemon_does_not_record_aggregates_when_daemon_disabled (Fixture      *fixtu
 
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 TRUE);
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_no_events_received);
   wait_for_upload_to_finish (fixture);
@@ -1090,6 +1109,7 @@ test_daemon_discards_in_memory_singulars_when_daemon_disabled (Fixture      *fix
   g_assert_true (mock_persistent_cache_is_empty (fixture->mock_persistent_cache));
 
   /* Re-enable, and wait for the next tick. No events should be submitted. */
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 TRUE);
   read_network_request (fixture,
@@ -1103,6 +1123,7 @@ test_daemon_discards_in_flight_singulars_when_daemon_disabled (Fixture      *fix
 {
   /* Record some events, and wait for them to be submitted */
   record_singulars (fixture->test_object);
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_singulars_received);
 
@@ -1116,6 +1137,7 @@ test_daemon_discards_in_flight_singulars_when_daemon_disabled (Fixture      *fix
   wait_for_upload_to_finish (fixture);
 
   /* Re-enable, and wait for the next tick. No (more) events should be submitted. */
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 TRUE);
   read_network_request (fixture,
@@ -1124,6 +1146,7 @@ test_daemon_discards_in_flight_singulars_when_daemon_disabled (Fixture      *fix
 
   /* Record some different events, and ensure they're submitted correctly */
   record_aggregates (fixture->test_object);
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_aggregates_received);
   wait_for_upload_to_finish (fixture);
@@ -1135,6 +1158,7 @@ test_daemon_discards_failed_in_flight_singulars_when_daemon_disabled (Fixture   
 {
   /* Record some events, and wait for them to be submitted */
   record_singulars (fixture->test_object);
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_singulars_received);
 
@@ -1155,6 +1179,7 @@ test_daemon_discards_failed_in_flight_singulars_when_daemon_disabled (Fixture   
   /* The first batch, which were pending when the daemon was disabled, should
    * have been discarded; the new batch should be sent.
    */
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_aggregates_received);
   wait_for_upload_to_finish (fixture);
@@ -1183,6 +1208,7 @@ test_daemon_discards_persistent_cache_when_daemon_disabled (Fixture      *fixtur
   /* Re-enable, and wait for the next tick. No events should be submitted. */
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider,
                                                 TRUE);
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_no_events_received);
   wait_for_upload_to_finish (fixture);
@@ -1213,6 +1239,7 @@ test_daemon_flushes_to_persistent_cache_on_finalize (Fixture      *fixture,
   create_test_object (fixture);
 
   /* It should upload those cached events */
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_singulars_received);
   wait_for_upload_to_finish (fixture);
@@ -1239,14 +1266,17 @@ test_daemon_limits_network_upload_size (Fixture      *fixture,
 
   record_aggregates (fixture->test_object);
 
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_large_singular_received);
   wait_for_upload_to_finish (fixture);
 
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_large_singular_received);
   wait_for_upload_to_finish (fixture);
 
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_aggregates_received);
   wait_for_upload_to_finish (fixture);
@@ -1335,6 +1365,7 @@ test_daemon_submits_aggregates_from_tally_on_startup (Fixture       *fixture,
 
   setup_persistent_cache (fixture);
   create_test_object (fixture);
+  mock_clock_advance_monotonic (fixture->mock_clock, INTERVAL_USEC);
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_aggregates_received);
   wait_for_upload_to_finish (fixture);

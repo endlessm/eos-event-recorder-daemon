@@ -41,6 +41,7 @@
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
 #include "emer-types.h"
+#include "mock-clock.h"
 #include "mock-image-id-provider.h"
 #include "mock-permissions-provider.h"
 #include "mock-persistent-cache.h"
@@ -66,6 +67,7 @@
 typedef struct _Fixture
 {
   EmerDaemon *test_object;
+  MockClock *mock_clock;
   EmerPermissionsProvider *mock_permissions_provider;
   EmerPersistentCache *mock_persistent_cache;
   EmerAggregateTally *mock_aggregate_tally;
@@ -828,6 +830,7 @@ create_test_object (Fixture *fixture)
     emer_daemon_new_full (g_rand_new_with_seed (18),
                           fixture->server_uri,
                           2 /* network send interval */,
+                          EMER_CLOCK (fixture->mock_clock),
                           fixture->mock_permissions_provider,
                           fixture->mock_persistent_cache,
                           fixture->mock_aggregate_tally,
@@ -854,6 +857,7 @@ setup_most (Fixture      *fixture,
 
   fixture->server_uri = get_server_uri (fixture->mock_server);
 
+  fixture->mock_clock = mock_clock_new ();
   fixture->mock_permissions_provider = emer_permissions_provider_new ();
   fixture->mock_persistent_cache = NULL;
   /* Not actually a mock! */
@@ -888,6 +892,7 @@ teardown (Fixture      *fixture,
           gconstpointer unused)
 {
   g_clear_object (&fixture->test_object);
+  g_clear_object (&fixture->mock_clock);
   g_clear_object (&fixture->mock_permissions_provider);
   g_clear_object (&fixture->mock_persistent_cache);
   g_clear_object (&fixture->mock_aggregate_tally);

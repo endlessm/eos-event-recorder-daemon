@@ -28,7 +28,6 @@
 #include <uuid/uuid.h>
 
 #include <gio/gio.h>
-#include <gio/gunixfdlist.h>
 #include <glib.h>
 #include <glib-object.h>
 #include <glib/gstdio.h>

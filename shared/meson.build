@@ -1,6 +1,8 @@
 emer_shared_lib = static_library(
     'libeos-metrics-event-recorder-shared',
     [
+        'emer-clock.c',
+        'emer-real-clock.c',
         'metrics-util.c',
     ],
     dependencies: emer_shared_required_modules,

@@ -1696,13 +1696,16 @@ emer_daemon_class_init (EmerDaemonClass *klass)
 
   g_object_class_install_properties (object_class, NPROPS, emer_daemon_props);
 
-  klass->upload_finished_handler = handle_upload_finished;
-
   emer_daemon_signals[SIGNAL_UPLOAD_FINISHED] =
-    g_signal_new ("upload-finished", EMER_TYPE_DAEMON, G_SIGNAL_RUN_FIRST,
-                  G_STRUCT_OFFSET (EmerDaemonClass, upload_finished_handler),
-                  NULL /* GSignalAccumulator */, NULL /* accumulator_data */,
-                  g_cclosure_marshal_VOID__VOID, G_TYPE_NONE, 0u);
+    g_signal_new_class_handler ("upload-finished",
+                                EMER_TYPE_DAEMON,
+                                G_SIGNAL_RUN_FIRST,
+                                G_CALLBACK (handle_upload_finished),
+                                NULL /* GSignalAccumulator */,
+                                NULL /* accumulator_data */,
+                                g_cclosure_marshal_VOID__VOID,
+                                G_TYPE_NONE,
+                                0u);
 }
 
 static void

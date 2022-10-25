@@ -66,8 +66,6 @@ struct _EmerDaemon
 struct _EmerDaemonClass
 {
   GObjectClass parent_class;
-
-  void (*upload_finished_handler) (EmerDaemon *self);
 };
 
 GType                    emer_daemon_get_type                 (void) G_GNUC_CONST;

@@ -78,6 +78,12 @@ typedef struct _Fixture
   gint64 relative_time;
   gint64 absolute_time;
   gchar *request_path;
+
+  /* For EmerDaemon::transient-upload-error handler */
+  gulong transient_upload_error_handler_id;
+  gboolean transient_upload_error_emitted;
+  guint transient_upload_error_code;
+  char *transient_upload_error_message;
 } Fixture;
 
 typedef void (*ProcessBytesSourceFunc) (GByteArray *, gpointer);
@@ -803,6 +809,17 @@ wait_for_upload_to_finish (Fixture *fixture)
   g_main_loop_unref (main_loop);
 }
 
+static void
+on_daemon_transient_upload_error (EmerDaemon *daemon,
+                                  guint       status_code,
+                                  const char *reason_phrase,
+                                  Fixture    *fixture)
+{
+  fixture->transient_upload_error_emitted = TRUE;
+  fixture->transient_upload_error_code = status_code;
+  fixture->transient_upload_error_message = g_strdup (reason_phrase);
+}
+
 static gchar *
 get_server_uri (GSubprocess *mock_server)
 {
@@ -835,6 +852,11 @@ create_test_object (Fixture *fixture)
                           fixture->mock_persistent_cache,
                           fixture->mock_aggregate_tally,
                           100000 /* max bytes buffered */);
+  fixture->transient_upload_error_handler_id =
+      g_signal_connect (fixture->test_object,
+                        "transient-upload-error",
+                        G_CALLBACK (on_daemon_transient_upload_error),
+                        fixture);
 }
 
 static void
@@ -891,6 +913,7 @@ static void
 teardown (Fixture      *fixture,
           gconstpointer unused)
 {
+  g_clear_signal_handler (&fixture->transient_upload_error_handler_id, fixture->test_object);
   g_clear_object (&fixture->test_object);
   g_clear_object (&fixture->mock_clock);
   g_clear_object (&fixture->mock_permissions_provider);
@@ -898,6 +921,7 @@ teardown (Fixture      *fixture,
   g_clear_object (&fixture->mock_aggregate_tally);
   g_clear_pointer (&fixture->mock_server, terminate_subprocess_and_wait);
   g_clear_pointer (&fixture->server_uri, g_free);
+  g_clear_pointer (&fixture->transient_upload_error_message, g_free);
 }
 
 // Unit Tests next:
@@ -961,13 +985,13 @@ test_daemon_retries_singular_uploads (Fixture      *fixture,
                         (ProcessBytesSourceFunc) assert_singulars_received);
   send_http_response (fixture->mock_server, SOUP_STATUS_INTERNAL_SERVER_ERROR);
 
-  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
-                         "Attempt to upload metrics failed: Internal Server "
-                         "Error.");
+  while (!fixture->transient_upload_error_emitted)
+    g_main_context_iteration (NULL, FALSE);
+  g_assert_cmpstr (fixture->transient_upload_error_message, ==, "Internal Server Error");
+
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_singulars_received);
   wait_for_upload_to_finish (fixture);
-  g_test_assert_expected_messages ();
 }
 
 static void
@@ -980,13 +1004,13 @@ test_daemon_retries_aggregate_uploads (Fixture      *fixture,
                         (ProcessBytesSourceFunc) assert_aggregates_received);
   send_http_response (fixture->mock_server, SOUP_STATUS_INTERNAL_SERVER_ERROR);
 
-  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
-                         "Attempt to upload metrics failed: Internal Server "
-                         "Error.");
+  while (!fixture->transient_upload_error_emitted)
+    g_main_context_iteration (NULL, FALSE);
+  g_assert_cmpstr (fixture->transient_upload_error_message, ==, "Internal Server Error");
+
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_aggregates_received);
   wait_for_upload_to_finish (fixture);
-  g_test_assert_expected_messages ();
 }
 
 static void
@@ -1128,17 +1152,11 @@ test_daemon_discards_failed_in_flight_singulars_when_daemon_disabled (Fixture   
   /* Now send back an error to the first batch  */
   send_http_response (fixture->mock_server, SOUP_STATUS_INTERNAL_SERVER_ERROR);
 
-  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
-                         "Attempt to upload metrics failed: Internal Server "
-                         "Error.");
-
   /* The first batch, which were pending when the daemon was disabled, should
    * have been discarded; the new batch should be sent.
    */
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_aggregates_received);
-  /* By now it should have warned about the first attempt */
-  g_test_assert_expected_messages ();
   wait_for_upload_to_finish (fixture);
 }
 

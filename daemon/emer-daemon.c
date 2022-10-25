@@ -133,8 +133,10 @@ typedef struct _AggregateTimerSenderData
   GPtrArray *aggregate_timers;
 } AggregateTimerSenderData;
 
-typedef struct _EmerDaemonPrivate
+struct _EmerDaemon
 {
+  GObject parent;
+
   guint network_send_interval;
   GQueue *upload_queue;
 
@@ -174,9 +176,9 @@ typedef struct _EmerDaemonPrivate
   gboolean recording_enabled;
 
   gsize max_bytes_buffered;
-} EmerDaemonPrivate;
+};
 
-G_DEFINE_TYPE_WITH_PRIVATE (EmerDaemon, emer_daemon, G_TYPE_OBJECT)
+G_DEFINE_TYPE (EmerDaemon, emer_daemon, G_TYPE_OBJECT)
 
 enum
 {
@@ -233,9 +235,8 @@ static void
 finish_network_callback (GTask *upload_task)
 {
   EmerDaemon *self = g_task_get_source_object (upload_task);
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  g_clear_object (&priv->current_upload_cancellable);
+  g_clear_object (&self->current_upload_cancellable);
 
   g_signal_emit (self, emer_daemon_signals[SIGNAL_UPLOAD_FINISHED], 0u);
   g_object_unref (upload_task);
@@ -255,13 +256,11 @@ static void
 buffer_event (EmerDaemon *self,
               GVariant   *event)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
   g_variant_ref_sink (event);
   gsize event_cost = emer_persistent_cache_cost (event);
-  gsize new_bytes_buffered = priv->num_bytes_buffered + event_cost;
+  gsize new_bytes_buffered = self->num_bytes_buffered + event_cost;
   if (event_cost > MAX_REQUEST_PAYLOAD || /* Don't get wedged by large event. */
-      new_bytes_buffered > priv->max_bytes_buffered)
+      new_bytes_buffered > self->max_bytes_buffered)
     {
       g_variant_unref (event);
       if (event_cost > MAX_REQUEST_PAYLOAD)
@@ -271,56 +270,52 @@ buffer_event (EmerDaemon *self,
                      "null-terminating byte) is %d bytes.",
                      event_cost, MAX_REQUEST_PAYLOAD);
         }
-      else if (!priv->have_logged_overflow)
+      else if (!self->have_logged_overflow)
         {
           g_warning ("The event buffer overflowed for the first time in the "
                      "life of this event recorder daemon. The maximum number "
                      "of bytes that may be buffered is %" G_GSIZE_FORMAT ".",
-                     priv->max_bytes_buffered);
-          priv->have_logged_overflow = TRUE;
+                     self->max_bytes_buffered);
+          self->have_logged_overflow = TRUE;
         }
       return;
     }
 
-  g_ptr_array_add (priv->variant_array, event);
-  priv->num_bytes_buffered = new_bytes_buffered;
+  g_ptr_array_add (self->variant_array, event);
+  self->num_bytes_buffered = new_bytes_buffered;
 }
 
 static void
 remove_events (EmerDaemon *self,
                gsize       num_events)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
   if (num_events == 0)
     return;
 
   for (gsize i = 0; i < num_events; i++)
     {
-      GVariant *curr_variant = g_ptr_array_index (priv->variant_array, i);
-      priv->num_bytes_buffered -= emer_persistent_cache_cost (curr_variant);
+      GVariant *curr_variant = g_ptr_array_index (self->variant_array, i);
+      self->num_bytes_buffered -= emer_persistent_cache_cost (curr_variant);
     }
 
-  g_ptr_array_remove_range (priv->variant_array, 0u, num_events);
+  g_ptr_array_remove_range (self->variant_array, 0u, num_events);
 }
 
 static void
 flush_to_persistent_cache (EmerDaemon *self)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  if (!priv->recording_enabled)
+  if (!self->recording_enabled)
     return;
 
-  if (priv->variant_array->len == 0)
+  if (self->variant_array->len == 0)
     return;
 
   gsize num_events_stored;
   GError *error = NULL;
   gboolean store_succeeded =
-    emer_persistent_cache_store (priv->persistent_cache,
-                                 (GVariant **) priv->variant_array->pdata,
-                                 priv->variant_array->len,
+    emer_persistent_cache_store (self->persistent_cache,
+                                 (GVariant **) self->variant_array->pdata,
+                                 self->variant_array->len,
                                  &num_events_stored,
                                  &error);
   if (!store_succeeded)
@@ -340,11 +335,9 @@ static void
 remove_from_persistent_cache (EmerDaemon *self,
                               guint64     token)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
   GError *error = NULL;
   gboolean remove_succeeded =
-    emer_persistent_cache_remove (priv->persistent_cache, token, &error);
+    emer_persistent_cache_remove (self->persistent_cache, token, &error);
   if (!remove_succeeded)
     {
       g_warning ("Failed to remove events from persistent cache with token %"
@@ -377,12 +370,10 @@ get_http_request_uri (EmerDaemon   *self,
                       const guchar *data,
                       gsize         length)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
   gchar *checksum =
     g_compute_checksum_for_data (G_CHECKSUM_SHA512, data, length);
   gchar *http_request_uri_string =
-    g_build_filename (priv->server_uri, checksum, NULL);
+    g_build_filename (self->server_uri, checksum, NULL);
   g_free (checksum);
 
   SoupURI *http_request_uri = soup_uri_new (http_request_uri_string);
@@ -406,7 +397,6 @@ get_offset_timestamps (EmerDaemon *self,
                        gint64     *abs_timestamp_ptr,
                        GError    **error)
 {
-
   if (!emtr_util_get_current_time (CLOCK_BOOTTIME, rel_timestamp_ptr) ||
       !emtr_util_get_current_time (CLOCK_REALTIME, abs_timestamp_ptr))
     {
@@ -415,10 +405,9 @@ get_offset_timestamps (EmerDaemon *self,
       return FALSE;
     }
 
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   gint64 boot_offset;
-  if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
+  if (!emer_persistent_cache_get_boot_time_offset (self->persistent_cache,
                                                    &boot_offset, error))
     return FALSE;
 
@@ -461,7 +450,6 @@ static void
 queue_http_request (GTask *upload_task)
 {
   EmerDaemon *self = g_task_get_source_object (upload_task);
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   NetworkCallbackData *callback_data = g_task_get_task_data (upload_task);
 
   gconstpointer serialized_request_body =
@@ -504,7 +492,7 @@ queue_http_request (GTask *upload_task)
   soup_message_set_request (http_message, "application/octet-stream",
                             SOUP_MEMORY_TAKE, compressed_request_body,
                             compressed_request_body_length);
-  soup_session_queue_message (priv->http_session, http_message,
+  soup_session_queue_message (self->http_session, http_message,
                               (SoupSessionCallback) handle_http_response,
                               upload_task);
 }
@@ -542,7 +530,6 @@ handle_http_response (SoupSession *http_session,
                       GTask       *upload_task)
 {
   EmerDaemon *self = g_task_get_source_object (upload_task);
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   NetworkCallbackData *callback_data = g_task_get_task_data (upload_task);
 
   guint status_code;
@@ -573,7 +560,7 @@ handle_http_response (SoupSession *http_session,
                  "%" G_GSIZE_FORMAT " events from buffer to %s.",
                  callback_data->num_stored_events,
                  callback_data->num_buffer_events,
-                 priv->server_uri);
+                 self->server_uri);
       g_task_return_boolean (upload_task, TRUE);
       finish_network_callback (upload_task);
       return;
@@ -605,7 +592,7 @@ handle_http_response (SoupSession *http_session,
       SOUP_STATUS_IS_SERVER_ERROR (status_code))
     {
       guint random_backoff_interval =
-        get_random_backoff_interval (priv->rand, callback_data->attempt_num);
+        get_random_backoff_interval (self->rand, callback_data->attempt_num);
       callback_data->backoff_timeout_source_id =
         g_timeout_add_seconds (random_backoff_interval,
                                (GSourceFunc) handle_backoff_timer,
@@ -656,21 +643,19 @@ add_stored_events_to_builders (EmerDaemon        *self,
                                GVariantBuilder   *singulars,
                                GVariantBuilder   *aggregates)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
   GVariant **variants;
   gsize num_variants;
   GError *error = NULL;
   gboolean has_invalid = FALSE;
   gboolean read_succeeded =
-    emer_persistent_cache_read (priv->persistent_cache, &variants, max_bytes,
+    emer_persistent_cache_read (self->persistent_cache, &variants, max_bytes,
                                 &num_variants, token, &has_invalid, &error);
   if (!read_succeeded)
     {
       if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA))
         {
           GError *local_error = NULL;
-          if (!emer_persistent_cache_remove_all (priv->persistent_cache, &local_error))
+          if (!emer_persistent_cache_remove_all (self->persistent_cache, &local_error))
             {
               g_warning ("Error removing data from the persistent cache: %s", local_error->message);
               g_error_free (local_error);
@@ -709,7 +694,7 @@ add_stored_events_to_builders (EmerDaemon        *self,
   *read_variants = num_variants;
   *read_bytes = curr_read_bytes;
 
-  return !emer_persistent_cache_has_more (priv->persistent_cache, *token);
+  return !emer_persistent_cache_has_more (self->persistent_cache, *token);
 }
 
 static void
@@ -719,19 +704,17 @@ add_buffered_events_to_builders (EmerDaemon      *self,
                                  GVariantBuilder *singulars,
                                  GVariantBuilder *aggregates)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
   gsize curr_bytes = 0, curr_num_variants = 0;
-  for (; curr_num_variants < priv->variant_array->len; curr_num_variants++)
+  for (; curr_num_variants < self->variant_array->len; curr_num_variants++)
     {
       GVariant *curr_event =
-        g_ptr_array_index (priv->variant_array, curr_num_variants);
+        g_ptr_array_index (self->variant_array, curr_num_variants);
       curr_bytes += emer_persistent_cache_cost (curr_event);
       if (curr_bytes > num_bytes)
         break;
     }
 
-  add_events_to_builders ((GVariant **) priv->variant_array->pdata,
+  add_events_to_builders ((GVariant **) self->variant_array->pdata,
                           curr_num_variants, singulars, aggregates);
   *num_variants = curr_num_variants;
 }
@@ -809,12 +792,10 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
                                   GAsyncResult    *result,
                                   EmerDaemon      *self)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  if (priv->current_upload_cancellable != NULL)
+  if (self->current_upload_cancellable != NULL)
     return;
 
-  GTask *upload_task = g_queue_pop_head (priv->upload_queue);
+  GTask *upload_task = g_queue_pop_head (self->upload_queue);
 
   GError *error = NULL;
   if (!g_network_monitor_can_reach_finish (network_monitor, result, &error))
@@ -839,7 +820,7 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
       return;
     }
 
-  priv->current_upload_cancellable = g_object_ref (
+  self->current_upload_cancellable = g_object_ref (
     g_task_get_cancellable (upload_task));
 
   callback_data->request_body = request_body;
@@ -854,15 +835,13 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
 static GSocketConnectable *
 get_ping_socket (EmerDaemon *self)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
   GError *error = NULL;
   GSocketConnectable *ping_socket =
-    g_network_address_parse_uri (priv->server_uri, 443 /* SSL default port */,
+    g_network_address_parse_uri (self->server_uri, 443 /* SSL default port */,
                                  &error);
   if (ping_socket == NULL)
     g_error ("Invalid server URI '%s' could not be parsed because: %s.",
-             priv->server_uri, error->message);
+             self->server_uri, error->message);
 
   return ping_socket;
 }
@@ -871,17 +850,15 @@ static void
 schedule_upload (EmerDaemon  *self,
                  const gchar *environment)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
   guint network_send_interval;
-  if (priv->network_send_interval != 0u)
-    network_send_interval = priv->network_send_interval;
+  if (self->network_send_interval != 0u)
+    network_send_interval = self->network_send_interval;
   else if (g_strcmp0 (environment, "production") == 0)
     network_send_interval = PRODUCTION_NETWORK_SEND_INTERVAL;
   else
     network_send_interval = DEV_NETWORK_SEND_INTERVAL;
 
-  priv->upload_events_timeout_source_id =
+  self->upload_events_timeout_source_id =
     g_timeout_add_seconds (network_send_interval,
                            (GSourceFunc) handle_upload_timer,
                            self);
@@ -891,9 +868,7 @@ static gboolean
 upload_permitted (EmerDaemon *self,
                   GError    **error)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  if (!priv->recording_enabled)
+  if (!self->recording_enabled)
     {
       g_set_error (error, EMER_ERROR, EMER_ERROR_METRICS_DISABLED,
                    METRICS_DISABLED_MESSAGE);
@@ -901,7 +876,7 @@ upload_permitted (EmerDaemon *self,
     }
 
   gboolean uploading_enabled =
-    emer_permissions_provider_get_uploading_enabled (priv->permissions_provider);
+    emer_permissions_provider_get_uploading_enabled (self->permissions_provider);
   if (!uploading_enabled)
     {
       flush_to_persistent_cache (self);
@@ -917,22 +892,20 @@ static void
 dequeue_and_do_upload (EmerDaemon  *self,
                        const gchar *environment)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
   GError *error = NULL;
   if (!upload_permitted (self, &error))
     {
-      GTask *upload_task = g_queue_pop_head (priv->upload_queue);
+      GTask *upload_task = g_queue_pop_head (self->upload_queue);
       g_task_return_error (upload_task, error);
       g_object_unref (upload_task);
       g_signal_emit (self, emer_daemon_signals[SIGNAL_UPLOAD_FINISHED], 0u);
       return;
     }
 
-  if (priv->use_default_server_uri)
+  if (self->use_default_server_uri)
     {
-      g_free (priv->server_uri);
-      priv->server_uri =
+      g_free (self->server_uri);
+      self->server_uri =
         g_strconcat ("https://", environment, "." DEFAULT_METRICS_SERVER "/"
                      CLIENT_VERSION_NUMBER "/", NULL);
     }
@@ -952,8 +925,6 @@ upload_events (EmerDaemon         *self,
                GAsyncReadyCallback callback,
                gpointer            user_data)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
   g_autoptr(GCancellable) cancellable = g_cancellable_new ();
   GTask *upload_task = g_task_new (self, cancellable, callback, user_data);
   // The rest of the fields will be populated when the request is dequeued
@@ -961,7 +932,7 @@ upload_events (EmerDaemon         *self,
   callback_data->max_upload_size = max_upload_size;
   g_task_set_task_data (upload_task, callback_data,
                         (GDestroyNotify) network_callback_data_free);
-  g_queue_push_tail (priv->upload_queue, upload_task);
+  g_queue_push_tail (self->upload_queue, upload_task);
   dequeue_and_do_upload (self, environment);
 }
 
@@ -987,10 +958,8 @@ log_upload_error (EmerDaemon   *self,
 static gboolean
 handle_upload_timer (EmerDaemon *self)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
   gchar *environment =
-    emer_permissions_provider_get_environment (priv->permissions_provider);
+    emer_permissions_provider_get_environment (self->permissions_provider);
   schedule_upload (self, environment);
   upload_events (self, MAX_REQUEST_PAYLOAD, environment,
                  (GAsyncReadyCallback) log_upload_error, NULL /* user_data */);
@@ -1002,13 +971,11 @@ handle_upload_timer (EmerDaemon *self)
 static void
 handle_upload_finished (EmerDaemon *self)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  if (g_queue_is_empty (priv->upload_queue))
+  if (g_queue_is_empty (self->upload_queue))
     return;
 
   gchar *environment =
-    emer_permissions_provider_get_environment (priv->permissions_provider);
+    emer_permissions_provider_get_environment (self->permissions_provider);
   dequeue_and_do_upload (self, environment);
   g_free (environment);
 }
@@ -1018,33 +985,32 @@ on_permissions_changed (EmerPermissionsProvider *permissions_provider,
                         GParamSpec              *pspec,
                         EmerDaemon              *self)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  priv->recording_enabled =
+  self->recording_enabled =
     emer_permissions_provider_get_daemon_enabled (permissions_provider);
 
-  if (!priv->recording_enabled)
+  if (!self->recording_enabled)
     {
       /* Discard any outstanding events */
       GError *error = NULL;
 
-      remove_events (self, priv->variant_array->len);
-      g_hash_table_remove_all (priv->monitored_senders);
-      g_hash_table_remove_all (priv->aggregate_timers);
+      remove_events (self, self->variant_array->len);
+      g_hash_table_remove_all (self->monitored_senders);
+      g_hash_table_remove_all (self->aggregate_timers);
 
-      if (!emer_persistent_cache_remove_all (priv->persistent_cache, &error))
+      if (!emer_persistent_cache_remove_all (self->persistent_cache, &error))
         {
           g_warning ("failed to clear persistent cache: %s", error->message);
           g_clear_error (&error);
         }
 
-      if (!emer_aggregate_tally_clear (priv->aggregate_tally, &error))
+      if (!emer_aggregate_tally_clear (self->aggregate_tally, &error))
         {
           g_warning ("failed to clear tally: %s", error->message);
           g_clear_error (&error);
         }
 
       /* If NULL (because no upload is in progress), this is a no-op. */
-      g_cancellable_cancel (priv->current_upload_cancellable);
+      g_cancellable_cancel (self->current_upload_cancellable);
     }
 }
 
@@ -1058,21 +1024,18 @@ static void
 set_random_number_generator (EmerDaemon *self,
                              GRand      *rand)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  priv->rand = rand == NULL ? g_rand_new () : rand;
+  self->rand = rand == NULL ? g_rand_new () : rand;
 }
 
 static void
 set_server_uri (EmerDaemon  *self,
                 const gchar *server_uri)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  priv->use_default_server_uri = (server_uri == NULL);
-  if (!priv->use_default_server_uri)
+  self->use_default_server_uri = (server_uri == NULL);
+  if (!self->use_default_server_uri)
     {
-      g_free (priv->server_uri);
-      priv->server_uri =
+      g_free (self->server_uri);
+      self->server_uri =
         g_build_filename (server_uri, CLIENT_VERSION_NUMBER "/", NULL);
     }
 }
@@ -1081,61 +1044,52 @@ static void
 set_network_send_interval (EmerDaemon *self,
                            guint       seconds)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  priv->network_send_interval = seconds;
+  self->network_send_interval = seconds;
 }
 
 static void
 set_permissions_provider (EmerDaemon              *self,
                           EmerPermissionsProvider *permissions_provider)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
   if (permissions_provider == NULL)
-    priv->permissions_provider = emer_permissions_provider_new ();
+    self->permissions_provider = emer_permissions_provider_new ();
   else
-    priv->permissions_provider = g_object_ref (permissions_provider);
+    self->permissions_provider = g_object_ref (permissions_provider);
 
-  g_signal_connect (priv->permissions_provider, "notify::daemon-enabled",
+  g_signal_connect (self->permissions_provider, "notify::daemon-enabled",
                     G_CALLBACK (on_permissions_changed), self);
-  priv->recording_enabled =
-    emer_permissions_provider_get_daemon_enabled (priv->permissions_provider);
+  self->recording_enabled =
+    emer_permissions_provider_get_daemon_enabled (self->permissions_provider);
 }
 
 static void
 set_persistent_cache_directory (EmerDaemon  *self,
                                 const gchar *persistent_cache_directory)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  priv->persistent_cache_directory = g_strdup (persistent_cache_directory);
+  self->persistent_cache_directory = g_strdup (persistent_cache_directory);
 }
 
 static void
 set_persistent_cache (EmerDaemon          *self,
                       EmerPersistentCache *persistent_cache)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
   if (persistent_cache != NULL)
     g_object_ref (persistent_cache);
-  priv->persistent_cache = persistent_cache;
+  self->persistent_cache = persistent_cache;
 }
 
 static void
 set_aggregate_tally (EmerDaemon         *self,
                      EmerAggregateTally *tally)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  g_set_object (&priv->aggregate_tally, tally);
+  g_set_object (&self->aggregate_tally, tally);
 }
 
 static void
 set_max_bytes_buffered (EmerDaemon *self,
                         gsize       max_bytes_buffered)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  priv->max_bytes_buffered = max_bytes_buffered;
+  self->max_bytes_buffered = max_bytes_buffered;
 }
 
 static void schedule_next_midnight_tick (EmerDaemon *self);
@@ -1146,11 +1100,10 @@ save_aggregate_timers_to_tally (EmerDaemon    *self,
                                 GDateTime     *datetime,
                                 gint64         monotonic_time_us)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   EmerAggregateTimerImpl *timer_impl;
   GHashTableIter iter;
 
-  g_hash_table_iter_init (&iter, priv->aggregate_timers);
+  g_hash_table_iter_init (&iter, self->aggregate_timers);
   while (g_hash_table_iter_next (&iter, NULL, (gpointer *) &timer_impl))
     {
       g_autoptr(GError) error = NULL;
@@ -1171,11 +1124,10 @@ static void
 split_aggregate_timers (EmerDaemon *self,
                         gint64      monotonic_time_us)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   EmerAggregateTimerImpl *timer_impl;
   GHashTableIter iter;
 
-  g_hash_table_iter_init (&iter, priv->aggregate_timers);
+  g_hash_table_iter_init (&iter, self->aggregate_timers);
   while (g_hash_table_iter_next (&iter, NULL, (gpointer *) &timer_impl))
     emer_aggregate_timer_impl_split (timer_impl, monotonic_time_us);
 }
@@ -1211,7 +1163,6 @@ static gboolean
 clock_ticked_midnight_cb (gpointer user_data)
 {
   EmerDaemon *self = EMER_DAEMON (user_data);
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   g_autoptr (GDateTime) now = NULL;
   g_autofree char *date = NULL;
   gint64 now_monotonic_us;
@@ -1219,7 +1170,7 @@ clock_ticked_midnight_cb (gpointer user_data)
   now_monotonic_us = g_get_monotonic_time ();
 
   /* Daily events */
-  date = g_date_time_format (priv->current_aggregate_tally_date,
+  date = g_date_time_format (self->current_aggregate_tally_date,
                              "%Y-%m-%d");
 
   g_message ("Buffering daily aggregate events from %s to submission queue",
@@ -1227,23 +1178,23 @@ clock_ticked_midnight_cb (gpointer user_data)
 
   save_aggregate_timers_to_tally (self,
                                   EMER_TALLY_DAILY_EVENTS,
-                                  priv->current_aggregate_tally_date,
+                                  self->current_aggregate_tally_date,
                                   now_monotonic_us);
 
-  emer_aggregate_tally_iter (priv->aggregate_tally,
+  emer_aggregate_tally_iter (self->aggregate_tally,
                              EMER_TALLY_DAILY_EVENTS,
-                             priv->current_aggregate_tally_date,
+                             self->current_aggregate_tally_date,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              buffer_aggregate_event_to_queue,
                              self);
 
   /* Monthly events */
   now = g_date_time_new_now_local ();
-  if (month_changed (now, priv->current_aggregate_tally_date))
+  if (month_changed (now, self->current_aggregate_tally_date))
     {
       g_autofree char *month_date = NULL;
 
-      month_date = g_date_time_format (priv->current_aggregate_tally_date,
+      month_date = g_date_time_format (self->current_aggregate_tally_date,
                                        "%Y-%m");
 
       g_message ("Buffering monthly aggregate events from %s to submission queue",
@@ -1251,12 +1202,12 @@ clock_ticked_midnight_cb (gpointer user_data)
 
       save_aggregate_timers_to_tally (self,
                                       EMER_TALLY_MONTHLY_EVENTS,
-                                      priv->current_aggregate_tally_date,
+                                      self->current_aggregate_tally_date,
                                       now_monotonic_us);
 
-      emer_aggregate_tally_iter (priv->aggregate_tally,
+      emer_aggregate_tally_iter (self->aggregate_tally,
                                  EMER_TALLY_MONTHLY_EVENTS,
-                                 priv->current_aggregate_tally_date,
+                                 self->current_aggregate_tally_date,
                                  EMER_TALLY_ITER_FLAG_DELETE,
                                  buffer_aggregate_event_to_queue,
                                  self);
@@ -1272,7 +1223,6 @@ clock_ticked_midnight_cb (gpointer user_data)
 static void
 schedule_next_midnight_tick (EmerDaemon *self)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   g_autoptr (GDateTime) next_midnight = NULL;
   g_autoptr (GDateTime) next_day = NULL;
   g_autoptr (GDateTime) now = NULL;
@@ -1287,25 +1237,23 @@ schedule_next_midnight_tick (EmerDaemon *self)
 
   time_to_next_midnight_us = g_date_time_difference (next_midnight, now);
 
-  priv->dispatch_aggregate_timers_daily_source_id =
+  self->dispatch_aggregate_timers_daily_source_id =
     eins_boottimeout_add_useconds (time_to_next_midnight_us,
                                    clock_ticked_midnight_cb,
                                    self);
 
-  priv->current_aggregate_tally_date = g_date_time_ref (now);
+  self->current_aggregate_tally_date = g_date_time_ref (now);
 }
 
 static void
 remove_timer (EmerDaemon             *self,
               EmerAggregateTimerImpl *timer_impl)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-
-  if (!g_hash_table_remove (priv->aggregate_timers, timer_impl))
+  if (!g_hash_table_remove (self->aggregate_timers, timer_impl))
     {
       g_warning ("Stopped timer %p was not in the set of %d running timers",
                  timer_impl,
-                 g_hash_table_size (priv->aggregate_timers));
+                 g_hash_table_size (self->aggregate_timers));
     }
 }
 
@@ -1315,7 +1263,6 @@ on_timer_stopped_cb (EmerAggregateTimer     *timer,
                      EmerAggregateTimerImpl *timer_impl)
 {
   EmerDaemon *self = g_object_get_data (G_OBJECT (timer_impl), "daemon");
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   AggregateTimerSenderData *sender_data;
   g_autoptr(GDateTime) now = NULL;
   g_autoptr(GError) error = NULL;
@@ -1332,11 +1279,11 @@ on_timer_stopped_cb (EmerAggregateTimer     *timer,
 
   /* Stop watching the sender if this was the last of its timers */
   sender_name = emer_aggregate_timer_impl_get_sender_name (timer_impl);
-  sender_data = g_hash_table_lookup (priv->monitored_senders, sender_name);
+  sender_data = g_hash_table_lookup (self->monitored_senders, sender_name);
   g_assert (sender_data != NULL);
   g_ptr_array_remove_fast (sender_data->aggregate_timers, timer_impl);
   if (sender_data->aggregate_timers->len == 0)
-    g_hash_table_remove (priv->monitored_senders, sender_name);
+    g_hash_table_remove (self->monitored_senders, sender_name);
 
   remove_timer (self, timer_impl);
 
@@ -1349,7 +1296,6 @@ sender_name_vanished_cb (GDBusConnection *connection,
                          gpointer         user_data)
 {
   EmerDaemon *self = EMER_DAEMON (user_data);
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   AggregateTimerSenderData *sender_data;
   g_autoptr(GDateTime) now = NULL;
   gint64 now_monotonic_us;
@@ -1358,7 +1304,7 @@ sender_name_vanished_cb (GDBusConnection *connection,
   now = g_date_time_new_now_local ();
   now_monotonic_us = g_get_monotonic_time ();
 
-  sender_data = g_hash_table_lookup (priv->monitored_senders, sender_name);
+  sender_data = g_hash_table_lookup (self->monitored_senders, sender_name);
   g_assert (sender_data != NULL);
 
   for (i = 0; i < sender_data->aggregate_timers->len; i++)
@@ -1379,23 +1325,22 @@ sender_name_vanished_cb (GDBusConnection *connection,
       remove_timer (self, timer_impl);
     }
 
-  g_hash_table_remove (priv->monitored_senders, sender_name);
+  g_hash_table_remove (self->monitored_senders, sender_name);
 }
 
 static void
 buffer_past_aggregate_events (EmerDaemon *self)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   g_autoptr(GDateTime) now = g_date_time_new_now_local ();
 
-  emer_aggregate_tally_iter_before (priv->aggregate_tally,
+  emer_aggregate_tally_iter_before (self->aggregate_tally,
                                     EMER_TALLY_DAILY_EVENTS,
                                     now,
                                     EMER_TALLY_ITER_FLAG_DELETE,
                                     buffer_aggregate_event_to_queue,
                                     self);
 
-  emer_aggregate_tally_iter_before (priv->aggregate_tally,
+  emer_aggregate_tally_iter_before (self->aggregate_tally,
                                     EMER_TALLY_MONTHLY_EVENTS,
                                     now,
                                     EMER_TALLY_ITER_FLAG_DELETE,
@@ -1408,50 +1353,49 @@ static void
 emer_daemon_constructed (GObject *object)
 {
   EmerDaemon *self = EMER_DAEMON (object);
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
-  if (priv->persistent_cache == NULL)
+  if (self->persistent_cache == NULL)
     {
       guint64 max_cache_size =
         emer_cache_size_provider_get_max_cache_size (NULL);
       g_autoptr(GError) error = NULL;
 
-      priv->persistent_cache =
-        emer_persistent_cache_new (priv->persistent_cache_directory,
+      self->persistent_cache =
+        emer_persistent_cache_new (self->persistent_cache_directory,
                                    max_cache_size,
                                    FALSE,
                                    &error);
 
-      if (priv->persistent_cache == NULL &&
+      if (self->persistent_cache == NULL &&
           error != NULL && error->domain == G_KEY_FILE_ERROR)
         {
           g_warning ("Persistent cache metadata in %s was corrupt: %s",
-                     priv->persistent_cache_directory,
+                     self->persistent_cache_directory,
                      error->message);
           g_clear_error (&error);
 
           g_message ("Attempting to reinitialize the persistent cache");
-          priv->persistent_cache =
-            emer_persistent_cache_new (priv->persistent_cache_directory,
+          self->persistent_cache =
+            emer_persistent_cache_new (self->persistent_cache_directory,
                                        max_cache_size,
                                        TRUE,
                                        &error);
         }
 
-      if (priv->persistent_cache == NULL)
+      if (self->persistent_cache == NULL)
         g_error ("Could not create persistent cache in %s: %s.",
-                 priv->persistent_cache_directory, error->message);
+                 self->persistent_cache_directory, error->message);
     }
 
-  if (priv->aggregate_tally == NULL)
+  if (self->aggregate_tally == NULL)
     {
-      priv->aggregate_tally =
-        emer_aggregate_tally_new (priv->persistent_cache_directory ?: g_get_user_cache_dir ());
+      self->aggregate_tally =
+        emer_aggregate_tally_new (self->persistent_cache_directory ?: g_get_user_cache_dir ());
     }
   buffer_past_aggregate_events (self);
 
   gchar *environment =
-    emer_permissions_provider_get_environment (priv->permissions_provider);
+    emer_permissions_provider_get_environment (self->permissions_provider);
   schedule_upload (self, environment);
   g_free (environment);
 
@@ -1465,16 +1409,15 @@ emer_daemon_get_property (GObject      *object,
                           GParamSpec   *pspec)
 {
   EmerDaemon *self = EMER_DAEMON (object);
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   switch (property_id)
     {
     case PROP_PERSISTENT_CACHE:
-      g_value_set_object (value, priv->persistent_cache);
+      g_value_set_object (value, self->persistent_cache);
       break;
 
     case PROP_AGGREGATE_TALLY:
-      g_value_set_object (value, priv->aggregate_tally);
+      g_value_set_object (value, self->aggregate_tally);
       break;
 
     default:
@@ -1533,39 +1476,38 @@ static void
 emer_daemon_finalize (GObject *object)
 {
   EmerDaemon *self = EMER_DAEMON (object);
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   /* While an upload is ongoing, the GTask holds a ref to the EmerDaemon. */
-  g_warn_if_fail (priv->current_upload_cancellable == NULL);
+  g_warn_if_fail (self->current_upload_cancellable == NULL);
 
-  g_clear_pointer (&priv->monitored_senders, g_hash_table_destroy);
-  g_clear_pointer (&priv->aggregate_timers, g_hash_table_destroy);
+  g_clear_pointer (&self->monitored_senders, g_hash_table_destroy);
+  g_clear_pointer (&self->aggregate_timers, g_hash_table_destroy);
 
-  g_source_remove (priv->upload_events_timeout_source_id);
+  g_source_remove (self->upload_events_timeout_source_id);
 
-  if (priv->report_invalid_cache_data_source_id != 0)
-    g_source_remove (priv->report_invalid_cache_data_source_id);
+  if (self->report_invalid_cache_data_source_id != 0)
+    g_source_remove (self->report_invalid_cache_data_source_id);
 
-  if (priv->dispatch_aggregate_timers_daily_source_id != 0)
-    g_source_remove (priv->dispatch_aggregate_timers_daily_source_id);
+  if (self->dispatch_aggregate_timers_daily_source_id != 0)
+    g_source_remove (self->dispatch_aggregate_timers_daily_source_id);
 
-  g_clear_pointer (&priv->current_aggregate_tally_date, g_date_time_unref);
+  g_clear_pointer (&self->current_aggregate_tally_date, g_date_time_unref);
 
   flush_to_persistent_cache (self);
-  g_clear_object (&priv->persistent_cache);
+  g_clear_object (&self->persistent_cache);
 
-  g_queue_free_full (priv->upload_queue, g_object_unref);
+  g_queue_free_full (self->upload_queue, g_object_unref);
 
-  soup_session_abort (priv->http_session);
-  g_clear_object (&priv->http_session);
+  soup_session_abort (self->http_session);
+  g_clear_object (&self->http_session);
 
-  g_clear_pointer (&priv->variant_array, g_ptr_array_unref);
+  g_clear_pointer (&self->variant_array, g_ptr_array_unref);
 
-  g_rand_free (priv->rand);
-  g_clear_pointer (&priv->server_uri, g_free);
-  g_clear_object (&priv->permissions_provider);
-  g_clear_object (&priv->aggregate_tally);
-  g_clear_pointer (&priv->persistent_cache_directory, g_free);
+  g_rand_free (self->rand);
+  g_clear_pointer (&self->server_uri, g_free);
+  g_clear_object (&self->permissions_provider);
+  g_clear_object (&self->aggregate_tally);
+  g_clear_pointer (&self->persistent_cache_directory, g_free);
 
   G_OBJECT_CLASS (emer_daemon_parent_class)->finalize (object);
 }
@@ -1711,25 +1653,23 @@ emer_daemon_class_init (EmerDaemonClass *klass)
 static void
 emer_daemon_init (EmerDaemon *self)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
+  self->upload_queue = g_queue_new ();
 
-  priv->upload_queue = g_queue_new ();
-
-  priv->http_session =
+  self->http_session =
     soup_session_new_with_options (SOUP_SESSION_MAX_CONNS, 1,
                                    SOUP_SESSION_MAX_CONNS_PER_HOST, 1,
                                    SOUP_SESSION_ADD_FEATURE_BY_TYPE,
                                    SOUP_TYPE_CACHE,
                                    NULL);
 
-  priv->aggregate_timers =
+  self->aggregate_timers =
     g_hash_table_new_full (NULL, NULL, g_object_unref, NULL);
 
-  priv->monitored_senders =
+  self->monitored_senders =
     g_hash_table_new_full (g_str_hash, g_str_equal, g_free,
                            (GDestroyNotify)aggregate_timer_sender_data_free);
 
-  priv->variant_array =
+  self->variant_array =
     g_ptr_array_new_with_free_func ((GDestroyNotify) g_variant_unref);
 
   /* Start aggregate timers now so it can buffer previously stored events */
@@ -1805,10 +1745,9 @@ emer_daemon_record_singular_event (EmerDaemon *self,
 {
   g_return_if_fail (g_variant_is_of_type (payload, G_VARIANT_TYPE_VARIANT));
 
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   g_autofree gchar *os_version = emer_image_id_provider_get_os_version();
 
-  if (!priv->recording_enabled)
+  if (!self->recording_enabled)
     return;
 
   if (!is_uuid (event_id))
@@ -1820,7 +1759,7 @@ emer_daemon_record_singular_event (EmerDaemon *self,
 
   gint64 boot_offset;
   GError *error = NULL;
-  if (!emer_persistent_cache_get_boot_time_offset (priv->persistent_cache,
+  if (!emer_persistent_cache_get_boot_time_offset (self->persistent_cache,
                                                    &boot_offset, &error))
     {
       g_warning ("Unable to correct event's relative timestamp. Dropping "
@@ -1846,10 +1785,9 @@ emer_daemon_enqueue_aggregate_event (EmerDaemon *self,
 {
   g_return_if_fail (payload == NULL || g_variant_is_of_type (payload, G_VARIANT_TYPE_VARIANT));
 
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
   g_autofree gchar *os_version = emer_image_id_provider_get_os_version();
 
-  if (!priv->recording_enabled)
+  if (!self->recording_enabled)
     return;
 
   if (!is_uuid (event_id))
@@ -1891,10 +1829,9 @@ emer_daemon_upload_events (EmerDaemon         *self,
                            GAsyncReadyCallback callback,
                            gpointer            user_data)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
 
   gchar *environment =
-    emer_permissions_provider_get_environment (priv->permissions_provider);
+    emer_permissions_provider_get_environment (self->permissions_provider);
   upload_events (self, G_MAXSIZE, environment, callback, user_data);
   g_free (environment);
 }
@@ -1929,8 +1866,7 @@ emer_daemon_upload_events_finish (EmerDaemon   *self,
 EmerPermissionsProvider *
 emer_daemon_get_permissions_provider (EmerDaemon *self)
 {
-  EmerDaemonPrivate *priv = emer_daemon_get_instance_private (self);
-  return priv->permissions_provider;
+  return self->permissions_provider;
 }
 
 gboolean
@@ -1944,7 +1880,6 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
                                    gchar           **out_timer_object_path,
                                    GError          **error)
 {
-  EmerDaemonPrivate *priv;
   EmerAggregateTimerImpl *timer_impl;
   AggregateTimerSenderData *sender_data;
   GVariant *nullable_payload;
@@ -1952,9 +1887,7 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
   g_return_val_if_fail (EMER_IS_DAEMON (self), FALSE);
   g_return_val_if_fail (event_id != NULL, FALSE);
 
-  priv = emer_daemon_get_instance_private (self);
-
-  if (!priv->recording_enabled)
+  if (!self->recording_enabled)
     {
       g_set_error (error, EMER_ERROR, EMER_ERROR_METRICS_DISABLED,
                    METRICS_DISABLED_MESSAGE);
@@ -1994,7 +1927,7 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
   // Only increment on success, otherwise we waste ids for nothing
   timer_id++;
 
-  timer_impl = emer_aggregate_timer_impl_new (priv->aggregate_tally,
+  timer_impl = emer_aggregate_timer_impl_new (self->aggregate_tally,
                                               g_object_ref (timer),
                                               sender_name,
                                               unix_user_id,
@@ -2012,7 +1945,7 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
                     timer_impl);
 
   /* Monitor sender and shut down all timers from it when it vanishes */
-  sender_data = g_hash_table_lookup (priv->monitored_senders, sender_name);
+  sender_data = g_hash_table_lookup (self->monitored_senders, sender_name);
   if (!sender_data)
     {
       sender_data = g_new0 (AggregateTimerSenderData, 1);
@@ -2025,13 +1958,13 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
                                         sender_name_vanished_cb,
                                         self,
                                         NULL);
-      g_hash_table_insert (priv->monitored_senders,
+      g_hash_table_insert (self->monitored_senders,
                            g_strdup (sender_name),
                            sender_data);
     }
 
   g_ptr_array_add (sender_data->aggregate_timers, timer_impl);
-  g_hash_table_add (priv->aggregate_timers, timer_impl);
+  g_hash_table_add (self->aggregate_timers, timer_impl);
 
   *out_timer_object_path = g_steal_pointer (&timer_object_path);
 
@@ -2041,7 +1974,6 @@ emer_daemon_start_aggregate_timer (EmerDaemon       *self,
 void
 emer_daemon_shutdown (EmerDaemon  *self)
 {
-  EmerDaemonPrivate *priv;
   g_autoptr(GDateTime) now = NULL;
   gint64 now_monotonic_us;
   GHashTableIter iter;
@@ -2049,11 +1981,10 @@ emer_daemon_shutdown (EmerDaemon  *self)
 
   g_return_if_fail (EMER_IS_DAEMON (self));
 
-  priv = emer_daemon_get_instance_private (self);
   now = g_date_time_new_now_local ();
   now_monotonic_us = g_get_monotonic_time ();
 
-  g_hash_table_iter_init (&iter, priv->aggregate_timers);
+  g_hash_table_iter_init (&iter, self->aggregate_timers);
   while (g_hash_table_iter_next (&iter, NULL, &value))
     {
       EmerAggregateTimerImpl *timer_impl = EMER_AGGREGATE_TIMER_IMPL (value);
@@ -2065,7 +1996,7 @@ emer_daemon_shutdown (EmerDaemon  *self)
       g_hash_table_iter_remove (&iter);
     }
 
-  g_assert (g_hash_table_size (priv->aggregate_timers) == 0);
-  g_hash_table_remove_all (priv->monitored_senders);
+  g_assert (g_hash_table_size (self->aggregate_timers) == 0);
+  g_hash_table_remove_all (self->monitored_senders);
 }
 

@@ -28,14 +28,6 @@
 #include <gio/gio.h>
 #include <glib.h>
 
-#define SIGNAL_TIMEOUT_SEC 5
-
-/*
- * The maximum number of calls to g_main_loop_run in any single test that aren't
- * guaranteed to be paired with calls to g_main_loop_quit.
- */
-#define MAX_NUM_TIMEOUTS 2
-
 #define PERMISSIONS_CONFIG_FILE_ENABLED_TEST \
   "[global]\n" \
   "enabled=true\n" \
@@ -89,8 +81,6 @@ typedef struct {
   EmerPermissionsProvider *test_object;
 
   GMainLoop *main_loop; /* for asynchronous tests */
-  guint failsafe_source_id;
-  gint num_timeouts;
 
   gboolean notify_daemon_called;
   gboolean notify_daemon_called_with;
@@ -127,16 +117,6 @@ on_notify_uploading_enabled (EmerPermissionsProvider *permissions_provider,
       emer_permissions_provider_get_uploading_enabled (permissions_provider);
   fixture->notify_uploading_called = TRUE;
   g_main_loop_quit (fixture->main_loop);
-}
-
-static gboolean
-quit_main_loop (Fixture *fixture)
-{
-  if (g_main_loop_is_running (fixture->main_loop))
-    g_main_loop_quit (fixture->main_loop);
-
-  return ++fixture->num_timeouts < MAX_NUM_TIMEOUTS ?
-    G_SOURCE_CONTINUE : G_SOURCE_REMOVE;
 }
 
 static gchar *
@@ -198,13 +178,6 @@ setup_config_files (Fixture     *fixture,
                     G_CALLBACK (on_notify_daemon_enabled), fixture);
   g_signal_connect (fixture->test_object, "notify::uploading-enabled",
                     G_CALLBACK (on_notify_uploading_enabled), fixture);
-
-
-  /* Failsafe: stop waiting for signals in async tests after
-     SIGNAL_TIMEOUT_SEC seconds. */
-  fixture->failsafe_source_id =
-    g_timeout_add_seconds (SIGNAL_TIMEOUT_SEC, (GSourceFunc) quit_main_loop,
-                           fixture);
 }
 
 /* Pass NULL to permissions_config_file_contents if you don't want to create a
@@ -274,8 +247,6 @@ static void
 teardown (Fixture      *fixture,
           gconstpointer unused)
 {
-  g_source_remove (fixture->failsafe_source_id);
-
   /* Might not exist. */
   g_file_delete (fixture->permissions_config_file, NULL, NULL);
 

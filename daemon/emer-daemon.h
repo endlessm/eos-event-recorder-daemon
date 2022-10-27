@@ -28,8 +28,6 @@
 
 #include "emer-aggregate-tally.h"
 #include "emer-event-recorder-server.h"
-#include "emer-machine-id-provider.h"
-#include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
 
@@ -75,14 +73,11 @@ struct _EmerDaemonClass
 GType                    emer_daemon_get_type                 (void) G_GNUC_CONST;
 
 EmerDaemon *             emer_daemon_new                      (const gchar             *persistent_cache_directory,
-                                                               EmerPermissionsProvider *permissions_provider,
-                                                               EmerMachineIdProvider *machine_id_provider);
+                                                               EmerPermissionsProvider *permissions_provider);
 
 EmerDaemon *             emer_daemon_new_full                 (GRand                   *rand,
                                                                const gchar             *server_uri,
                                                                guint                    network_send_interval,
-                                                               EmerMachineIdProvider   *machine_id_provider,
-                                                               EmerNetworkSendProvider *network_send_provider,
                                                                EmerPermissionsProvider *permissions_provider,
                                                                EmerPersistentCache     *persistent_cache,
                                                                EmerAggregateTally      *aggregate_tally,
@@ -113,8 +108,6 @@ void                     emer_daemon_upload_events            (EmerDaemon       
 gboolean                 emer_daemon_upload_events_finish     (EmerDaemon              *self,
                                                                GAsyncResult            *result,
                                                                GError                 **error);
-gchar *                  emer_daemon_get_tracking_id          (EmerDaemon              *self);
-
 EmerPermissionsProvider *emer_daemon_get_permissions_provider (EmerDaemon              *self);
 
 gboolean                 emer_daemon_start_aggregate_timer    (EmerDaemon              *self,

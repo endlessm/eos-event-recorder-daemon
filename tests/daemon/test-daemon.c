@@ -38,8 +38,6 @@
 #include <eosmetrics/eosmetrics.h>
 
 #include "emer-boot-id-provider.h"
-#include "emer-machine-id-provider.h"
-#include "emer-network-send-provider.h"
 #include "emer-permissions-provider.h"
 #include "emer-persistent-cache.h"
 #include "emer-types.h"
@@ -68,8 +66,6 @@
 typedef struct _Fixture
 {
   EmerDaemon *test_object;
-  EmerMachineIdProvider *mock_machine_id_provider;
-  EmerNetworkSendProvider *mock_network_send_provider;
   EmerPermissionsProvider *mock_permissions_provider;
   EmerPersistentCache *mock_persistent_cache;
   EmerAggregateTally *mock_aggregate_tally;
@@ -832,8 +828,6 @@ create_test_object (Fixture *fixture)
     emer_daemon_new_full (g_rand_new_with_seed (18),
                           fixture->server_uri,
                           2 /* network send interval */,
-                          fixture->mock_machine_id_provider,
-                          fixture->mock_network_send_provider,
                           fixture->mock_permissions_provider,
                           fixture->mock_persistent_cache,
                           fixture->mock_aggregate_tally,
@@ -860,9 +854,6 @@ setup_most (Fixture      *fixture,
 
   fixture->server_uri = get_server_uri (fixture->mock_server);
 
-  fixture->mock_machine_id_provider = emer_machine_id_provider_new ();
-  fixture->mock_network_send_provider =
-    emer_network_send_provider_new (NULL /* path */);
   fixture->mock_permissions_provider = emer_permissions_provider_new ();
   fixture->mock_persistent_cache = NULL;
   /* Not actually a mock! */
@@ -897,8 +888,6 @@ teardown (Fixture      *fixture,
           gconstpointer unused)
 {
   g_clear_object (&fixture->test_object);
-  g_clear_object (&fixture->mock_machine_id_provider);
-  g_clear_object (&fixture->mock_network_send_provider);
   g_clear_object (&fixture->mock_permissions_provider);
   g_clear_object (&fixture->mock_persistent_cache);
   g_clear_pointer (&fixture->mock_server, terminate_subprocess_and_wait);
@@ -912,8 +901,7 @@ test_daemon_new_succeeds (Fixture      *fixture,
                           gconstpointer unused)
 {
   EmerDaemon *daemon = emer_daemon_new (NULL /* persistent cache directory */,
-                                        NULL /* permissions provider */,
-                                        NULL /* machine id provider */);
+                                        NULL /* permissions provider */);
   g_assert_nonnull (daemon);
   g_object_unref (daemon);
 }
@@ -925,8 +913,7 @@ test_daemon_new_succeeds_if_disabled (Fixture       *fixture,
   emer_permissions_provider_set_daemon_enabled (fixture->mock_permissions_provider, FALSE);
 
   EmerDaemon *daemon = emer_daemon_new (NULL /* persistent cache directory */,
-                                        fixture->mock_permissions_provider,
-                                        NULL /* machine id provider */);
+                                        fixture->mock_permissions_provider);
   g_assert_nonnull (daemon);
   g_object_unref (daemon);
 }

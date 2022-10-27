@@ -119,13 +119,6 @@ typedef struct _NetworkCallbackData
   guint backoff_timeout_source_id;
 } NetworkCallbackData;
 
-typedef struct _CacheMetricEventData
-{
-  EmerDaemon *daemon;
-  const char *event_id;
-  GVariant *payload;
-} CacheMetricEventData;
-
 typedef struct _AggregateTimerSenderData
 {
   guint watch_id;

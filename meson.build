@@ -8,11 +8,12 @@ project('eos-event-recorder-daemon',
 
 cc = meson.get_compiler('c')
 
+glib_dep = dependency('glib-2.0', version: '>= 2.63.1')
 eosmetrics_dep = dependency('eosmetrics-0', version: '>= 0.2')
 polkit_gobject_dep = dependency('polkit-gobject-1')
 
 emer_shared_required_modules = [
-    dependency('glib-2.0', version: '>= 2.63.1'),
+    glib_dep,
     dependency('gio-unix-2.0', version: '>= 2.46'),
     dependency('gobject-2.0', version: '>= 2.58'),
     dependency('sqlite3'),
@@ -65,6 +66,28 @@ configure_file(
     configuration: conf_data,
 )
 config_inc = include_directories('.')
+
+# Allow the tests to be easily run under valgrind using --setup=valgrind
+valgrind = find_program('valgrind', required: false)
+if valgrind.found()
+  glib_suppression_file = glib_dep.get_variable(pkgconfig: 'prefix') / 'share/glib-2.0/valgrind/glib.supp'
+
+  add_test_setup('valgrind',
+    exe_wrapper: [
+      valgrind,
+      '--tool=memcheck',
+      '--error-exitcode=1',
+      '--track-origins=yes',
+      '--leak-check=full',
+      '--leak-resolution=high',
+      '--num-callers=50',
+      '--show-leak-kinds=definite,possible',
+      '--show-error-list=yes',
+      '--suppressions=@0@'.format(glib_suppression_file),
+    ],
+    timeout_multiplier: 10,
+  )
+endif
 
 subdir('data')
 subdir('shared')

@@ -600,7 +600,7 @@ test_persistent_cache_store_when_full (Fixture      *fixture,
   GVariant *variant = make_variant (0);
   g_variant_ref_sink (variant);
   gsize num_variants = MAX_CACHE_SIZE / get_size_when_stored (variant);
-  GVariant *variants[num_variants];
+  g_autofree GVariant **variants = g_new0 (GVariant *, num_variants);
   for (gsize i = 0; i < num_variants; i++)
     variants[i] = variant;
 

@@ -45,6 +45,7 @@ EmerDaemon *             emer_daemon_new_full                 (GRand            
                                                                const gchar             *server_uri,
                                                                guint                    network_send_interval,
                                                                EmerClock               *clock,
+                                                               GNetworkMonitor         *network_monitor,
                                                                EmerPermissionsProvider *permissions_provider,
                                                                EmerPersistentCache     *persistent_cache,
                                                                EmerAggregateTally      *aggregate_tally,

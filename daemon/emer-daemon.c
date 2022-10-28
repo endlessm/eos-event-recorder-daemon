@@ -151,6 +151,7 @@ struct _EmerDaemon
 
   GRand *rand;
   EmerClock *clock;
+  GNetworkMonitor *network_monitor;
 
   gboolean use_default_server_uri;
   gchar *server_uri;
@@ -181,6 +182,7 @@ enum
   PROP_SERVER_URI,
   PROP_NETWORK_SEND_INTERVAL,
   PROP_CLOCK,
+  PROP_NETWORK_MONITOR,
   PROP_PERMISSIONS_PROVIDER,
   PROP_PERSISTENT_CACHE_DIRECTORY,
   PROP_PERSISTENT_CACHE,
@@ -922,12 +924,10 @@ dequeue_and_do_upload (EmerDaemon  *self,
                      CLIENT_VERSION_NUMBER "/", NULL);
     }
 
-  GNetworkMonitor *network_monitor = g_network_monitor_get_default ();
-  GSocketConnectable *ping_socket = get_ping_socket (self);
-  g_network_monitor_can_reach_async (network_monitor, ping_socket, NULL,
+  g_autoptr(GSocketConnectable) ping_socket = get_ping_socket (self);
+  g_network_monitor_can_reach_async (self->network_monitor, ping_socket, NULL,
                                      (GAsyncReadyCallback) handle_network_monitor_can_reach,
                                      self);
-  g_object_unref (ping_socket);
 }
 
 static void
@@ -1069,6 +1069,18 @@ set_clock (EmerDaemon *self,
     self->clock = emer_real_clock_new ();
   else
     self->clock = g_object_ref (clock);
+}
+
+static void
+set_network_monitor (EmerDaemon      *self,
+                     GNetworkMonitor *network_monitor)
+{
+  g_assert (self->network_monitor == NULL);
+
+  if (network_monitor == NULL)
+    network_monitor = g_network_monitor_get_default ();
+
+  self->network_monitor = g_object_ref (network_monitor);
 }
 
 static void
@@ -1475,6 +1487,10 @@ emer_daemon_set_property (GObject      *object,
       set_clock (self, g_value_get_object (value));
       break;
 
+    case PROP_NETWORK_MONITOR:
+      set_network_monitor (self, g_value_get_object (value));
+      break;
+
     case PROP_PERMISSIONS_PROVIDER:
       set_permissions_provider (self, g_value_get_object (value));
       break;
@@ -1533,6 +1549,7 @@ emer_daemon_finalize (GObject *object)
 
   g_rand_free (self->rand);
   g_clear_object (&self->clock);
+  g_clear_object (&self->network_monitor);
   g_clear_pointer (&self->server_uri, g_free);
   g_clear_object (&self->permissions_provider);
   g_clear_object (&self->aggregate_tally);
@@ -1606,6 +1623,21 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                          "Clock",
                          "Object providing current time and timeouts",
                          EMER_TYPE_CLOCK,
+                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
+                         G_PARAM_STATIC_STRINGS);
+
+  /*
+   * EmerDaemon:network-monitor:
+   *
+   * Implementation of #GNetworkMonitor to use to monitor connectivity. If
+   * this property is not specified, g_network_monitor_get_default () will be
+   * used.
+   */
+  emer_daemon_props[PROP_NETWORK_MONITOR] =
+    g_param_spec_object ("network-monitor",
+                         "Network Minotaur",
+                         "Network connectivity monitor",
+                         G_TYPE_NETWORK_MONITOR,
                          G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                          G_PARAM_STATIC_STRINGS);
 
@@ -1767,6 +1799,8 @@ emer_daemon_new (const gchar             *persistent_cache_directory,
  *   attempt a network send request.
  * @clock: The #EmerClock to use to measure time and set timeouts, or %NULL to
  *   use the default, #EmerRealClock.
+ * @network_monitor: The #GNetworkMonitor to use to monitor connectivity,
+ *   or %NULL to use g_network_monitor_get_default().
  * @permissions_provider: The #EmerPermissionsProvider to supply information
  *   about opting out of metrics collection, disabling network uploads, and the
  *   metrics environment (dev or production).
@@ -1787,6 +1821,7 @@ emer_daemon_new_full (GRand                   *rand,
                       const gchar             *server_uri,
                       guint                    network_send_interval,
                       EmerClock               *clock,
+                      GNetworkMonitor         *network_monitor,
                       EmerPermissionsProvider *permissions_provider,
                       EmerPersistentCache     *persistent_cache,
                       EmerAggregateTally      *aggregate_tally,
@@ -1797,6 +1832,7 @@ emer_daemon_new_full (GRand                   *rand,
                        "server-uri", server_uri,
                        "network-send-interval", network_send_interval,
                        "clock", clock,
+                       "network-monitor", network_monitor,
                        "permissions-provider", permissions_provider,
                        "persistent-cache", persistent_cache,
                        "aggregate-tally", aggregate_tally,

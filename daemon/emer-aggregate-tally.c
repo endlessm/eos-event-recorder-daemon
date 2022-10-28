@@ -195,7 +195,7 @@ close_db (sqlite3 *db)
 {
   g_autoptr(GError) error = NULL;
 
-  if (db != NULL)
+  if (db == NULL)
     return;
 
   if (!check_sqlite_error ("sqlite3_close", sqlite3_close (db), &error))

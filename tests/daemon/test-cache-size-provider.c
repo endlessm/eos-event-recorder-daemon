@@ -134,7 +134,7 @@ test_cache_size_provider_recovers_if_corrupt_nul (Fixture      *fixture,
   g_test_bug ("T19953");
 
   gssize size = 41;
-  gchar *contents = g_malloc0 (41);
+  g_autofree gchar *contents = g_malloc0 (41);
 
   write_cache_size_file (fixture, contents, size);
   assert_gets_default_max_cache_size (fixture);

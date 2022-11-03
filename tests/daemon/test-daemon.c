@@ -890,6 +890,7 @@ teardown (Fixture      *fixture,
   g_clear_object (&fixture->test_object);
   g_clear_object (&fixture->mock_permissions_provider);
   g_clear_object (&fixture->mock_persistent_cache);
+  g_clear_object (&fixture->mock_aggregate_tally);
   g_clear_pointer (&fixture->mock_server, terminate_subprocess_and_wait);
   g_clear_pointer (&fixture->server_uri, g_free);
 }

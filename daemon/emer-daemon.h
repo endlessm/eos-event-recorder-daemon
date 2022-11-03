@@ -34,43 +34,7 @@
 G_BEGIN_DECLS
 
 #define EMER_TYPE_DAEMON emer_daemon_get_type()
-
-#define EMER_DAEMON(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST ((obj), \
-  EMER_TYPE_DAEMON, EmerDaemon))
-
-#define EMER_DAEMON_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST ((klass), \
-  EMER_TYPE_DAEMON, EmerDaemonClass))
-
-#define EMER_IS_DAEMON(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE ((obj), \
-  EMER_TYPE_DAEMON))
-
-#define EMER_IS_DAEMON_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE ((klass), \
-  EMER_TYPE_DAEMON))
-
-#define EMER_DAEMON_GET_CLASS(obj) \
-  (G_TYPE_INSTANCE_GET_CLASS ((obj), \
-  EMER_TYPE_DAEMON, EmerDaemonClass))
-
-typedef struct _EmerDaemon EmerDaemon;
-typedef struct _EmerDaemonClass EmerDaemonClass;
-
-struct _EmerDaemon
-{
-  GObject parent;
-};
-
-struct _EmerDaemonClass
-{
-  GObjectClass parent_class;
-
-  void (*upload_finished_handler) (EmerDaemon *self);
-};
-
-GType                    emer_daemon_get_type                 (void) G_GNUC_CONST;
+G_DECLARE_FINAL_TYPE (EmerDaemon, emer_daemon, EMER, DAEMON, GObject)
 
 EmerDaemon *             emer_daemon_new                      (const gchar             *persistent_cache_directory,
                                                                EmerPermissionsProvider *permissions_provider);

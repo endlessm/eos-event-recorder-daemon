@@ -525,11 +525,7 @@ emer_circular_file_initable_init (GInitable    *initable,
            * file was first initialized, but before any events were logged to
            * the file.
            */
-          gsize n_groups;
-          g_autofree GStrv groups =
-            g_key_file_get_groups (priv->metadata_key_file, &n_groups);
-
-          if (n_groups == 0)
+          if (!g_key_file_has_group (priv->metadata_key_file, METADATA_GROUP_NAME))
             priv->reinitialize = TRUE;
         }
     }

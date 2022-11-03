@@ -404,7 +404,7 @@ make_large_singular (void)
                                1);
   GVariant *singular =
     g_variant_new ("(@aysxmv)", make_event_id_variant (),
-                   emer_image_id_provider_get_os_version(),
+                   OS_VERSION,
                    OFFSET_TIMESTAMP, auxiliary_payload);
 
   gsize singular_cost = emer_persistent_cache_cost (singular);
@@ -485,7 +485,7 @@ assert_singular_matches_variant (GVariant *actual_variant,
 {
   GVariant *expected_variant =
     g_variant_new ("(@aysxm@v)", make_event_id_variant (),
-                   emer_image_id_provider_get_os_version(),
+                   OS_VERSION,
                    OFFSET_TIMESTAMP, expected_auxiliary_payload);
   assert_variants_equal (actual_variant, expected_variant);
 }
@@ -497,7 +497,7 @@ assert_aggregate_matches_variant (GVariant   *actual_variant,
 {
   GVariant *expected_variant =
     g_variant_new ("(@ayssum@v)", make_event_id_variant (),
-                   emer_image_id_provider_get_os_version(),
+                   OS_VERSION,
                    expected_period_start,
                    NUM_EVENTS, expected_auxiliary_payload);
   assert_variants_equal (actual_variant, expected_variant);

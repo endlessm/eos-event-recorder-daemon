@@ -472,6 +472,9 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
 {
   g_return_val_if_fail (payload == NULL || g_variant_is_of_type (payload, G_VARIANT_TYPE_VARIANT), FALSE);
 
+  if (payload != NULL)
+    g_variant_ref_sink (payload);
+
   const char *UPSERT_SQL =
     "INSERT INTO tally (date, event_id, unix_user_id, "
     "                   payload, counter) "
@@ -484,8 +487,7 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
   sqlite3_stmt *stmt = NULL;
 
   date = format_datetime_for_tally_type (datetime, tally_type);
-
-  return
+  gboolean ret =
       CHECK (sqlite3_prepare_v2 (self->db, UPSERT_SQL, -1, &stmt, NULL)) &&
       CHECK (sqlite3_bind_text (stmt, 1, date, -1, SQLITE_TRANSIENT)) &&
       CHECK (sqlite3_bind_blob (stmt, 2, event_id, sizeof (uuid_t), SQLITE_STATIC)) &&
@@ -497,6 +499,10 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
       CHECK (sqlite3_bind_int64 (stmt, 5, counter)) &&
       CHECK (sqlite3_step (stmt)) &&
       CHECK (sqlite3_finalize (stmt));
+
+  g_clear_pointer (&payload, g_variant_unref);
+
+  return ret;
 }
 
 G_STATIC_ASSERT (sizeof (sqlite3_int64) == sizeof (gint64));

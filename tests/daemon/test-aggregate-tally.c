@@ -136,8 +136,9 @@ test_aggregate_tally_store_events (struct Fixture *fixture,
 {
   g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
   g_autoptr(GError) error = NULL;
-  GVariant *payload = v_str (G_STRFUNC);
+  g_autoptr(GVariant) payload = v_str (G_STRFUNC);
 
+  // Store a non-floating payload
   emer_aggregate_tally_store_event (fixture->tally,
                                     EMER_TALLY_DAILY_EVENTS,
                                     1001,
@@ -148,11 +149,24 @@ test_aggregate_tally_store_events (struct Fixture *fixture,
                                     &error);
   g_assert_no_error (error);
 
+  // Store a floating payload
+  GVariant *floaty = g_variant_new_variant (g_variant_new_string ("mcfloatface"));
   emer_aggregate_tally_store_event (fixture->tally,
                                     EMER_TALLY_DAILY_EVENTS,
                                     1001,
                                     uuids[0],
-                                    payload,
+                                    floaty,
+                                    2,
+                                    datetime,
+                                    &error);
+  g_assert_no_error (error);
+
+  // Store a null payload
+  emer_aggregate_tally_store_event (fixture->tally,
+                                    EMER_TALLY_DAILY_EVENTS,
+                                    1001,
+                                    uuids[0],
+                                    NULL,
                                     2,
                                     datetime,
                                     &error);

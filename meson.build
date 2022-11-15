@@ -8,7 +8,7 @@ project('eos-event-recorder-daemon',
 
 cc = meson.get_compiler('c')
 
-glib_dep = dependency('glib-2.0', version: '>= 2.63.1')
+glib_dep = dependency('glib-2.0', version: '>= 2.66')
 eosmetrics_dep = dependency('eosmetrics-0', version: '>= 0.2')
 polkit_gobject_dep = dependency('polkit-gobject-1')
 
@@ -53,14 +53,14 @@ add_project_arguments(
     '-DPERMISSIONS_FILE="@0@"'.format(permissions_file),
     '-DPERSISTENT_CACHE_DIR="@0@"'.format(persistent_cache_dir),
     '-DSYSCONFDIR="@0@"'.format(get_option('sysconfdir')),
+    '-DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_66',
+    '-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_66',
     '-Wno-unused-parameter',
   ],
   language: 'c',
 )
 conf_data = configuration_data()
 conf_data.set_quoted('DEFAULT_METRICS_SERVER', default_metrics_server)
-conf_data.set('GLIB_VERSION_MIN_REQUIRED', 'GLIB_VERSION_2_64')
-conf_data.set('GLIB_VERSION_MAX_ALLOWED', 'GLIB_VERSION_2_64')
 configure_file(
     output: 'config.h',
     configuration: conf_data,

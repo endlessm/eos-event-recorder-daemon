@@ -156,6 +156,7 @@ handle_upload_finished (EmerDaemon       *daemon,
     g_dbus_method_invocation_take_error (callback_data->invocation, error);
 
   g_object_unref (callback_data->server);
+  g_object_unref (callback_data->invocation);
   g_free (callback_data);
 }
 

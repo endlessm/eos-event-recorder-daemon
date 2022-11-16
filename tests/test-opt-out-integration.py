@@ -65,9 +65,10 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         config_file_arg = "--config-file-path={}".format(self.config_file)
 
         daemon_path = os.environ.get("EMER_PATH", "./eos-metrics-event-recorder")
-        self.daemon = subprocess.Popen(
-            [daemon_path, persistent_cache_dir_arg, config_file_arg]
-        )
+        # e.g. valgrind
+        exe_wrapper = os.environ.get("EXE_WRAPPER", "").split()
+        daemon_command = exe_wrapper + [daemon_path, persistent_cache_dir_arg, config_file_arg]
+        self.daemon = subprocess.Popen(daemon_command)
 
         # Wait for the service to come up
         self.wait_for_bus_object(

@@ -72,19 +72,28 @@ valgrind = find_program('valgrind', required: false)
 if valgrind.found()
   glib_suppression_file = glib_dep.get_variable(pkgconfig: 'prefix') / 'share/glib-2.0/valgrind/glib.supp'
 
+  valgrind_arguments = [
+    '--tool=memcheck',
+    '--error-exitcode=1',
+    '--track-origins=yes',
+    '--leak-check=full',
+    '--leak-resolution=high',
+    '--num-callers=50',
+    '--show-leak-kinds=definite,possible',
+    '--show-error-list=yes',
+    '--suppressions=@0@'.format(glib_suppression_file),
+  ]
   add_test_setup('valgrind',
-    exe_wrapper: [
-      valgrind,
-      '--tool=memcheck',
-      '--error-exitcode=1',
-      '--track-origins=yes',
-      '--leak-check=full',
-      '--leak-resolution=high',
-      '--num-callers=50',
-      '--show-leak-kinds=definite,possible',
-      '--show-error-list=yes',
-      '--suppressions=@0@'.format(glib_suppression_file),
-    ],
+    exe_wrapper: [valgrind, valgrind_arguments],
+    # For a test which runs the entire daemon as a subprocess. We don't use
+    # --trace-children=yes because that test also spawns other things such as
+    # a dbus-daemon and we don't want to valgrind those.
+    env: {
+      'EXE_WRAPPER': ' '.join(
+        # TODO: use .full_path() once we require meson ≥ 0.55
+        [valgrind.path()] + valgrind_arguments
+      ),
+    },
     timeout_multiplier: 10,
   )
 endif

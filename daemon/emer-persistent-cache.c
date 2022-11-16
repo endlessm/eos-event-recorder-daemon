@@ -194,31 +194,6 @@ get_system_boot_id (EmerPersistentCache *self,
   return TRUE;
 }
 
-static void
-unlink_old_file (EmerPersistentCache *self,
-                 const gchar         *filename)
-{
-  EmerPersistentCachePrivate *priv =
-    emer_persistent_cache_get_instance_private (self);
-
-  gchar *path = g_build_filename (priv->cache_directory, filename, NULL);
-  if (g_unlink (path) != 0 && errno != ENOENT)
-    {
-      const gchar *error_string = g_strerror (errno);
-      g_warning ("Failed to unlink old cache file %s. Error: %s.",
-                 path, error_string);
-    }
-  g_free (path);
-}
-
-static void
-unlink_old_files (EmerPersistentCache *self)
-{
-  unlink_old_file (self, "cache_individual.metrics");
-  unlink_old_file (self, "cache_aggregate.metrics");
-  unlink_old_file (self, "cache_sequence.metrics");
-}
-
 /*
  * Will populate an already open GKeyFile with timing metadata and then write
  * that data to disk. Because all values for timestamps and offsets are
@@ -618,16 +593,13 @@ apply_cache_versioning (EmerPersistentCache *self,
   EmerPersistentCachePrivate *priv =
     emer_persistent_cache_get_instance_private (self);
 
-  gint old_version;
+  gint old_version = 0;
   gboolean read_succeeded =
     emer_cache_version_provider_get_version (priv->cache_version_provider,
                                              &old_version);
 
   if (!read_succeeded || CURRENT_CACHE_VERSION != old_version)
     {
-      if (old_version < 4)
-        unlink_old_files (self);
-
       if (!emer_circular_file_purge (priv->variant_file, error))
         {
           g_prefix_error (error, "Will not update version number. ");

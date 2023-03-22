@@ -94,6 +94,9 @@ emer_image_id_provider_get_version (void)
   if (image_version == NULL)
     image_version = get_image_version_for_path (EOS_IMAGE_VERSION_ALT_PATH);
 
+  if (image_version == NULL)
+    image_version = g_strdup ("unknown");
+
   return image_version;
 }
 

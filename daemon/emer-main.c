@@ -394,6 +394,15 @@ on_name_lost (GDBusConnection *system_bus,
   g_error ("Could not acquire name '%s' on system bus.", name);
 }
 
+static void
+on_daemon_transient_upload_error (EmerDaemon *daemon,
+                                  guint       status_code,
+                                  const char *reason_phrase,
+                                  gpointer    user_data)
+{
+  g_warning ("Attempt to upload metrics failed: %s", reason_phrase);
+}
+
 static EmerDaemon *
 make_daemon (gint                argc,
              const gchar * const argv[])
@@ -452,6 +461,12 @@ main (gint                argc,
   GMainLoop *main_loop = g_main_loop_new (NULL, TRUE);
   ShutdownSignalData data = { daemon, main_loop };
 
+  gulong transient_upload_error_id =
+      g_signal_connect (daemon,
+                        "transient-upload-error",
+                        G_CALLBACK (on_daemon_transient_upload_error),
+                        NULL);
+
   // Shut down on any of these signals.
   g_unix_signal_add (SIGHUP, (GSourceFunc) quit_main_loop, &data);
   g_unix_signal_add (SIGINT, (GSourceFunc) quit_main_loop, &data);
@@ -468,6 +483,7 @@ main (gint                argc,
 
   g_main_loop_run (main_loop);
 
+  g_clear_signal_handler (&transient_upload_error_id, daemon);
   g_object_unref (daemon);
   g_bus_unown_name (name_id);
   g_main_loop_unref (main_loop);

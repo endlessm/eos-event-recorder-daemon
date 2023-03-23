@@ -26,6 +26,8 @@
 #include <gio/gio.h>
 #include <glib-object.h>
 
+#include "shared/emer-clock.h"
+
 #include "emer-aggregate-tally.h"
 #include "emer-event-recorder-server.h"
 #include "emer-permissions-provider.h"
@@ -42,6 +44,7 @@ EmerDaemon *             emer_daemon_new                      (const gchar      
 EmerDaemon *             emer_daemon_new_full                 (GRand                   *rand,
                                                                const gchar             *server_uri,
                                                                guint                    network_send_interval,
+                                                               EmerClock               *clock,
                                                                EmerPermissionsProvider *permissions_provider,
                                                                EmerPersistentCache     *persistent_cache,
                                                                EmerAggregateTally      *aggregate_tally,

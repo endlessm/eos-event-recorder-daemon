@@ -44,6 +44,7 @@
 #include "emer-persistent-cache.h"
 #include "emer-site-id-provider.h"
 #include "emer-types.h"
+#include "shared/emer-real-clock.h"
 #include "shared/metrics-util.h"
 
 /*
@@ -149,6 +150,7 @@ struct _EmerDaemon
   /* Private storage for public properties */
 
   GRand *rand;
+  EmerClock *clock;
 
   gboolean use_default_server_uri;
   gchar *server_uri;
@@ -178,6 +180,7 @@ enum
   PROP_RANDOM_NUMBER_GENERATOR,
   PROP_SERVER_URI,
   PROP_NETWORK_SEND_INTERVAL,
+  PROP_CLOCK,
   PROP_PERMISSIONS_PROVIDER,
   PROP_PERSISTENT_CACHE_DIRECTORY,
   PROP_PERSISTENT_CACHE,
@@ -190,12 +193,12 @@ static GParamSpec *emer_daemon_props[NPROPS] = { NULL, };
 
 enum
 {
-  SIGNAL_0,
+  SIGNAL_TRANSIENT_UPLOAD_ERROR,
   SIGNAL_UPLOAD_FINISHED,
   NSIGNALS
 };
 
-static guint emer_daemon_signals[NSIGNALS] = { 0u, };
+static guint emer_daemon_signals[NSIGNALS];
 
 static gboolean handle_upload_timer (EmerDaemon *self);
 
@@ -526,6 +529,7 @@ handle_http_response (SoupSession *http_session,
 
   guint status_code;
   g_object_get (http_message, "status-code", &status_code, NULL);
+
   if (SOUP_STATUS_IS_SUCCESSFUL (status_code))
     {
       GCancellable *cancellable =
@@ -558,23 +562,27 @@ handle_http_response (SoupSession *http_session,
       return;
     }
 
-  gchar *reason_phrase;
+  g_autofree gchar *reason_phrase = NULL;
   g_object_get (http_message, "reason-phrase", &reason_phrase, NULL);
-  g_warning ("Attempt to upload metrics failed: %s.", reason_phrase);
-  g_free (reason_phrase);
+
+  g_debug ("EmerDaemon: HTTP request failed with code %u: %s",
+           status_code, reason_phrase);
 
   if (g_task_return_error_if_cancelled (upload_task))
     {
+      g_debug ("EmerDaemon: Upload task cancelled, ignoring error response");
       finish_network_callback (upload_task);
       return;
     }
 
   if (++callback_data->attempt_num >= NETWORK_ATTEMPT_LIMIT)
     {
-      g_task_return_new_error (upload_task, G_IO_ERROR,
-                               G_IO_ERROR_FAILED,
-                               "Maximum number of network attempts (%d) "
-                               "reached", NETWORK_ATTEMPT_LIMIT);
+      g_task_return_new_error (upload_task,
+                               SOUP_HTTP_ERROR,
+                               status_code,
+                               "Upload failed after %d attempts: %s",
+                               callback_data->attempt_num,
+                               reason_phrase);
       finish_network_callback (upload_task);
       return;
     }
@@ -585,18 +593,28 @@ handle_http_response (SoupSession *http_session,
     {
       guint random_backoff_interval =
         get_random_backoff_interval (self->rand, callback_data->attempt_num);
+      g_debug ("Scheduling retry in %u seconds", random_backoff_interval);
       callback_data->backoff_timeout_source_id =
-        g_timeout_add_seconds (random_backoff_interval,
-                               (GSourceFunc) handle_backoff_timer,
-                               upload_task);
+        emer_clock_timeout_add_seconds (self->clock,
+                                        random_backoff_interval,
+                                        (GSourceFunc) handle_backoff_timer,
+                                        upload_task);
+
+      g_signal_emit (self,
+                     emer_daemon_signals[SIGNAL_TRANSIENT_UPLOAD_ERROR],
+                     0,
+                     status_code,
+                     reason_phrase);
 
       /* Old message is unreffed automatically, because it is not requeued. */
       return;
     }
 
-  g_task_return_new_error (upload_task, G_IO_ERROR,
-                           G_IO_ERROR_FAILED, "Received HTTP status code: %u",
-                           status_code);
+  g_task_return_new_error (upload_task,
+                           SOUP_HTTP_ERROR,
+                           status_code,
+                           "HTTP request failed: %s",
+                           reason_phrase);
   finish_network_callback (upload_task);
 }
 
@@ -850,10 +868,12 @@ schedule_upload (EmerDaemon  *self,
   else
     network_send_interval = DEV_NETWORK_SEND_INTERVAL;
 
+  g_debug ("Scheduling upload in %u seconds", network_send_interval);
   self->upload_events_timeout_source_id =
-    g_timeout_add_seconds (network_send_interval,
-                           (GSourceFunc) handle_upload_timer,
-                           self);
+    emer_clock_timeout_add_seconds (self->clock,
+                                    network_send_interval,
+                                    (GSourceFunc) handle_upload_timer,
+                                    self);
 }
 
 static gboolean
@@ -1037,6 +1057,19 @@ set_network_send_interval (EmerDaemon *self,
                            guint       seconds)
 {
   self->network_send_interval = seconds;
+}
+
+static void
+set_clock (EmerDaemon *self,
+           EmerClock  *clock)
+{
+  g_return_if_fail (clock == NULL || EMER_IS_CLOCK (clock));
+  g_assert (self->clock == NULL);
+
+  if (clock == NULL)
+    self->clock = emer_real_clock_new ();
+  else
+    self->clock = g_object_ref (clock);
 }
 
 static void
@@ -1439,6 +1472,10 @@ emer_daemon_set_property (GObject      *object,
       set_network_send_interval (self, g_value_get_uint (value));
       break;
 
+    case PROP_CLOCK:
+      set_clock (self, g_value_get_object (value));
+      break;
+
     case PROP_PERMISSIONS_PROVIDER:
       set_permissions_provider (self, g_value_get_object (value));
       break;
@@ -1496,6 +1533,7 @@ emer_daemon_finalize (GObject *object)
   g_clear_pointer (&self->variant_array, g_ptr_array_unref);
 
   g_rand_free (self->rand);
+  g_clear_object (&self->clock);
   g_clear_pointer (&self->server_uri, g_free);
   g_clear_object (&self->permissions_provider);
   g_clear_object (&self->aggregate_tally);
@@ -1557,6 +1595,20 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                        0, G_MAXUINT, 0,
                        G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                        G_PARAM_STATIC_STRINGS);
+
+  /*
+   * EmerDaemon:clock:
+   *
+   * An #EmerClock to measure time and set timeouts. If this property is not
+   * specified, an #EmerRealClock will be used.
+   */
+  emer_daemon_props[PROP_CLOCK] =
+    g_param_spec_object ("clock",
+                         "Clock",
+                         "Object providing current time and timeouts",
+                         EMER_TYPE_CLOCK,
+                         G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
+                         G_PARAM_STATIC_STRINGS);
 
   /*
    * EmerDaemon:permissions-provider:
@@ -1630,6 +1682,27 @@ emer_daemon_class_init (EmerDaemonClass *klass)
 
   g_object_class_install_properties (object_class, NPROPS, emer_daemon_props);
 
+  /**
+   * EmerDaemon::transient-upload-error:
+   * @status_code: HTTP status code
+   * @reason_phrase: HTTP reason phrase
+   *
+   * Emitted when an upload fails in such a way that the daemon will retry
+   * in a little while.
+   */
+  emer_daemon_signals[SIGNAL_TRANSIENT_UPLOAD_ERROR] =
+    g_signal_new ("transient-upload-error",
+                  EMER_TYPE_DAEMON,
+                  G_SIGNAL_RUN_FIRST,
+                  0 /* class_offset */,
+                  NULL /* GSignalAccumulator */,
+                  NULL /* accumulator_data */,
+                  g_cclosure_marshal_generic,
+                  G_TYPE_NONE,
+                  2u,
+                  G_TYPE_UINT,
+                  G_TYPE_STRING);
+
   emer_daemon_signals[SIGNAL_UPLOAD_FINISHED] =
     g_signal_new_class_handler ("upload-finished",
                                 EMER_TYPE_DAEMON,
@@ -1693,6 +1766,8 @@ emer_daemon_new (const gchar             *persistent_cache_directory,
  *   defaults to 443 (the standard port used by SSL).
  * @network_send_interval: frequency in seconds with which the client will
  *   attempt a network send request.
+ * @clock: The #EmerClock to use to measure time and set timeouts, or %NULL to
+ *   use the default, #EmerRealClock.
  * @permissions_provider: The #EmerPermissionsProvider to supply information
  *   about opting out of metrics collection, disabling network uploads, and the
  *   metrics environment (dev or production).
@@ -1712,6 +1787,7 @@ EmerDaemon *
 emer_daemon_new_full (GRand                   *rand,
                       const gchar             *server_uri,
                       guint                    network_send_interval,
+                      EmerClock               *clock,
                       EmerPermissionsProvider *permissions_provider,
                       EmerPersistentCache     *persistent_cache,
                       EmerAggregateTally      *aggregate_tally,
@@ -1721,6 +1797,7 @@ emer_daemon_new_full (GRand                   *rand,
                        "random-number-generator", rand,
                        "server-uri", server_uri,
                        "network-send-interval", network_send_interval,
+                       "clock", clock,
                        "permissions-provider", permissions_provider,
                        "persistent-cache", persistent_cache,
                        "aggregate-tally", aggregate_tally,

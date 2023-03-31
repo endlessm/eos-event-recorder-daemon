@@ -39,7 +39,7 @@ py = import('python').find_installation('python3',
 systemd_dep = dependency('systemd')
 event_recorder_server_xml = eosmetrics_dep.get_variable(pkgconfig: 'datadir') / 'eos-metrics' / 'com.endlessm.Metrics.xml'
 
-default_metrics_server = get_option('default_metrics_server')
+default_metrics_server_url = get_option('default_metrics_server_url')
 
 prefix = get_option('prefix')
 libexec_dir = join_paths(prefix, get_option('libexecdir'))
@@ -60,7 +60,7 @@ add_project_arguments(
   language: 'c',
 )
 conf_data = configuration_data()
-conf_data.set_quoted('DEFAULT_METRICS_SERVER', default_metrics_server)
+conf_data.set_quoted('DEFAULT_METRICS_SERVER_URL', default_metrics_server_url)
 configure_file(
     output: 'config.h',
     configuration: conf_data,

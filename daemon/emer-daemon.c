@@ -150,7 +150,6 @@ struct _EmerDaemon
 
   GRand *rand;
 
-  gboolean use_default_server_url;
   gchar *server_url;
 
   guint upload_events_timeout_source_id;
@@ -894,12 +893,13 @@ dequeue_and_do_upload (EmerDaemon  *self,
       return;
     }
 
-  if (self->use_default_server_url)
+  if (strstr (self->server_url, "${environment}") != NULL)
     {
+      GString *s = g_string_new (self->server_url);
+      g_string_replace (s, "${environment}", environment, 0);
+
       g_free (self->server_url);
-      self->server_url =
-        g_strconcat ("https://", environment, "." DEFAULT_METRICS_SERVER "/"
-                     CLIENT_VERSION_NUMBER "/", NULL);
+      self->server_url = g_string_free (s, FALSE);
     }
 
   GNetworkMonitor *network_monitor = g_network_monitor_get_default ();
@@ -1023,13 +1023,11 @@ static void
 set_server_url (EmerDaemon  *self,
                 const gchar *server_url)
 {
-  self->use_default_server_url = (server_url == NULL);
-  if (!self->use_default_server_url)
-    {
-      g_free (self->server_url);
-      self->server_url =
-        g_build_filename (server_url, CLIENT_VERSION_NUMBER "/", NULL);
-    }
+  g_free (self->server_url);
+  self->server_url = NULL;
+
+  if (server_url != NULL)
+    self->server_url = g_build_filename (server_url, CLIENT_VERSION_NUMBER "/", NULL);
 }
 
 static void
@@ -1385,6 +1383,15 @@ emer_daemon_constructed (GObject *object)
         emer_aggregate_tally_new (self->persistent_cache_directory ?: g_get_user_cache_dir ());
     }
   buffer_past_aggregate_events (self);
+
+  if (self->server_url == NULL)
+    {
+      g_autofree gchar *server_url = emer_permissions_provider_get_server_url (self->permissions_provider);
+      if (server_url != NULL)
+        set_server_url (self, server_url);
+      else
+        set_server_url (self, DEFAULT_METRICS_SERVER_URL);
+    }
 
   gchar *environment =
     emer_permissions_provider_get_environment (self->permissions_provider);

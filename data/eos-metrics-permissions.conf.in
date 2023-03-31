@@ -2,3 +2,4 @@
 enabled=true
 uploading_enabled=false
 environment=production
+server_url=@default_metrics_server_url@

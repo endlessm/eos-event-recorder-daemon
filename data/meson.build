@@ -39,8 +39,13 @@ configure_file(
 )
 
 # Daemon configuration
-install_data(
-    'eos-metrics-permissions.conf',
+configure_file(
+    input: 'eos-metrics-permissions.conf.in',
+    output: 'eos-metrics-permissions.conf',
+    configuration: configuration_data({
+        'default_metrics_server_url': default_metrics_server_url,
+    }),
+    install: true,
     install_dir: config_dir,
     install_mode: ['rwxrwsr-x', 'metrics', 'metrics'],
 )

@@ -150,8 +150,8 @@ struct _EmerDaemon
 
   GRand *rand;
 
-  gboolean use_default_server_uri;
-  gchar *server_uri;
+  gboolean use_default_server_url;
+  gchar *server_url;
 
   guint upload_events_timeout_source_id;
   guint report_invalid_cache_data_source_id;
@@ -176,7 +176,7 @@ enum
 {
   PROP_0,
   PROP_RANDOM_NUMBER_GENERATOR,
-  PROP_SERVER_URI,
+  PROP_SERVER_URL,
   PROP_NETWORK_SEND_INTERVAL,
   PROP_PERMISSIONS_PROVIDER,
   PROP_PERSISTENT_CACHE_DIRECTORY,
@@ -358,24 +358,24 @@ get_random_backoff_interval (GRand *rand,
  * done.
  */
 static SoupURI *
-get_http_request_uri (EmerDaemon   *self,
+get_http_request_url (EmerDaemon   *self,
                       const guchar *data,
                       gsize         length)
 {
   gchar *checksum =
     g_compute_checksum_for_data (G_CHECKSUM_SHA512, data, length);
-  gchar *http_request_uri_string =
-    g_build_filename (self->server_uri, checksum, NULL);
+  gchar *http_request_url_string =
+    g_build_filename (self->server_url, checksum, NULL);
   g_free (checksum);
 
-  SoupURI *http_request_uri = soup_uri_new (http_request_uri_string);
+  SoupURI *http_request_url = soup_uri_new (http_request_url_string);
 
-  if (http_request_uri == NULL)
-    g_error ("Invalid URI: %s.", http_request_uri_string);
+  if (http_request_url == NULL)
+    g_error ("Invalid URL: %s.", http_request_url_string);
 
-  g_free (http_request_uri_string);
+  g_free (http_request_url_string);
 
-  return http_request_uri;
+  return http_request_url;
 }
 
 /*
@@ -472,12 +472,12 @@ queue_http_request (GTask *upload_task)
       return;
     }
 
-  SoupURI *http_request_uri =
-    get_http_request_uri (self, serialized_request_body,
+  SoupURI *http_request_url =
+    get_http_request_url (self, serialized_request_body,
                           serialized_request_body_length);
   SoupMessage *http_message =
-    soup_message_new_from_uri ("PUT", http_request_uri);
-  soup_uri_free (http_request_uri);
+    soup_message_new_from_uri ("PUT", http_request_url);
+  soup_uri_free (http_request_url);
 
   soup_message_headers_append (http_message->request_headers,
                                "X-Endless-Content-Encoding", "gzip");
@@ -552,7 +552,7 @@ handle_http_response (SoupSession *http_session,
                  "%" G_GSIZE_FORMAT " events from buffer to %s.",
                  callback_data->num_stored_events,
                  callback_data->num_buffer_events,
-                 self->server_uri);
+                 self->server_url);
       g_task_return_boolean (upload_task, TRUE);
       finish_network_callback (upload_task);
       return;
@@ -829,11 +829,11 @@ get_ping_socket (EmerDaemon *self)
 {
   GError *error = NULL;
   GSocketConnectable *ping_socket =
-    g_network_address_parse_uri (self->server_uri, 443 /* SSL default port */,
+    g_network_address_parse_uri (self->server_url, 443 /* SSL default port */,
                                  &error);
   if (ping_socket == NULL)
-    g_error ("Invalid server URI '%s' could not be parsed because: %s.",
-             self->server_uri, error->message);
+    g_error ("Invalid server URL '%s' could not be parsed because: %s.",
+             self->server_url, error->message);
 
   return ping_socket;
 }
@@ -894,10 +894,10 @@ dequeue_and_do_upload (EmerDaemon  *self,
       return;
     }
 
-  if (self->use_default_server_uri)
+  if (self->use_default_server_url)
     {
-      g_free (self->server_uri);
-      self->server_uri =
+      g_free (self->server_url);
+      self->server_url =
         g_strconcat ("https://", environment, "." DEFAULT_METRICS_SERVER "/"
                      CLIENT_VERSION_NUMBER "/", NULL);
     }
@@ -1020,15 +1020,15 @@ set_random_number_generator (EmerDaemon *self,
 }
 
 static void
-set_server_uri (EmerDaemon  *self,
-                const gchar *server_uri)
+set_server_url (EmerDaemon  *self,
+                const gchar *server_url)
 {
-  self->use_default_server_uri = (server_uri == NULL);
-  if (!self->use_default_server_uri)
+  self->use_default_server_url = (server_url == NULL);
+  if (!self->use_default_server_url)
     {
-      g_free (self->server_uri);
-      self->server_uri =
-        g_build_filename (server_uri, CLIENT_VERSION_NUMBER "/", NULL);
+      g_free (self->server_url);
+      self->server_url =
+        g_build_filename (server_url, CLIENT_VERSION_NUMBER "/", NULL);
     }
 }
 
@@ -1431,8 +1431,8 @@ emer_daemon_set_property (GObject      *object,
       set_random_number_generator (self, g_value_get_pointer (value));
       break;
 
-    case PROP_SERVER_URI:
-      set_server_uri (self, g_value_get_string (value));
+    case PROP_SERVER_URL:
+      set_server_url (self, g_value_get_string (value));
       break;
 
     case PROP_NETWORK_SEND_INTERVAL:
@@ -1496,7 +1496,7 @@ emer_daemon_finalize (GObject *object)
   g_clear_pointer (&self->variant_array, g_ptr_array_unref);
 
   g_rand_free (self->rand);
-  g_clear_pointer (&self->server_uri, g_free);
+  g_clear_pointer (&self->server_url, g_free);
   g_clear_object (&self->permissions_provider);
   g_clear_object (&self->aggregate_tally);
   g_clear_pointer (&self->persistent_cache_directory, g_free);
@@ -1531,15 +1531,15 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                           G_PARAM_STATIC_STRINGS);
 
   /*
-   * EmerDaemon:server-uri:
+   * EmerDaemon:server-url:
    *
-   * The URI to which events are uploaded. The URI must contain the protocol and
+   * The URL to which events are uploaded. The URL must contain the protocol and
    * may contain the port number. If unspecified, the port number defaults to
    * 443, which is the standard port number for SSL.
    */
-  emer_daemon_props[PROP_SERVER_URI] =
-    g_param_spec_string ("server-uri", "Server URI",
-                         "URI to which events are uploaded",
+  emer_daemon_props[PROP_SERVER_URL] =
+    g_param_spec_string ("server-url", "Server URL",
+                         "URL to which events are uploaded",
                          NULL,
                          G_PARAM_CONSTRUCT | G_PARAM_WRITABLE |
                          G_PARAM_STATIC_STRINGS);
@@ -1687,7 +1687,7 @@ emer_daemon_new (const gchar             *persistent_cache_directory,
  * emer_daemon_new_full:
  * @rand: (allow-none): random number generator to use for randomized
  *   exponential backoff, or %NULL to use the default.
- * @server_uri: (allow-none): the URI (including protocol and, optionally, port
+ * @server_url: (allow-none): the URL (including protocol and, optionally, port
  *   number) to which to upload events, or %NULL to use the default. Must
  *   include trailing forward slash. If the port number is unspecified, it
  *   defaults to 443 (the standard port used by SSL).
@@ -1710,7 +1710,7 @@ emer_daemon_new (const gchar             *persistent_cache_directory,
  */
 EmerDaemon *
 emer_daemon_new_full (GRand                   *rand,
-                      const gchar             *server_uri,
+                      const gchar             *server_url,
                       guint                    network_send_interval,
                       EmerPermissionsProvider *permissions_provider,
                       EmerPersistentCache     *persistent_cache,
@@ -1719,7 +1719,7 @@ emer_daemon_new_full (GRand                   *rand,
 {
   return g_object_new (EMER_TYPE_DAEMON,
                        "random-number-generator", rand,
-                       "server-uri", server_uri,
+                       "server-url", server_url,
                        "network-send-interval", network_send_interval,
                        "permissions-provider", permissions_provider,
                        "persistent-cache", persistent_cache,

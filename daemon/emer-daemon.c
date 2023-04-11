@@ -198,9 +198,9 @@ static guint emer_daemon_signals[NSIGNALS] = { 0u, };
 
 static gboolean handle_upload_timer (EmerDaemon *self);
 
-static void handle_http_response (SoupSession *http_session,
-                                  SoupMessage *http_message,
-                                  GTask       *upload_task);
+static void handle_http_response (GObject      *source_object,
+                                  GAsyncResult *result,
+                                  GTask        *upload_task);
 
 static void
 aggregate_timer_sender_data_free (AggregateTimerSenderData *sender_data)
@@ -353,10 +353,10 @@ get_random_backoff_interval (GRand *rand,
 }
 
 /*
- * Returned object is owned by calling code. Free with soup_uri_free() when
+ * Returned object is owned by calling code. Free with g_uri_unref() when
  * done.
  */
-static SoupURI *
+static GUri *
 get_http_request_url (EmerDaemon   *self,
                       const guchar *data,
                       gsize         length)
@@ -367,10 +367,12 @@ get_http_request_url (EmerDaemon   *self,
     g_build_filename (self->server_url, checksum, NULL);
   g_free (checksum);
 
-  SoupURI *http_request_url = soup_uri_new (http_request_url_string);
+  g_autoptr(GError) error = NULL;
+  GUri *http_request_url = g_uri_parse (http_request_url_string, SOUP_HTTP_URI_FLAGS, &error);
 
   if (http_request_url == NULL)
-    g_error ("Invalid URL: %s.", http_request_url_string);
+    g_error ("Invalid http request URL '%s' could not be parsed because: %s.",
+             http_request_url_string, error->message);
 
   g_free (http_request_url_string);
 
@@ -471,21 +473,21 @@ queue_http_request (GTask *upload_task)
       return;
     }
 
-  SoupURI *http_request_url =
+  g_autoptr(GUri) http_request_url =
     get_http_request_url (self, serialized_request_body,
                           serialized_request_body_length);
-  SoupMessage *http_message =
+  g_autoptr(SoupMessage) http_message =
     soup_message_new_from_uri ("PUT", http_request_url);
-  soup_uri_free (http_request_url);
 
-  soup_message_headers_append (http_message->request_headers,
+  soup_message_headers_append (soup_message_get_request_headers (http_message),
                                "X-Endless-Content-Encoding", "gzip");
-  soup_message_set_request (http_message, "application/octet-stream",
-                            SOUP_MEMORY_TAKE, compressed_request_body,
-                            compressed_request_body_length);
-  soup_session_queue_message (self->http_session, http_message,
-                              (SoupSessionCallback) handle_http_response,
-                              upload_task);
+
+  g_autoptr(GBytes) request_body = g_bytes_new (compressed_request_body, compressed_request_body_length);
+  soup_message_set_request_body_from_bytes (http_message, "application/octet-stream", request_body);
+
+  soup_session_send_async (self->http_session, http_message, G_PRIORITY_DEFAULT, NULL,
+                           (GAsyncReadyCallback) handle_http_response,
+                           upload_task);
 }
 
 static gboolean
@@ -516,15 +518,18 @@ handle_backoff_timer (GTask *upload_task)
 
 // Handles HTTP or HTTPS responses.
 static void
-handle_http_response (SoupSession *http_session,
-                      SoupMessage *http_message,
-                      GTask       *upload_task)
+handle_http_response (GObject      *source_object,
+                      GAsyncResult *result,
+                      GTask        *upload_task)
 {
   EmerDaemon *self = g_task_get_source_object (upload_task);
   NetworkCallbackData *callback_data = g_task_get_task_data (upload_task);
 
-  guint status_code;
-  g_object_get (http_message, "status-code", &status_code, NULL);
+  g_autoptr(GInputStream) stream = soup_session_send_finish (SOUP_SESSION (source_object), result, NULL);
+
+  SoupMessage *http_message = soup_session_get_async_result_message (SOUP_SESSION (source_object), result);
+  guint status_code = soup_message_get_status (http_message);
+
   if (SOUP_STATUS_IS_SUCCESSFUL (status_code))
     {
       GCancellable *cancellable =
@@ -578,8 +583,7 @@ handle_http_response (SoupSession *http_session,
       return;
     }
 
-  if (SOUP_STATUS_IS_TRANSPORT_ERROR (status_code) ||
-      SOUP_STATUS_IS_CLIENT_ERROR (status_code) ||
+  if (SOUP_STATUS_IS_CLIENT_ERROR (status_code) ||
       SOUP_STATUS_IS_SERVER_ERROR (status_code))
     {
       guint random_backoff_interval =
@@ -1655,11 +1659,10 @@ emer_daemon_init (EmerDaemon *self)
   self->upload_queue = g_queue_new ();
 
   self->http_session =
-    soup_session_new_with_options (SOUP_SESSION_MAX_CONNS, 1,
-                                   SOUP_SESSION_MAX_CONNS_PER_HOST, 1,
-                                   SOUP_SESSION_ADD_FEATURE_BY_TYPE,
-                                   SOUP_TYPE_CACHE,
+    soup_session_new_with_options ("max-conns", 1,
+                                   "max-conns-per-host", 1,
                                    NULL);
+  soup_session_add_feature_by_type (self->http_session, SOUP_TYPE_CACHE);
 
   self->aggregate_timers =
     g_hash_table_new_full (NULL, NULL, g_object_unref, NULL);

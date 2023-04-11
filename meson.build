@@ -24,7 +24,7 @@ emer_required_modules = emer_shared_required_modules + [
     cc.find_library('m', required: false),
     dependency('ostree-1', version: '>= 2013.7'),
     polkit_gobject_dep,
-    dependency('libsoup-2.4', version: '>= 2.42'),
+    dependency('libsoup-3.0'),
 ]
 
 gnome = import('gnome')

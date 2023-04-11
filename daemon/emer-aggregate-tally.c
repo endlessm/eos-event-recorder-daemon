@@ -123,7 +123,7 @@ column_to_variant (sqlite3_stmt *stmt,
 {
   g_autoptr(GVariant) variant = NULL;
   gconstpointer sqlite_data;
-  gint size;
+  gsize size;
 
   /* Unlike sqlite3_column_text, "The return value from sqlite3_column_blob()
    * for a zero-length BLOB is a NULL pointer." even if the value is not NULL
@@ -135,7 +135,7 @@ column_to_variant (sqlite3_stmt *stmt,
     return NULL;
 
   size = sqlite3_column_bytes (stmt, i);
-  gpointer data = g_memdup (sqlite_data, size);
+  gpointer data = g_memdup2 (sqlite_data, size);
 
   variant = g_variant_new_from_data (G_VARIANT_TYPE_VARIANT,
                                      data, size, FALSE,

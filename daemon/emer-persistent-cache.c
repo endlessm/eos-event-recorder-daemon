@@ -1083,7 +1083,7 @@ emer_persistent_cache_read (EmerPersistentCache *self,
       const GVariantType *variant_type = G_VARIANT_TYPE (elem_data);
       const gchar *start_of_variant = end_of_type + 1;
       gsize variant_size = (elem_data + elem_size) - start_of_variant;
-      gpointer variant_data = g_memdup (start_of_variant, variant_size);
+      gpointer variant_data = g_memdup2 (start_of_variant, variant_size);
       GVariant *curr_variant =
         g_variant_new_from_data (variant_type, variant_data, variant_size,
                                  FALSE /* trusted */, g_free, variant_data);

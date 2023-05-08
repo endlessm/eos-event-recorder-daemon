@@ -1,0 +1,43 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  fedora:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Check we are on Fedora
+      run: cat /etc/os-release
+    - name: Update
+      run: |
+        sudo dnf -y update
+    - name: Enable kalev/metrics copr
+      run: |
+        sudo dnf -y install 'dnf-command(copr)'
+        sudo dnf -y copr enable kalev/metrics
+    - name: Install dependencies
+      run: |
+        sudo dnf -y install \
+          gcc \
+          meson \
+          'pkgconfig(eosmetrics-0)' \
+          'pkgconfig(gio-unix-2.0)' \
+          'pkgconfig(glib-2.0)' \
+          'pkgconfig(gobject-2.0)' \
+          'pkgconfig(libsoup-3.0)' \
+          'pkgconfig(ostree-1)' \
+          'pkgconfig(polkit-gobject-1)' \
+          'pkgconfig(sqlite3)' \
+          'pkgconfig(systemd)' \
+          'pkgconfig(uuid)' \
+          python3-dbus \
+          python3-dbusmock \
+          ${NULL+}
+    - name: Meson setup
+      run: meson setup _build
+    - name: Build
+      run: ninja -C _build
+    - name: Run tests
+      run: meson test -C _build

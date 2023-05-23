@@ -897,6 +897,7 @@ dequeue_and_do_upload (EmerDaemon  *self,
       return;
     }
 
+  g_assert (self->server_url != NULL);
   if (strstr (self->server_url, "${environment}") != NULL)
     {
       GString *s = g_string_new (self->server_url);

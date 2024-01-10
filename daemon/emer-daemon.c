@@ -524,13 +524,14 @@ handle_http_response (GObject      *source_object,
 {
   EmerDaemon *self = g_task_get_source_object (upload_task);
   NetworkCallbackData *callback_data = g_task_get_task_data (upload_task);
+  g_autoptr(GError) error = NULL;
 
-  g_autoptr(GInputStream) stream = soup_session_send_finish (SOUP_SESSION (source_object), result, NULL);
+  g_autoptr(GInputStream) stream = soup_session_send_finish (SOUP_SESSION (source_object), result, &error);
 
   SoupMessage *http_message = soup_session_get_async_result_message (SOUP_SESSION (source_object), result);
   guint status_code = soup_message_get_status (http_message);
 
-  if (SOUP_STATUS_IS_SUCCESSFUL (status_code))
+  if (stream != NULL && SOUP_STATUS_IS_SUCCESSFUL (status_code))
     {
       GCancellable *cancellable =
         g_task_get_cancellable (upload_task);
@@ -562,10 +563,12 @@ handle_http_response (GObject      *source_object,
       return;
     }
 
-  gchar *reason_phrase;
-  g_object_get (http_message, "reason-phrase", &reason_phrase, NULL);
-  g_warning ("Attempt to upload metrics failed: %s.", reason_phrase);
-  g_free (reason_phrase);
+  const gchar *reason;
+  if (error != NULL)
+    reason = error->message;
+  else
+    reason = soup_message_get_reason_phrase (http_message);
+  g_warning ("Attempt to upload metrics failed: %s.", reason);
 
   if (g_task_return_error_if_cancelled (upload_task))
     {
@@ -584,7 +587,9 @@ handle_http_response (GObject      *source_object,
     }
 
   if (SOUP_STATUS_IS_CLIENT_ERROR (status_code) ||
-      SOUP_STATUS_IS_SERVER_ERROR (status_code))
+      SOUP_STATUS_IS_SERVER_ERROR (status_code) ||
+      g_error_matches (error, SOUP_SESSION_ERROR, SOUP_SESSION_ERROR_PARSING) ||
+      g_error_matches (error, SOUP_SESSION_ERROR, SOUP_SESSION_ERROR_ENCODING))
     {
       guint random_backoff_interval =
         get_random_backoff_interval (self->rand, callback_data->attempt_num);

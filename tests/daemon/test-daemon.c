@@ -985,6 +985,25 @@ test_daemon_retries_aggregate_uploads (Fixture      *fixture,
 }
 
 static void
+test_daemon_retries_after_malformed_response (Fixture       *fixture,
+                                              gconstpointer  unused)
+{
+  record_singulars (fixture->test_object);
+
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_singulars_received);
+  send_http_response (fixture->mock_server, -1);
+
+  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
+                         "Attempt to upload metrics failed: "
+                         "Could not parse HTTP response.");
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_singulars_received);
+  wait_for_upload_to_finish (fixture);
+  g_test_assert_expected_messages ();
+}
+
+static void
 test_daemon_only_reports_singulars_when_uploading_enabled (Fixture      *fixture,
                                                            gconstpointer unused)
 {
@@ -1343,6 +1362,8 @@ main (gint                argc,
                    test_daemon_retries_singular_uploads);
   ADD_DAEMON_TEST ("/daemon/retries-aggregate-uploads",
                    test_daemon_retries_aggregate_uploads);
+  ADD_DAEMON_TEST ("/daemon/retries-after-malformed-response",
+                   test_daemon_retries_after_malformed_response);
   ADD_DAEMON_TEST ("/daemon/only-reports-singulars-when-uploading-enabled",
                    test_daemon_only_reports_singulars_when_uploading_enabled);
   ADD_DAEMON_TEST ("/daemon/only-reports-aggregates-when-uploading-enabled",

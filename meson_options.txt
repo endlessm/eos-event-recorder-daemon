@@ -1,5 +1,5 @@
-option('default_metrics_server',
+option('default_metrics_server_url',
     type: 'string',
-    description: 'Hostname of default metrics server',
-    value: 'azafea.example',
+    description: 'URL of default metrics server',
+    value: 'https://${environment}.azafea.example',
 )

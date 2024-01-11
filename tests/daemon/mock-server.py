@@ -39,7 +39,13 @@ class PrintingHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
 
         status_code_str = sys.stdin.readline()
         status_code = int(status_code_str)
-        self.send_response(status_code)
+        if status_code < 0:
+            # Send garbage back
+            self.send_header("I am a teapot", "\nhello\n\n\n\r\n\r\n")
+            self.send_header("X-Y", "Z")
+            self.send_response(200)
+        else:
+            self.send_response(status_code)
         self.end_headers()
 
 

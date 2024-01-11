@@ -296,8 +296,8 @@ sync_recorder_server_enabled_for_upload (GBinding     *binding,
                                          GValue       *to_value,
                                          gpointer      user_data)
 {
-  EmerPermissionsProvider *permissions =
-    EMER_PERMISSIONS_PROVIDER (g_binding_get_source (binding));
+  g_autoptr(EmerPermissionsProvider) permissions =
+    EMER_PERMISSIONS_PROVIDER (g_binding_dup_source (binding));
 
   gboolean daemon_enabled =
     emer_permissions_provider_get_daemon_enabled (permissions);
@@ -314,8 +314,8 @@ sync_recorder_server_enabled_for_daemon (GBinding     *binding,
                                          GValue       *to_value,
                                          gpointer      user_data)
 {
-  EmerPermissionsProvider *permissions =
-    EMER_PERMISSIONS_PROVIDER (g_binding_get_source (binding));
+  g_autoptr(EmerPermissionsProvider) permissions =
+    EMER_PERMISSIONS_PROVIDER (g_binding_dup_source (binding));
 
   gboolean daemon_enabled = g_value_get_boolean (from_value);
   gboolean uploading_enabled =

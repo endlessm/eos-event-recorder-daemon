@@ -126,7 +126,7 @@ emer_gzip_compress (gconstpointer input_data,
     }
 
   g_object_unref (zlib_compressor);
-  gpointer compressed_data = g_memdup (byte_array->data, total_bytes_written);
+  gpointer compressed_data = g_memdup2 (byte_array->data, total_bytes_written);
   g_byte_array_free (byte_array, TRUE);
   *compressed_length = total_bytes_written;
   return compressed_data;

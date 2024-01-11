@@ -83,6 +83,11 @@ void                     emer_permissions_provider_set_uploading_enabled (EmerPe
 
 gchar                   *emer_permissions_provider_get_environment       (EmerPermissionsProvider *self);
 
+gchar                   *emer_permissions_provider_get_server_url        (EmerPermissionsProvider *self);
+
+void                     emer_permissions_provider_set_server_url        (EmerPermissionsProvider *self,
+                                                                          const gchar             *server_url);
+
 G_END_DECLS
 
 #endif /* EMER_PERMISSIONS_PROVIDER_H */

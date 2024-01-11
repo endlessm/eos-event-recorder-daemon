@@ -8,7 +8,7 @@ project('eos-event-recorder-daemon',
 
 cc = meson.get_compiler('c')
 
-glib_dep = dependency('glib-2.0', version: '>= 2.66')
+glib_dep = dependency('glib-2.0', version: '>= 2.68')
 eosmetrics_dep = dependency('eosmetrics-0', version: '>= 0.2')
 polkit_gobject_dep = dependency('polkit-gobject-1')
 
@@ -24,7 +24,7 @@ emer_required_modules = emer_shared_required_modules + [
     cc.find_library('m', required: false),
     dependency('ostree-1', version: '>= 2013.7'),
     polkit_gobject_dep,
-    dependency('libsoup-2.4', version: '>= 2.42'),
+    dependency('libsoup-3.0'),
 ]
 
 gnome = import('gnome')
@@ -39,7 +39,7 @@ py = import('python').find_installation('python3',
 systemd_dep = dependency('systemd')
 event_recorder_server_xml = eosmetrics_dep.get_variable(pkgconfig: 'datadir') / 'eos-metrics' / 'com.endlessm.Metrics.xml'
 
-default_metrics_server = get_option('default_metrics_server')
+default_metrics_server_url = get_option('default_metrics_server_url')
 
 prefix = get_option('prefix')
 libexec_dir = join_paths(prefix, get_option('libexecdir'))
@@ -53,14 +53,14 @@ add_project_arguments(
     '-DPERMISSIONS_FILE="@0@"'.format(permissions_file),
     '-DPERSISTENT_CACHE_DIR="@0@"'.format(persistent_cache_dir),
     '-DSYSCONFDIR="@0@"'.format(get_option('sysconfdir')),
-    '-DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_66',
-    '-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_66',
+    '-DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_68',
+    '-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_68',
     '-Wno-unused-parameter',
   ],
   language: 'c',
 )
 conf_data = configuration_data()
-conf_data.set_quoted('DEFAULT_METRICS_SERVER', default_metrics_server)
+conf_data.set_quoted('DEFAULT_METRICS_SERVER_URL', default_metrics_server_url)
 configure_file(
     output: 'config.h',
     configuration: conf_data,

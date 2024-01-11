@@ -71,7 +71,7 @@ typedef struct _Fixture
   EmerAggregateTally *mock_aggregate_tally;
 
   GSubprocess *mock_server;
-  gchar *server_uri;
+  gchar *server_url;
 
   gint64 relative_time;
   gint64 absolute_time;
@@ -802,15 +802,15 @@ wait_for_upload_to_finish (Fixture *fixture)
 }
 
 static gchar *
-get_server_uri (GSubprocess *mock_server)
+get_server_url (GSubprocess *mock_server)
 {
   gchar *port_number;
   read_lines_from_stdout (mock_server,
                           (ProcessLineSourceFunc) remove_last_character,
                           &port_number);
-  gchar *server_uri = g_strconcat ("http://localhost:", port_number, "/", NULL);
+  gchar *server_url = g_strconcat ("http://localhost:", port_number, "/", NULL);
   g_free (port_number);
-  return server_uri;
+  return server_url;
 }
 
 static void
@@ -826,7 +826,7 @@ create_test_object (Fixture *fixture)
 {
   fixture->test_object =
     emer_daemon_new_full (g_rand_new_with_seed (18),
-                          fixture->server_uri,
+                          fixture->server_url,
                           2 /* network send interval */,
                           fixture->mock_permissions_provider,
                           fixture->mock_persistent_cache,
@@ -852,7 +852,7 @@ setup_most (Fixture      *fixture,
   g_assert_nonnull (fixture->mock_server);
   g_object_unref (subprocess_launcher);
 
-  fixture->server_uri = get_server_uri (fixture->mock_server);
+  fixture->server_url = get_server_url (fixture->mock_server);
 
   fixture->mock_permissions_provider = emer_permissions_provider_new ();
   fixture->mock_persistent_cache = NULL;
@@ -892,7 +892,7 @@ teardown (Fixture      *fixture,
   g_clear_object (&fixture->mock_persistent_cache);
   g_clear_object (&fixture->mock_aggregate_tally);
   g_clear_pointer (&fixture->mock_server, terminate_subprocess_and_wait);
-  g_clear_pointer (&fixture->server_uri, g_free);
+  g_clear_pointer (&fixture->server_url, g_free);
 }
 
 // Unit Tests next:
@@ -980,6 +980,25 @@ test_daemon_retries_aggregate_uploads (Fixture      *fixture,
                          "Error.");
   read_network_request (fixture,
                         (ProcessBytesSourceFunc) assert_aggregates_received);
+  wait_for_upload_to_finish (fixture);
+  g_test_assert_expected_messages ();
+}
+
+static void
+test_daemon_retries_after_malformed_response (Fixture       *fixture,
+                                              gconstpointer  unused)
+{
+  record_singulars (fixture->test_object);
+
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_singulars_received);
+  send_http_response (fixture->mock_server, -1);
+
+  g_test_expect_message (G_LOG_DOMAIN, G_LOG_LEVEL_WARNING,
+                         "Attempt to upload metrics failed: "
+                         "Could not parse HTTP response.");
+  read_network_request (fixture,
+                        (ProcessBytesSourceFunc) assert_singulars_received);
   wait_for_upload_to_finish (fixture);
   g_test_assert_expected_messages ();
 }
@@ -1343,6 +1362,8 @@ main (gint                argc,
                    test_daemon_retries_singular_uploads);
   ADD_DAEMON_TEST ("/daemon/retries-aggregate-uploads",
                    test_daemon_retries_aggregate_uploads);
+  ADD_DAEMON_TEST ("/daemon/retries-after-malformed-response",
+                   test_daemon_retries_after_malformed_response);
   ADD_DAEMON_TEST ("/daemon/only-reports-singulars-when-uploading-enabled",
                    test_daemon_only_reports_singulars_when_uploading_enabled);
   ADD_DAEMON_TEST ("/daemon/only-reports-aggregates-when-uploading-enabled",

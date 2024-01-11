@@ -150,8 +150,7 @@ struct _EmerDaemon
 
   GRand *rand;
 
-  gboolean use_default_server_uri;
-  gchar *server_uri;
+  gchar *server_url;
 
   guint upload_events_timeout_source_id;
   guint report_invalid_cache_data_source_id;
@@ -176,7 +175,7 @@ enum
 {
   PROP_0,
   PROP_RANDOM_NUMBER_GENERATOR,
-  PROP_SERVER_URI,
+  PROP_SERVER_URL,
   PROP_NETWORK_SEND_INTERVAL,
   PROP_PERMISSIONS_PROVIDER,
   PROP_PERSISTENT_CACHE_DIRECTORY,
@@ -199,9 +198,9 @@ static guint emer_daemon_signals[NSIGNALS] = { 0u, };
 
 static gboolean handle_upload_timer (EmerDaemon *self);
 
-static void handle_http_response (SoupSession *http_session,
-                                  SoupMessage *http_message,
-                                  GTask       *upload_task);
+static void handle_http_response (GObject      *source_object,
+                                  GAsyncResult *result,
+                                  GTask        *upload_task);
 
 static void
 aggregate_timer_sender_data_free (AggregateTimerSenderData *sender_data)
@@ -354,28 +353,30 @@ get_random_backoff_interval (GRand *rand,
 }
 
 /*
- * Returned object is owned by calling code. Free with soup_uri_free() when
+ * Returned object is owned by calling code. Free with g_uri_unref() when
  * done.
  */
-static SoupURI *
-get_http_request_uri (EmerDaemon   *self,
+static GUri *
+get_http_request_url (EmerDaemon   *self,
                       const guchar *data,
                       gsize         length)
 {
   gchar *checksum =
     g_compute_checksum_for_data (G_CHECKSUM_SHA512, data, length);
-  gchar *http_request_uri_string =
-    g_build_filename (self->server_uri, checksum, NULL);
+  gchar *http_request_url_string =
+    g_build_filename (self->server_url, checksum, NULL);
   g_free (checksum);
 
-  SoupURI *http_request_uri = soup_uri_new (http_request_uri_string);
+  g_autoptr(GError) error = NULL;
+  GUri *http_request_url = g_uri_parse (http_request_url_string, SOUP_HTTP_URI_FLAGS, &error);
 
-  if (http_request_uri == NULL)
-    g_error ("Invalid URI: %s.", http_request_uri_string);
+  if (http_request_url == NULL)
+    g_error ("Invalid http request URL '%s' could not be parsed because: %s.",
+             http_request_url_string, error->message);
 
-  g_free (http_request_uri_string);
+  g_free (http_request_url_string);
 
-  return http_request_uri;
+  return http_request_url;
 }
 
 /*
@@ -472,21 +473,21 @@ queue_http_request (GTask *upload_task)
       return;
     }
 
-  SoupURI *http_request_uri =
-    get_http_request_uri (self, serialized_request_body,
+  g_autoptr(GUri) http_request_url =
+    get_http_request_url (self, serialized_request_body,
                           serialized_request_body_length);
-  SoupMessage *http_message =
-    soup_message_new_from_uri ("PUT", http_request_uri);
-  soup_uri_free (http_request_uri);
+  g_autoptr(SoupMessage) http_message =
+    soup_message_new_from_uri ("PUT", http_request_url);
 
-  soup_message_headers_append (http_message->request_headers,
+  soup_message_headers_append (soup_message_get_request_headers (http_message),
                                "X-Endless-Content-Encoding", "gzip");
-  soup_message_set_request (http_message, "application/octet-stream",
-                            SOUP_MEMORY_TAKE, compressed_request_body,
-                            compressed_request_body_length);
-  soup_session_queue_message (self->http_session, http_message,
-                              (SoupSessionCallback) handle_http_response,
-                              upload_task);
+
+  g_autoptr(GBytes) request_body = g_bytes_new (compressed_request_body, compressed_request_body_length);
+  soup_message_set_request_body_from_bytes (http_message, "application/octet-stream", request_body);
+
+  soup_session_send_async (self->http_session, http_message, G_PRIORITY_DEFAULT, NULL,
+                           (GAsyncReadyCallback) handle_http_response,
+                           upload_task);
 }
 
 static gboolean
@@ -517,16 +518,20 @@ handle_backoff_timer (GTask *upload_task)
 
 // Handles HTTP or HTTPS responses.
 static void
-handle_http_response (SoupSession *http_session,
-                      SoupMessage *http_message,
-                      GTask       *upload_task)
+handle_http_response (GObject      *source_object,
+                      GAsyncResult *result,
+                      GTask        *upload_task)
 {
   EmerDaemon *self = g_task_get_source_object (upload_task);
   NetworkCallbackData *callback_data = g_task_get_task_data (upload_task);
+  g_autoptr(GError) error = NULL;
 
-  guint status_code;
-  g_object_get (http_message, "status-code", &status_code, NULL);
-  if (SOUP_STATUS_IS_SUCCESSFUL (status_code))
+  g_autoptr(GInputStream) stream = soup_session_send_finish (SOUP_SESSION (source_object), result, &error);
+
+  SoupMessage *http_message = soup_session_get_async_result_message (SOUP_SESSION (source_object), result);
+  guint status_code = soup_message_get_status (http_message);
+
+  if (stream != NULL && SOUP_STATUS_IS_SUCCESSFUL (status_code))
     {
       GCancellable *cancellable =
         g_task_get_cancellable (upload_task);
@@ -552,16 +557,18 @@ handle_http_response (SoupSession *http_session,
                  "%" G_GSIZE_FORMAT " events from buffer to %s.",
                  callback_data->num_stored_events,
                  callback_data->num_buffer_events,
-                 self->server_uri);
+                 self->server_url);
       g_task_return_boolean (upload_task, TRUE);
       finish_network_callback (upload_task);
       return;
     }
 
-  gchar *reason_phrase;
-  g_object_get (http_message, "reason-phrase", &reason_phrase, NULL);
-  g_warning ("Attempt to upload metrics failed: %s.", reason_phrase);
-  g_free (reason_phrase);
+  const gchar *reason;
+  if (error != NULL)
+    reason = error->message;
+  else
+    reason = soup_message_get_reason_phrase (http_message);
+  g_warning ("Attempt to upload metrics failed: %s.", reason);
 
   if (g_task_return_error_if_cancelled (upload_task))
     {
@@ -579,9 +586,10 @@ handle_http_response (SoupSession *http_session,
       return;
     }
 
-  if (SOUP_STATUS_IS_TRANSPORT_ERROR (status_code) ||
-      SOUP_STATUS_IS_CLIENT_ERROR (status_code) ||
-      SOUP_STATUS_IS_SERVER_ERROR (status_code))
+  if (SOUP_STATUS_IS_CLIENT_ERROR (status_code) ||
+      SOUP_STATUS_IS_SERVER_ERROR (status_code) ||
+      g_error_matches (error, SOUP_SESSION_ERROR, SOUP_SESSION_ERROR_PARSING) ||
+      g_error_matches (error, SOUP_SESSION_ERROR, SOUP_SESSION_ERROR_ENCODING))
     {
       guint random_backoff_interval =
         get_random_backoff_interval (self->rand, callback_data->attempt_num);
@@ -829,11 +837,11 @@ get_ping_socket (EmerDaemon *self)
 {
   GError *error = NULL;
   GSocketConnectable *ping_socket =
-    g_network_address_parse_uri (self->server_uri, 443 /* SSL default port */,
+    g_network_address_parse_uri (self->server_url, 443 /* SSL default port */,
                                  &error);
   if (ping_socket == NULL)
-    g_error ("Invalid server URI '%s' could not be parsed because: %s.",
-             self->server_uri, error->message);
+    g_error ("Invalid server URL '%s' could not be parsed because: %s.",
+             self->server_url, error->message);
 
   return ping_socket;
 }
@@ -894,12 +902,14 @@ dequeue_and_do_upload (EmerDaemon  *self,
       return;
     }
 
-  if (self->use_default_server_uri)
+  g_assert (self->server_url != NULL);
+  if (strstr (self->server_url, "${environment}") != NULL)
     {
-      g_free (self->server_uri);
-      self->server_uri =
-        g_strconcat ("https://", environment, "." DEFAULT_METRICS_SERVER "/"
-                     CLIENT_VERSION_NUMBER "/", NULL);
+      GString *s = g_string_new (self->server_url);
+      g_string_replace (s, "${environment}", environment, 0);
+
+      g_free (self->server_url);
+      self->server_url = g_string_free (s, FALSE);
     }
 
   GNetworkMonitor *network_monitor = g_network_monitor_get_default ();
@@ -1020,16 +1030,14 @@ set_random_number_generator (EmerDaemon *self,
 }
 
 static void
-set_server_uri (EmerDaemon  *self,
-                const gchar *server_uri)
+set_server_url (EmerDaemon  *self,
+                const gchar *server_url)
 {
-  self->use_default_server_uri = (server_uri == NULL);
-  if (!self->use_default_server_uri)
-    {
-      g_free (self->server_uri);
-      self->server_uri =
-        g_build_filename (server_uri, CLIENT_VERSION_NUMBER "/", NULL);
-    }
+  g_free (self->server_url);
+  self->server_url = NULL;
+
+  if (server_url != NULL)
+    self->server_url = g_build_filename (server_url, CLIENT_VERSION_NUMBER "/", NULL);
 }
 
 static void
@@ -1386,6 +1394,15 @@ emer_daemon_constructed (GObject *object)
     }
   buffer_past_aggregate_events (self);
 
+  if (self->server_url == NULL)
+    {
+      g_autofree gchar *server_url = emer_permissions_provider_get_server_url (self->permissions_provider);
+      if (server_url != NULL)
+        set_server_url (self, server_url);
+      else
+        set_server_url (self, DEFAULT_METRICS_SERVER_URL);
+    }
+
   gchar *environment =
     emer_permissions_provider_get_environment (self->permissions_provider);
   schedule_upload (self, environment);
@@ -1431,8 +1448,8 @@ emer_daemon_set_property (GObject      *object,
       set_random_number_generator (self, g_value_get_pointer (value));
       break;
 
-    case PROP_SERVER_URI:
-      set_server_uri (self, g_value_get_string (value));
+    case PROP_SERVER_URL:
+      set_server_url (self, g_value_get_string (value));
       break;
 
     case PROP_NETWORK_SEND_INTERVAL:
@@ -1496,7 +1513,7 @@ emer_daemon_finalize (GObject *object)
   g_clear_pointer (&self->variant_array, g_ptr_array_unref);
 
   g_rand_free (self->rand);
-  g_clear_pointer (&self->server_uri, g_free);
+  g_clear_pointer (&self->server_url, g_free);
   g_clear_object (&self->permissions_provider);
   g_clear_object (&self->aggregate_tally);
   g_clear_pointer (&self->persistent_cache_directory, g_free);
@@ -1531,15 +1548,15 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                           G_PARAM_STATIC_STRINGS);
 
   /*
-   * EmerDaemon:server-uri:
+   * EmerDaemon:server-url:
    *
-   * The URI to which events are uploaded. The URI must contain the protocol and
+   * The URL to which events are uploaded. The URL must contain the protocol and
    * may contain the port number. If unspecified, the port number defaults to
    * 443, which is the standard port number for SSL.
    */
-  emer_daemon_props[PROP_SERVER_URI] =
-    g_param_spec_string ("server-uri", "Server URI",
-                         "URI to which events are uploaded",
+  emer_daemon_props[PROP_SERVER_URL] =
+    g_param_spec_string ("server-url", "Server URL",
+                         "URL to which events are uploaded",
                          NULL,
                          G_PARAM_CONSTRUCT | G_PARAM_WRITABLE |
                          G_PARAM_STATIC_STRINGS);
@@ -1648,11 +1665,10 @@ emer_daemon_init (EmerDaemon *self)
   self->upload_queue = g_queue_new ();
 
   self->http_session =
-    soup_session_new_with_options (SOUP_SESSION_MAX_CONNS, 1,
-                                   SOUP_SESSION_MAX_CONNS_PER_HOST, 1,
-                                   SOUP_SESSION_ADD_FEATURE_BY_TYPE,
-                                   SOUP_TYPE_CACHE,
+    soup_session_new_with_options ("max-conns", 1,
+                                   "max-conns-per-host", 1,
                                    NULL);
+  soup_session_add_feature_by_type (self->http_session, SOUP_TYPE_CACHE);
 
   self->aggregate_timers =
     g_hash_table_new_full (NULL, NULL, g_object_unref, NULL);
@@ -1687,7 +1703,7 @@ emer_daemon_new (const gchar             *persistent_cache_directory,
  * emer_daemon_new_full:
  * @rand: (allow-none): random number generator to use for randomized
  *   exponential backoff, or %NULL to use the default.
- * @server_uri: (allow-none): the URI (including protocol and, optionally, port
+ * @server_url: (allow-none): the URL (including protocol and, optionally, port
  *   number) to which to upload events, or %NULL to use the default. Must
  *   include trailing forward slash. If the port number is unspecified, it
  *   defaults to 443 (the standard port used by SSL).
@@ -1710,7 +1726,7 @@ emer_daemon_new (const gchar             *persistent_cache_directory,
  */
 EmerDaemon *
 emer_daemon_new_full (GRand                   *rand,
-                      const gchar             *server_uri,
+                      const gchar             *server_url,
                       guint                    network_send_interval,
                       EmerPermissionsProvider *permissions_provider,
                       EmerPersistentCache     *persistent_cache,
@@ -1719,7 +1735,7 @@ emer_daemon_new_full (GRand                   *rand,
 {
   return g_object_new (EMER_TYPE_DAEMON,
                        "random-number-generator", rand,
-                       "server-uri", server_uri,
+                       "server-url", server_url,
                        "network-send-interval", network_send_interval,
                        "permissions-provider", permissions_provider,
                        "persistent-cache", persistent_cache,

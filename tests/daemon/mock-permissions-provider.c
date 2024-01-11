@@ -113,6 +113,12 @@ emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
   return g_strdup ("test");
 }
 
+gchar *
+emer_permissions_provider_get_server_url (EmerPermissionsProvider *self)
+{
+  return NULL;
+}
+
 /* API OF MOCK OBJECT */
 
 /* Sets the value to return from

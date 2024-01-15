@@ -584,21 +584,17 @@ get_events_from_request (GByteArray    *request,
     emtr_util_get_current_time (CLOCK_REALTIME, &curr_absolute_time);
   g_assert_true (get_succeeded);
 
-  GBytes *request_bytes = g_bytes_new (request->data, request->len);
+  g_autoptr(GBytes) request_bytes = g_bytes_new (request->data, request->len);
 
-  gchar *checksum =
+  g_autofree gchar *checksum =
     g_compute_checksum_for_bytes (G_CHECKSUM_SHA512, request_bytes);
-  gchar *expected_request_path = g_build_filename ("/3/", checksum, NULL);
-  g_free (checksum);
+  g_autofree gchar *expected_request_path = g_build_filename ("/3/", checksum, NULL);
   g_assert_cmpstr (fixture->request_path, ==, expected_request_path);
-  g_free (expected_request_path);
 
   const GVariantType *REQUEST_FORMAT =
     G_VARIANT_TYPE ("(xxsa{ss}ya(aysxmv)a(ayssumv))");
   GVariant *request_variant =
     g_variant_new_from_bytes (REQUEST_FORMAT, request_bytes, FALSE);
-
-  g_bytes_unref (request_bytes);
 
   g_assert_true (g_variant_is_normal_form (request_variant));
 

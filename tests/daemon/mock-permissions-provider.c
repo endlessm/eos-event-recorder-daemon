@@ -27,13 +27,15 @@
 #include <gio/gio.h>
 #include <glib.h>
 
-typedef struct _EmerPermissionsProviderPrivate
+typedef struct _EmerPermissionsProvider
 {
+  GObject parent;
+
   gboolean daemon_enabled;
   gboolean uploading_enabled;
-} EmerPermissionsProviderPrivate;
+} EmerPermissionsProvider;
 
-G_DEFINE_TYPE_WITH_PRIVATE (EmerPermissionsProvider, emer_permissions_provider, G_TYPE_OBJECT)
+G_DEFINE_TYPE (EmerPermissionsProvider, emer_permissions_provider, G_TYPE_OBJECT)
 
 static void
 emer_permissions_provider_class_init (EmerPermissionsProviderClass *klass)
@@ -43,11 +45,8 @@ emer_permissions_provider_class_init (EmerPermissionsProviderClass *klass)
 static void
 emer_permissions_provider_init (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  priv->daemon_enabled = TRUE;
-  priv->uploading_enabled = TRUE;
+  self->daemon_enabled = TRUE;
+  self->uploading_enabled = TRUE;
 }
 
 /* MOCK PUBLIC API */
@@ -68,20 +67,14 @@ emer_permissions_provider_new_full (const gchar *config_file_path,
 gboolean
 emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  return priv->daemon_enabled;
+  return self->daemon_enabled;
 }
 
 void
 emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
                                               gboolean                 enabled)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  priv->daemon_enabled = enabled;
+  self->daemon_enabled = enabled;
 
   /* Emit a property notification even though there isn't a property by this
    * name in this mock object.
@@ -92,10 +85,7 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
 gboolean
 emer_permissions_provider_get_uploading_enabled (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  return priv->uploading_enabled;
+  return self->uploading_enabled;
 }
 
 gchar *
@@ -127,10 +117,7 @@ void
 emer_permissions_provider_set_uploading_enabled (EmerPermissionsProvider *self,
                                                  gboolean                 uploading_enabled)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  priv->uploading_enabled = uploading_enabled;
+  self->uploading_enabled = uploading_enabled;
 
   /* Emit a property notification even though there isn't a property by this
    * name in this mock object.

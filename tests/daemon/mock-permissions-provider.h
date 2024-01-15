@@ -29,6 +29,8 @@
 
 G_BEGIN_DECLS
 
+EmerPermissionsProvider *mock_permissions_provider_new (const gchar *server_url);
+
 G_END_DECLS
 
 #endif /* MOCK_PERMISSIONS_PROVIDER_H */

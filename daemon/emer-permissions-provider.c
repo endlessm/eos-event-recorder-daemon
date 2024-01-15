@@ -665,7 +665,7 @@ emer_permissions_provider_get_server_url (EmerPermissionsProvider *self)
                DAEMON_GLOBAL_GROUP_NAME, DAEMON_SERVER_URL_KEY_NAME,
                error->message);
       g_error_free (error);
-      return NULL;
+      return g_strdup (DEFAULT_METRICS_SERVER_URL);
     }
 
   return server_url;

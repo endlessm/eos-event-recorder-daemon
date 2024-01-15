@@ -175,7 +175,6 @@ enum
 {
   PROP_0,
   PROP_RANDOM_NUMBER_GENERATOR,
-  PROP_SERVER_URL,
   PROP_NETWORK_SEND_INTERVAL,
   PROP_PERMISSIONS_PROVIDER,
   PROP_PERSISTENT_CACHE_DIRECTORY,
@@ -1030,14 +1029,6 @@ set_random_number_generator (EmerDaemon *self,
 }
 
 static void
-set_server_url (EmerDaemon  *self,
-                const gchar *server_url)
-{
-  g_free (self->server_url);
-  self->server_url = g_strdup (server_url);
-}
-
-static void
 set_network_send_interval (EmerDaemon *self,
                            guint       seconds)
 {
@@ -1391,14 +1382,7 @@ emer_daemon_constructed (GObject *object)
     }
   buffer_past_aggregate_events (self);
 
-  if (self->server_url == NULL)
-    {
-      g_autofree gchar *server_url = emer_permissions_provider_get_server_url (self->permissions_provider);
-      if (server_url != NULL)
-        set_server_url (self, server_url);
-      else
-        set_server_url (self, DEFAULT_METRICS_SERVER_URL);
-    }
+  self->server_url = emer_permissions_provider_get_server_url (self->permissions_provider);
 
   gchar *environment =
     emer_permissions_provider_get_environment (self->permissions_provider);
@@ -1443,10 +1427,6 @@ emer_daemon_set_property (GObject      *object,
     {
     case PROP_RANDOM_NUMBER_GENERATOR:
       set_random_number_generator (self, g_value_get_pointer (value));
-      break;
-
-    case PROP_SERVER_URL:
-      set_server_url (self, g_value_get_string (value));
       break;
 
     case PROP_NETWORK_SEND_INTERVAL:
@@ -1543,20 +1523,6 @@ emer_daemon_class_init (EmerDaemonClass *klass)
                           "exponential backoff",
                           G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                           G_PARAM_STATIC_STRINGS);
-
-  /*
-   * EmerDaemon:server-url:
-   *
-   * The URL to which events are uploaded. The URL must contain the protocol and
-   * may contain the port number. If unspecified, the port number defaults to
-   * 443, which is the standard port number for SSL.
-   */
-  emer_daemon_props[PROP_SERVER_URL] =
-    g_param_spec_string ("server-url", "Server URL",
-                         "URL to which events are uploaded",
-                         NULL,
-                         G_PARAM_CONSTRUCT | G_PARAM_WRITABLE |
-                         G_PARAM_STATIC_STRINGS);
 
   /*
    * EmerDaemon:network-send-interval:
@@ -1700,10 +1666,6 @@ emer_daemon_new (const gchar             *persistent_cache_directory,
  * emer_daemon_new_full:
  * @rand: (allow-none): random number generator to use for randomized
  *   exponential backoff, or %NULL to use the default.
- * @server_url: (allow-none): the URL (including protocol and, optionally, port
- *   number) to which to upload events, or %NULL to use the default. Must
- *   include trailing forward slash. If the port number is unspecified, it
- *   defaults to 443 (the standard port used by SSL).
  * @network_send_interval: frequency in seconds with which the client will
  *   attempt a network send request.
  * @permissions_provider: The #EmerPermissionsProvider to supply information
@@ -1723,7 +1685,6 @@ emer_daemon_new (const gchar             *persistent_cache_directory,
  */
 EmerDaemon *
 emer_daemon_new_full (GRand                   *rand,
-                      const gchar             *server_url,
                       guint                    network_send_interval,
                       EmerPermissionsProvider *permissions_provider,
                       EmerPersistentCache     *persistent_cache,
@@ -1732,7 +1693,6 @@ emer_daemon_new_full (GRand                   *rand,
 {
   return g_object_new (EMER_TYPE_DAEMON,
                        "random-number-generator", rand,
-                       "server-url", server_url,
                        "network-send-interval", network_send_interval,
                        "permissions-provider", permissions_provider,
                        "persistent-cache", persistent_cache,

@@ -822,7 +822,6 @@ create_test_object (Fixture *fixture)
 {
   fixture->test_object =
     emer_daemon_new_full (g_rand_new_with_seed (18),
-                          fixture->server_url,
                           2 /* network send interval */,
                           fixture->mock_permissions_provider,
                           fixture->mock_persistent_cache,
@@ -850,7 +849,7 @@ setup_most (Fixture      *fixture,
 
   fixture->server_url = get_server_url (fixture->mock_server);
 
-  fixture->mock_permissions_provider = emer_permissions_provider_new ();
+  fixture->mock_permissions_provider = mock_permissions_provider_new (fixture->server_url);
   fixture->mock_persistent_cache = NULL;
   /* Not actually a mock! */
   fixture->mock_aggregate_tally = emer_aggregate_tally_new (g_get_user_cache_dir ());

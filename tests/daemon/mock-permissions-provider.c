@@ -33,13 +33,29 @@ typedef struct _EmerPermissionsProvider
 
   gboolean daemon_enabled;
   gboolean uploading_enabled;
+
+  gchar *server_url;
 } EmerPermissionsProvider;
 
 G_DEFINE_TYPE (EmerPermissionsProvider, emer_permissions_provider, G_TYPE_OBJECT)
 
 static void
+emer_permissions_provider_finalize (GObject *object)
+{
+  EmerPermissionsProvider *self = EMER_PERMISSIONS_PROVIDER (object);
+
+  g_clear_pointer (&self->server_url, g_free);
+
+  G_OBJECT_CLASS (emer_permissions_provider_parent_class)->finalize (object);
+}
+
+static void
 emer_permissions_provider_class_init (EmerPermissionsProviderClass *klass)
 {
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+
+  object_class->finalize = emer_permissions_provider_finalize;
+
 }
 
 static void
@@ -47,6 +63,7 @@ emer_permissions_provider_init (EmerPermissionsProvider *self)
 {
   self->daemon_enabled = TRUE;
   self->uploading_enabled = TRUE;
+  self->server_url = NULL;
 }
 
 /* MOCK PUBLIC API */
@@ -62,6 +79,14 @@ emer_permissions_provider_new_full (const gchar *config_file_path,
                                     const gchar *ostree_config_file_path)
 {
   return emer_permissions_provider_new ();
+}
+
+EmerPermissionsProvider *
+mock_permissions_provider_new (const gchar *server_url)
+{
+  EmerPermissionsProvider *self = emer_permissions_provider_new ();
+  self->server_url = g_strdup (server_url);
+  return self;
 }
 
 gboolean
@@ -106,7 +131,7 @@ emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
 gchar *
 emer_permissions_provider_get_server_url (EmerPermissionsProvider *self)
 {
-  return NULL;
+  return g_strdup (self->server_url);
 }
 
 /* API OF MOCK OBJECT */

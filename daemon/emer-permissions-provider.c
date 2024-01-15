@@ -92,19 +92,16 @@ load_fallback_data (EmerPermissionsProvider *self)
 static void
 write_config_file_sync (EmerPermissionsProvider *self)
 {
-  gchar *permissions_config_file_path =
+  g_autofree gchar *permissions_config_file_path =
     g_file_get_path (self->permissions_config_file);
-  GError *error = NULL;
+  g_autoptr(GError) error = NULL;
 
   if (!g_key_file_save_to_file (self->permissions, permissions_config_file_path,
       &error))
     {
       g_critical ("Could not write to permissions config file '%s'. Error: %s.",
                   permissions_config_file_path, error->message);
-      g_clear_error (&error);
     }
-
-  g_free (permissions_config_file_path);
 }
 
 static gboolean
@@ -137,9 +134,9 @@ default. Also emits a property notification. */
 static void
 read_config_file_sync (EmerPermissionsProvider *self)
 {
-  GError *error = NULL;
+  g_autoptr(GError) error = NULL;
 
-  gchar *path = g_file_get_path (self->permissions_config_file);
+  const gchar *path = g_file_peek_path (self->permissions_config_file);
   gboolean load_succeeded =
     g_key_file_load_from_file (self->permissions, path, G_KEY_FILE_NONE, &error);
   if (!load_succeeded)
@@ -157,8 +154,6 @@ read_config_file_sync (EmerPermissionsProvider *self)
       g_clear_error (&error);
     }
 
-  g_free (path);
-
   GParamSpec *daemon_enabled_pspec =
     emer_permissions_provider_props[PROP_DAEMON_ENABLED];
   g_object_notify_by_pspec (G_OBJECT (self), daemon_enabled_pspec);
@@ -175,7 +170,7 @@ read_config_file_sync (EmerPermissionsProvider *self)
 static gchar *
 get_ostree_url_from_file (EmerPermissionsProvider *self)
 {
-  gchar *path = g_file_get_path (self->ostree_config_file);
+  const gchar *path = g_file_peek_path (self->ostree_config_file);
 
   if (path == NULL)
     {
@@ -183,31 +178,24 @@ get_ostree_url_from_file (EmerPermissionsProvider *self)
       return NULL;
     }
 
-  GKeyFile *ostree_configuration_key_file = g_key_file_new ();
-  GError *error = NULL;
+  g_autoptr(GKeyFile) ostree_configuration_key_file = g_key_file_new ();
+  g_autoptr(GError) error = NULL;
   if (!g_key_file_load_from_file (ostree_configuration_key_file, path,
                                  G_KEY_FILE_NONE, &error))
     {
       g_warning ("Unable to load OSTree GKeyFile from given OSTree config "
                  "file path %s. Error: %s.", path, error->message);
-      g_free (path);
-      g_clear_error (&error);
       return NULL;
     }
-
-  g_free (path);
 
   gchar *ostree_url = g_key_file_get_value (ostree_configuration_key_file,
                                             "remote \"eos\"",
                                             "url",
                                             &error);
-  g_key_file_unref (ostree_configuration_key_file);
-
   if (ostree_url == NULL)
     {
       g_warning ("Unable to read OSTree URL from given OSTree config file. "
                  "Error: %s.", error->message);
-      g_clear_error (&error);
     }
 
   return ostree_url;
@@ -217,15 +205,14 @@ static gchar *
 get_ostree_url_from_ostree_repo (void)
 {
   OstreeRepo *ostree_repo = ostree_repo_new_default ();
+  g_autoptr(GError) error = NULL;
 
-  GError *error = NULL;
   if (!ostree_repo_open (ostree_repo, NULL /* GCancellable */, &error))
     {
       /* Don't warn if simply not on an OSTree system. */
       if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
        g_warning ("Unable to open OSTree repo: %s", error->message);
 
-      g_clear_error (&error);
       g_object_unref (ostree_repo);
       return NULL;
     }
@@ -248,7 +235,6 @@ get_ostree_url_from_ostree_repo (void)
   if (ostree_url == NULL)
     {
       g_warning ("Unable to read OSTree URL. Error: %s.", error->message);
-      g_clear_error (&error);
     }
 
   return ostree_url;
@@ -266,7 +252,7 @@ read_ostree_url (EmerPermissionsProvider *self)
 static gchar *
 read_environment (EmerPermissionsProvider *self)
 {
-  GError *error = NULL;
+  g_autoptr(GError) error = NULL;
   gchar *environment = g_key_file_get_value (self->permissions,
                                              DAEMON_GLOBAL_GROUP_NAME,
                                              DAEMON_ENVIRONMENT_KEY_NAME,
@@ -277,7 +263,6 @@ read_environment (EmerPermissionsProvider *self)
                   "Returning default value. Error: %s.",
                   DAEMON_GLOBAL_GROUP_NAME, DAEMON_ENVIRONMENT_KEY_NAME,
                   error->message);
-      g_error_free (error);
     }
 
   if (g_strcmp0 (environment, "dev") != 0 &&
@@ -511,7 +496,7 @@ emer_permissions_provider_new_full (const gchar *permissions_config_file_path,
 gboolean
 emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self)
 {
-  GError *error = NULL;
+  g_autoptr(GError) error = NULL;
   gboolean daemon_enabled =
     g_key_file_get_boolean (self->permissions, DAEMON_GLOBAL_GROUP_NAME,
                             DAEMON_ENABLED_KEY_NAME, &error);
@@ -521,7 +506,6 @@ emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self)
                   "Returning default value. Error: %s.",
                   DAEMON_GLOBAL_GROUP_NAME, DAEMON_ENABLED_KEY_NAME,
                   error->message);
-      g_error_free (error);
     }
 
   return daemon_enabled;
@@ -562,7 +546,7 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
 gboolean
 emer_permissions_provider_get_uploading_enabled (EmerPermissionsProvider *self)
 {
-  GError *error = NULL;
+  g_autoptr(GError) error = NULL;
   gboolean uploading_enabled =
     g_key_file_get_boolean (self->permissions, DAEMON_GLOBAL_GROUP_NAME,
                             DAEMON_UPLOADING_ENABLED_KEY_NAME, &error);
@@ -572,7 +556,6 @@ emer_permissions_provider_get_uploading_enabled (EmerPermissionsProvider *self)
                   "Returning default value. Error: %s.",
                   DAEMON_GLOBAL_GROUP_NAME, DAEMON_UPLOADING_ENABLED_KEY_NAME,
                   error->message);
-      g_error_free (error);
       return TRUE;
     }
 
@@ -619,7 +602,7 @@ emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
   read_config_file_sync (self);
 
   gchar *environment = read_environment (self);
-  gchar *ostree_url = read_ostree_url (self);
+  g_autofree gchar *ostree_url = read_ostree_url (self);
 
   if (ostree_url == NULL)
     {
@@ -639,7 +622,6 @@ emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
       set_environment (self, environment);
     }
 
-  g_clear_pointer (&ostree_url, g_free);
   return environment;
 }
 

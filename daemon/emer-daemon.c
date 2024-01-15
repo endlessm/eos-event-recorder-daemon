@@ -364,7 +364,7 @@ get_http_request_url (EmerDaemon   *self,
   gchar *checksum =
     g_compute_checksum_for_data (G_CHECKSUM_SHA512, data, length);
   gchar *http_request_url_string =
-    g_build_filename (self->server_url, checksum, NULL);
+    g_build_filename (self->server_url, CLIENT_VERSION_NUMBER, checksum, NULL);
   g_free (checksum);
 
   g_autoptr(GError) error = NULL;
@@ -1034,10 +1034,7 @@ set_server_url (EmerDaemon  *self,
                 const gchar *server_url)
 {
   g_free (self->server_url);
-  self->server_url = NULL;
-
-  if (server_url != NULL)
-    self->server_url = g_build_filename (server_url, CLIENT_VERSION_NUMBER "/", NULL);
+  self->server_url = g_strdup (server_url);
 }
 
 static void

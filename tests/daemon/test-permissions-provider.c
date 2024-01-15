@@ -28,52 +28,53 @@
 #include <gio/gio.h>
 #include <glib.h>
 
-#define PERMISSIONS_CONFIG_FILE_ENABLED_TEST \
-  "[global]\n" \
-  "enabled=true\n" \
-  "uploading_enabled=true\n" \
-  "environment=test"
-#define PERMISSIONS_CONFIG_FILE_DISABLED_TEST \
-  "[global]\n" \
-  "enabled=false\n" \
-  "uploading_enabled=true\n" \
-  "environment=test"
-#define PERMISSIONS_CONFIG_FILE_UPLOADING_DISABLED_TEST \
-  "[global]\n" \
-  "enabled=true\n" \
-  "uploading_enabled=false\n" \
-  "environment=test"
-#define PERMISSIONS_CONFIG_FILE_INVALID \
-  "lavubeu;f'w943ty[jdn;fbl\n"
-#define PERMISSIONS_CONFIG_FILE_ENABLED_DEV \
-  "[global]\n" \
-  "enabled=true\n" \
-  "uploading_enabled=true\n" \
-  "environment=dev"
-#define PERMISSIONS_CONFIG_FILE_ENABLED_PRODUCTION \
-  "[global]\n" \
-  "enabled=true\n" \
-  "uploading_enabled=true\n" \
-  "environment=production"
-#define PERMISSIONS_CONFIG_FILE_ENABLED_INVALID_ENVIRONMENT \
-  "[global]\n" \
-  "enabled=true\n" \
-  "uploading_enabled=true\n" \
-  "environment=invalid"
-#define OSTREE_CONFIG_FILE_STAGING_URL \
-  "[core]\n" \
-  "repo_version=1\n" \
-  "mode=bare\n\n" \
-  "[remote \"eos\"]\n" \
-  "url=http://fakeurl.with/staging/in/path\n" \
-  "branches=master/i386;"
-#define OSTREE_CONFIG_FILE_NON_STAGING_URL \
-  "[core]\n" \
-  "repo_version=1\n" \
-  "mode=bare\n\n" \
-  "[remote \"eos\"]\n" \
-  "url=http://fakeurl.without/term/in/path\n" \
-  "branches=master/i386;"
+const char *PERMISSIONS_CONFIG_FILE_ENABLED_TEST =
+  "[global]\n"
+  "enabled=true\n"
+  "uploading_enabled=true\n"
+  "environment=test";
+const char *PERMISSIONS_CONFIG_FILE_DISABLED_TEST =
+  "[global]\n"
+  "enabled=false\n"
+  "uploading_enabled=true\n"
+  "environment=test";
+const char *PERMISSIONS_CONFIG_FILE_UPLOADING_DISABLED_TEST =
+  "[global]\n"
+  "enabled=true\n"
+  "uploading_enabled=false\n"
+  "environment=test";
+const char *PERMISSIONS_CONFIG_FILE_INVALID =
+  "lavubeu;f'w943ty[jdn;fbl\n";
+const char *PERMISSIONS_CONFIG_FILE_ENABLED_DEV =
+  "[global]\n"
+  "enabled=true\n"
+  "uploading_enabled=true\n"
+  "environment=dev";
+const char *PERMISSIONS_CONFIG_FILE_ENABLED_PRODUCTION =
+  "[global]\n"
+  "enabled=true\n"
+  "uploading_enabled=true\n"
+  "environment=production";
+const char *PERMISSIONS_CONFIG_FILE_ENABLED_INVALID_ENVIRONMENT =
+  "[global]\n"
+  "enabled=true\n"
+  "uploading_enabled=true\n"
+  "environment=invalid";
+
+const char *OSTREE_CONFIG_FILE_STAGING_URL =
+  "[core]\n"
+  "repo_version=1\n"
+  "mode=bare\n\n"
+  "[remote \"eos\"]\n"
+  "url=http://fakeurl.with/staging/in/path\n"
+  "branches=master/i386;";
+const char *OSTREE_CONFIG_FILE_NON_STAGING_URL =
+  "[core]\n"
+  "repo_version=1\n"
+  "mode=bare\n\n"
+  "[remote \"eos\"]\n"
+  "url=http://fakeurl.without/term/in/path\n"
+  "branches=master/i386;";
 
 typedef struct {
   GFile *permissions_config_file;

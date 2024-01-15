@@ -60,6 +60,18 @@ const char *PERMISSIONS_CONFIG_FILE_ENABLED_INVALID_ENVIRONMENT =
   "enabled=true\n"
   "uploading_enabled=true\n"
   "environment=invalid";
+const char *PERMISSIONS_CONFIG_FILE_WITH_TEMPLATE_URL =
+  "[global]\n"
+  "enabled=true\n"
+  "uploading_enabled=true\n"
+  "environment=dev\n"
+  "server_url=https://${environment}.example.com/";
+const char *PERMISSIONS_CONFIG_FILE_WITH_PLAIN_URL =
+  "[global]\n"
+  "enabled=true\n"
+  "uploading_enabled=true\n"
+  "environment=dev\n"
+  "server_url=https://example.com/";
 
 const char *OSTREE_CONFIG_FILE_STAGING_URL =
   "[core]\n"
@@ -521,6 +533,46 @@ test_permissions_provider_set_uploading_enabled_updates_config_file (Fixture    
                                       "^uploading_enabled=false$"));
 }
 
+static void
+test_permissions_provider_returns_valid_default_url (Fixture *fixture,
+                                             gconstpointer unused)
+{
+  g_autofree gchar *url = NULL;
+  g_autoptr(GUri) gellar = NULL;
+  g_autoptr(GError) error = NULL;
+
+  url = emer_permissions_provider_get_server_url (fixture->test_object);
+  g_assert_nonnull (url);
+
+  /* We can't make any specific assertion about the URL because it is a
+   * build-time parameter. But we can verify that that build-time parameter
+   * is a valid URL.
+   */
+  gellar = g_uri_parse (url, G_URI_FLAGS_NONE, &error);
+  g_assert_no_error (error);
+
+}
+
+static void
+test_permissions_provider_expands_url (Fixture *fixture,
+                                       gconstpointer unused)
+{
+  g_autofree gchar *url = NULL;
+
+  url = emer_permissions_provider_get_server_url (fixture->test_object);
+  g_assert_cmpstr (url, ==, "https://dev.example.com/");
+}
+
+static void
+test_permissions_provider_handles_plain_url (Fixture       *fixture,
+                                             gconstpointer  unused)
+{
+  g_autofree gchar *url = NULL;
+
+  url = emer_permissions_provider_get_server_url (fixture->test_object);
+  g_assert_cmpstr (url, ==, "https://example.com/");
+}
+
 gint
 main (gint                argc,
       const gchar * const argv[])
@@ -609,6 +661,18 @@ main (gint                argc,
                                  PERMISSIONS_CONFIG_FILE_ENABLED_TEST,
                                  setup_with_config_file,
                                  test_permissions_provider_set_uploading_enabled_updates_config_file);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-server-url/returns-valid-default-url",
+                                 PERMISSIONS_CONFIG_FILE_ENABLED_PRODUCTION,
+                                 setup_with_config_file,
+                                 test_permissions_provider_returns_valid_default_url);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-server-url/expands-template",
+                                 PERMISSIONS_CONFIG_FILE_WITH_TEMPLATE_URL,
+                                 setup_with_config_file,
+                                 test_permissions_provider_expands_url);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-server-url/handles-plain-url",
+                                 PERMISSIONS_CONFIG_FILE_WITH_PLAIN_URL,
+                                 setup_with_config_file,
+                                 test_permissions_provider_handles_plain_url);
 
 #undef ADD_PERMISSIONS_PROVIDER_TEST
 

@@ -150,8 +150,6 @@ struct _EmerDaemon
 
   GRand *rand;
 
-  gchar *server_url;
-
   guint upload_events_timeout_source_id;
   guint report_invalid_cache_data_source_id;
   guint dispatch_aggregate_timers_daily_source_id;
@@ -360,10 +358,12 @@ get_http_request_url (EmerDaemon   *self,
                       const guchar *data,
                       gsize         length)
 {
+  g_autofree gchar *server_url =
+   emer_permissions_provider_get_server_url (self->permissions_provider);
   gchar *checksum =
     g_compute_checksum_for_data (G_CHECKSUM_SHA512, data, length);
   gchar *http_request_url_string =
-    g_build_filename (self->server_url, CLIENT_VERSION_NUMBER, checksum, NULL);
+    g_build_filename (server_url, CLIENT_VERSION_NUMBER, checksum, NULL);
   g_free (checksum);
 
   g_autoptr(GError) error = NULL;
@@ -551,12 +551,17 @@ handle_http_response (GObject      *source_object,
           flush_to_persistent_cache (self);
         }
 
+      /* Log URL without checksum */
+      GUri *url = soup_message_get_uri (http_message);
+      g_autoptr(GUri) base = g_uri_parse_relative (url, ".", G_URI_FLAGS_NONE, &error);
+      g_autofree gchar *base_str = g_uri_to_string (base);
+
       g_message ("Uploaded "
                  "%" G_GSIZE_FORMAT " events from persistent cache, "
                  "%" G_GSIZE_FORMAT " events from buffer to %s.",
                  callback_data->num_stored_events,
                  callback_data->num_buffer_events,
-                 self->server_url);
+                 base_str);
       g_task_return_boolean (upload_task, TRUE);
       finish_network_callback (upload_task);
       return;
@@ -834,13 +839,16 @@ handle_network_monitor_can_reach (GNetworkMonitor *network_monitor,
 static GSocketConnectable *
 get_ping_socket (EmerDaemon *self)
 {
+  g_autofree gchar *server_url =
+    emer_permissions_provider_get_server_url (self->permissions_provider);
   GError *error = NULL;
   GSocketConnectable *ping_socket =
-    g_network_address_parse_uri (self->server_url, 443 /* SSL default port */,
+    g_network_address_parse_uri (server_url,
+                                 443 /* SSL default port */,
                                  &error);
   if (ping_socket == NULL)
     g_error ("Invalid server URL '%s' could not be parsed because: %s.",
-             self->server_url, error->message);
+             server_url, error->message);
 
   return ping_socket;
 }
@@ -888,8 +896,7 @@ upload_permitted (EmerDaemon *self,
 }
 
 static void
-dequeue_and_do_upload (EmerDaemon  *self,
-                       const gchar *environment)
+dequeue_and_do_upload (EmerDaemon  *self)
 {
   GError *error = NULL;
   if (!upload_permitted (self, &error))
@@ -899,16 +906,6 @@ dequeue_and_do_upload (EmerDaemon  *self,
       g_object_unref (upload_task);
       g_signal_emit (self, emer_daemon_signals[SIGNAL_UPLOAD_FINISHED], 0u);
       return;
-    }
-
-  g_assert (self->server_url != NULL);
-  if (strstr (self->server_url, "${environment}") != NULL)
-    {
-      GString *s = g_string_new (self->server_url);
-      g_string_replace (s, "${environment}", environment, 0);
-
-      g_free (self->server_url);
-      self->server_url = g_string_free (s, FALSE);
     }
 
   GNetworkMonitor *network_monitor = g_network_monitor_get_default ();
@@ -922,7 +919,6 @@ dequeue_and_do_upload (EmerDaemon  *self,
 static void
 upload_events (EmerDaemon         *self,
                gsize               max_upload_size,
-               const gchar        *environment,
                GAsyncReadyCallback callback,
                gpointer            user_data)
 {
@@ -934,7 +930,7 @@ upload_events (EmerDaemon         *self,
   g_task_set_task_data (upload_task, callback_data,
                         (GDestroyNotify) network_callback_data_free);
   g_queue_push_tail (self->upload_queue, upload_task);
-  dequeue_and_do_upload (self, environment);
+  dequeue_and_do_upload (self);
 }
 
 static void
@@ -962,7 +958,7 @@ handle_upload_timer (EmerDaemon *self)
   gchar *environment =
     emer_permissions_provider_get_environment (self->permissions_provider);
   schedule_upload (self, environment);
-  upload_events (self, MAX_REQUEST_PAYLOAD, environment,
+  upload_events (self, MAX_REQUEST_PAYLOAD,
                  (GAsyncReadyCallback) log_upload_error, NULL /* user_data */);
   g_free (environment);
 
@@ -975,10 +971,7 @@ handle_upload_finished (EmerDaemon *self)
   if (g_queue_is_empty (self->upload_queue))
     return;
 
-  gchar *environment =
-    emer_permissions_provider_get_environment (self->permissions_provider);
-  dequeue_and_do_upload (self, environment);
-  g_free (environment);
+  dequeue_and_do_upload (self);
 }
 
 static void
@@ -1382,8 +1375,6 @@ emer_daemon_constructed (GObject *object)
     }
   buffer_past_aggregate_events (self);
 
-  self->server_url = emer_permissions_provider_get_server_url (self->permissions_provider);
-
   gchar *environment =
     emer_permissions_provider_get_environment (self->permissions_provider);
   schedule_upload (self, environment);
@@ -1490,7 +1481,6 @@ emer_daemon_finalize (GObject *object)
   g_clear_pointer (&self->variant_array, g_ptr_array_unref);
 
   g_rand_free (self->rand);
-  g_clear_pointer (&self->server_url, g_free);
   g_clear_object (&self->permissions_provider);
   g_clear_object (&self->aggregate_tally);
   g_clear_pointer (&self->persistent_cache_directory, g_free);
@@ -1794,11 +1784,7 @@ emer_daemon_upload_events (EmerDaemon         *self,
                            GAsyncReadyCallback callback,
                            gpointer            user_data)
 {
-
-  gchar *environment =
-    emer_permissions_provider_get_environment (self->permissions_provider);
-  upload_events (self, G_MAXSIZE, environment, callback, user_data);
-  g_free (environment);
+  upload_events (self, G_MAXSIZE, callback, user_data);
 }
 
 /* emer_daemon_upload_events_finish:

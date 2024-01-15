@@ -647,26 +647,35 @@ emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
  * emer_permissions_provider_get_server_url:
  * @self: the permissions provider
  *
- * Gets the metrics server URL from the configuration file.
+ * Gets the metrics server base URL from the configuration file, with any
+ * placeholders expanded.
  *
  * Returns: The metrics server URL.
  */
 gchar *
 emer_permissions_provider_get_server_url (EmerPermissionsProvider *self)
 {
-  GError *error = NULL;
-  gchar *server_url =
+  g_autofree gchar *server_url = NULL;
+  g_autoptr(GError) error = NULL;
+
+  server_url =
     g_key_file_get_value (self->permissions, DAEMON_GLOBAL_GROUP_NAME,
                           DAEMON_SERVER_URL_KEY_NAME, &error);
-  if (error != NULL)
+  if (server_url == NULL)
     {
-      g_debug ("Couldn't find key '%s:%s' in permissions config file. "
-               "Returning default value. Error: %s.",
-               DAEMON_GLOBAL_GROUP_NAME, DAEMON_SERVER_URL_KEY_NAME,
-               error->message);
-      g_error_free (error);
-      return g_strdup (DEFAULT_METRICS_SERVER_URL);
+      g_debug ("%s: %s", G_STRFUNC, error->message);
+      server_url = g_strdup (DEFAULT_METRICS_SERVER_URL);
     }
 
-  return server_url;
+  if (strstr (server_url, "${environment}") != NULL)
+    {
+      GString *s = g_string_new (server_url);
+      g_autofree gchar *environment =
+        emer_permissions_provider_get_environment (self);
+      g_string_replace (s, "${environment}", environment, 0);
+
+      return g_string_free (s, FALSE);
+    }
+
+  return g_steal_pointer (&server_url);
 }

@@ -53,9 +53,6 @@ gchar                   *emer_permissions_provider_get_environment       (EmerPe
 
 gchar                   *emer_permissions_provider_get_server_url        (EmerPermissionsProvider *self);
 
-void                     emer_permissions_provider_set_server_url        (EmerPermissionsProvider *self,
-                                                                          const gchar             *server_url);
-
 G_END_DECLS
 
 #endif /* EMER_PERMISSIONS_PROVIDER_H */

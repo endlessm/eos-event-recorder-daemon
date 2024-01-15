@@ -398,11 +398,6 @@ emer_permissions_provider_set_property (GObject      *object,
                                                        g_value_get_boolean (value));
       break;
 
-    case PROP_SERVER_URL:
-      emer_permissions_provider_set_server_url (self,
-                                                g_value_get_string (value));
-      break;
-
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
     }
@@ -454,7 +449,7 @@ emer_permissions_provider_class_init (EmerPermissionsProviderClass *klass)
     g_param_spec_string ("server-url", "Server URL",
                          "Metrics server URL to use",
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+                         G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, NPROPS,
                                      emer_permissions_provider_props);
@@ -675,25 +670,3 @@ emer_permissions_provider_get_server_url (EmerPermissionsProvider *self)
 
   return server_url;
 }
-
-/*
- * emer_permissions_provider_set_server_url:
- * @self: the permissions provider
- * @server_url: the metrics server URL to use
- *
- * Sets the metrics server URL in the configuration file.
- */
-void
-emer_permissions_provider_set_server_url (EmerPermissionsProvider *self,
-                                          const gchar             *server_url)
-{
-  g_key_file_set_value (self->permissions, DAEMON_GLOBAL_GROUP_NAME,
-                        DAEMON_SERVER_URL_KEY_NAME, server_url);
-
-  schedule_config_file_update (self);
-
-  GParamSpec *server_url_pspec =
-    emer_permissions_provider_props[PROP_SERVER_URL];
-  g_object_notify_by_pspec (G_OBJECT (self), server_url_pspec);
-}
-

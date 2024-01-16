@@ -9,7 +9,7 @@ project('eos-event-recorder-daemon',
 cc = meson.get_compiler('c')
 
 glib_major_version = '2'
-glib_minor_version = '68'
+glib_minor_version = '74'
 glib_dep_version = '>= @0@.@1@'.format(glib_major_version, glib_minor_version)
 glib_version_define = 'GLIB_VERSION_@0@_@1@'.format(glib_major_version, glib_minor_version)
 

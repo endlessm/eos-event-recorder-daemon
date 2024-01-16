@@ -979,6 +979,8 @@ on_permissions_changed (EmerPermissionsProvider *permissions_provider,
                         GParamSpec              *pspec,
                         EmerDaemon              *self)
 {
+  g_assert (EMER_IS_DAEMON (self));
+
   self->recording_enabled =
     emer_permissions_provider_get_daemon_enabled (permissions_provider);
 
@@ -1037,8 +1039,11 @@ set_permissions_provider (EmerDaemon              *self,
   else
     self->permissions_provider = g_object_ref (permissions_provider);
 
-  g_signal_connect (self->permissions_provider, "notify::daemon-enabled",
-                    G_CALLBACK (on_permissions_changed), self);
+  g_signal_connect_object (self->permissions_provider,
+                           "notify::daemon-enabled",
+                           G_CALLBACK (on_permissions_changed),
+                           G_OBJECT (self),
+                           G_CONNECT_DEFAULT);
   self->recording_enabled =
     emer_permissions_provider_get_daemon_enabled (self->permissions_provider);
 }

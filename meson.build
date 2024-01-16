@@ -3,7 +3,7 @@ project('eos-event-recorder-daemon',
         license: 'GPL-2.0-or-later',
         version: '0.0.0',
         default_options: ['c_std=c11', 'warning_level=2'],
-        meson_version: '>= 0.52.0',
+        meson_version: '>= 0.55',
 )
 
 cc = meson.get_compiler('c')
@@ -89,10 +89,7 @@ if valgrind.found()
     # --trace-children=yes because that test also spawns other things such as
     # a dbus-daemon and we don't want to valgrind those.
     env: {
-      'EXE_WRAPPER': ' '.join(
-        # TODO: use .full_path() once we require meson ≥ 0.55
-        [valgrind.path()] + valgrind_arguments
-      ),
+      'EXE_WRAPPER': ' '.join([valgrind.full_path()] + valgrind_arguments),
     },
     timeout_multiplier: 10,
   )

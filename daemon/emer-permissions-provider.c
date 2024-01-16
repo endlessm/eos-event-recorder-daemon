@@ -60,7 +60,8 @@ G_DEFINE_TYPE (EmerPermissionsProvider, emer_permissions_provider, G_TYPE_OBJECT
   "[" DAEMON_GLOBAL_GROUP_NAME "]\n" \
   DAEMON_ENABLED_KEY_NAME "=true\n" \
   DAEMON_UPLOADING_ENABLED_KEY_NAME "=false\n" \
-  DAEMON_ENVIRONMENT_KEY_NAME "=production\n"
+  DAEMON_ENVIRONMENT_KEY_NAME "=production\n" \
+  DAEMON_SERVER_URL_KEY_NAME "=" DEFAULT_METRICS_SERVER_URL "\n"
 
 enum
 {

@@ -27,27 +27,43 @@
 #include <gio/gio.h>
 #include <glib.h>
 
-typedef struct _EmerPermissionsProviderPrivate
+typedef struct _EmerPermissionsProvider
 {
+  GObject parent;
+
   gboolean daemon_enabled;
   gboolean uploading_enabled;
-} EmerPermissionsProviderPrivate;
 
-G_DEFINE_TYPE_WITH_PRIVATE (EmerPermissionsProvider, emer_permissions_provider, G_TYPE_OBJECT)
+  gchar *server_url;
+} EmerPermissionsProvider;
+
+G_DEFINE_TYPE (EmerPermissionsProvider, emer_permissions_provider, G_TYPE_OBJECT)
+
+static void
+emer_permissions_provider_finalize (GObject *object)
+{
+  EmerPermissionsProvider *self = EMER_PERMISSIONS_PROVIDER (object);
+
+  g_clear_pointer (&self->server_url, g_free);
+
+  G_OBJECT_CLASS (emer_permissions_provider_parent_class)->finalize (object);
+}
 
 static void
 emer_permissions_provider_class_init (EmerPermissionsProviderClass *klass)
 {
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+
+  object_class->finalize = emer_permissions_provider_finalize;
+
 }
 
 static void
 emer_permissions_provider_init (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  priv->daemon_enabled = TRUE;
-  priv->uploading_enabled = TRUE;
+  self->daemon_enabled = TRUE;
+  self->uploading_enabled = TRUE;
+  self->server_url = NULL;
 }
 
 /* MOCK PUBLIC API */
@@ -65,23 +81,25 @@ emer_permissions_provider_new_full (const gchar *config_file_path,
   return emer_permissions_provider_new ();
 }
 
+EmerPermissionsProvider *
+mock_permissions_provider_new (const gchar *server_url)
+{
+  EmerPermissionsProvider *self = emer_permissions_provider_new ();
+  self->server_url = g_strdup (server_url);
+  return self;
+}
+
 gboolean
 emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  return priv->daemon_enabled;
+  return self->daemon_enabled;
 }
 
 void
 emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
                                               gboolean                 enabled)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  priv->daemon_enabled = enabled;
+  self->daemon_enabled = enabled;
 
   /* Emit a property notification even though there isn't a property by this
    * name in this mock object.
@@ -92,10 +110,7 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
 gboolean
 emer_permissions_provider_get_uploading_enabled (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  return priv->uploading_enabled;
+  return self->uploading_enabled;
 }
 
 gchar *
@@ -116,7 +131,7 @@ emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
 gchar *
 emer_permissions_provider_get_server_url (EmerPermissionsProvider *self)
 {
-  return NULL;
+  return g_strdup (self->server_url);
 }
 
 /* API OF MOCK OBJECT */
@@ -127,10 +142,7 @@ void
 emer_permissions_provider_set_uploading_enabled (EmerPermissionsProvider *self,
                                                  gboolean                 uploading_enabled)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  priv->uploading_enabled = uploading_enabled;
+  self->uploading_enabled = uploading_enabled;
 
   /* Emit a property notification even though there isn't a property by this
    * name in this mock object.

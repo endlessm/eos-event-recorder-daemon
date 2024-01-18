@@ -28,52 +28,65 @@
 #include <gio/gio.h>
 #include <glib.h>
 
-#define PERMISSIONS_CONFIG_FILE_ENABLED_TEST \
-  "[global]\n" \
-  "enabled=true\n" \
-  "uploading_enabled=true\n" \
-  "environment=test"
-#define PERMISSIONS_CONFIG_FILE_DISABLED_TEST \
-  "[global]\n" \
-  "enabled=false\n" \
-  "uploading_enabled=true\n" \
-  "environment=test"
-#define PERMISSIONS_CONFIG_FILE_UPLOADING_DISABLED_TEST \
-  "[global]\n" \
-  "enabled=true\n" \
-  "uploading_enabled=false\n" \
-  "environment=test"
-#define PERMISSIONS_CONFIG_FILE_INVALID \
-  "lavubeu;f'w943ty[jdn;fbl\n"
-#define PERMISSIONS_CONFIG_FILE_ENABLED_DEV \
-  "[global]\n" \
-  "enabled=true\n" \
-  "uploading_enabled=true\n" \
-  "environment=dev"
-#define PERMISSIONS_CONFIG_FILE_ENABLED_PRODUCTION \
-  "[global]\n" \
-  "enabled=true\n" \
-  "uploading_enabled=true\n" \
-  "environment=production"
-#define PERMISSIONS_CONFIG_FILE_ENABLED_INVALID_ENVIRONMENT \
-  "[global]\n" \
-  "enabled=true\n" \
-  "uploading_enabled=true\n" \
-  "environment=invalid"
-#define OSTREE_CONFIG_FILE_STAGING_URL \
-  "[core]\n" \
-  "repo_version=1\n" \
-  "mode=bare\n\n" \
-  "[remote \"eos\"]\n" \
-  "url=http://fakeurl.with/staging/in/path\n" \
-  "branches=master/i386;"
-#define OSTREE_CONFIG_FILE_NON_STAGING_URL \
-  "[core]\n" \
-  "repo_version=1\n" \
-  "mode=bare\n\n" \
-  "[remote \"eos\"]\n" \
-  "url=http://fakeurl.without/term/in/path\n" \
-  "branches=master/i386;"
+const char *PERMISSIONS_CONFIG_FILE_ENABLED_TEST =
+  "[global]\n"
+  "enabled=true\n"
+  "uploading_enabled=true\n"
+  "environment=test";
+const char *PERMISSIONS_CONFIG_FILE_DISABLED_TEST =
+  "[global]\n"
+  "enabled=false\n"
+  "uploading_enabled=true\n"
+  "environment=test";
+const char *PERMISSIONS_CONFIG_FILE_UPLOADING_DISABLED_TEST =
+  "[global]\n"
+  "enabled=true\n"
+  "uploading_enabled=false\n"
+  "environment=test";
+const char *PERMISSIONS_CONFIG_FILE_INVALID =
+  "lavubeu;f'w943ty[jdn;fbl\n";
+const char *PERMISSIONS_CONFIG_FILE_ENABLED_DEV =
+  "[global]\n"
+  "enabled=true\n"
+  "uploading_enabled=true\n"
+  "environment=dev";
+const char *PERMISSIONS_CONFIG_FILE_ENABLED_PRODUCTION =
+  "[global]\n"
+  "enabled=true\n"
+  "uploading_enabled=true\n"
+  "environment=production";
+const char *PERMISSIONS_CONFIG_FILE_ENABLED_INVALID_ENVIRONMENT =
+  "[global]\n"
+  "enabled=true\n"
+  "uploading_enabled=true\n"
+  "environment=invalid";
+const char *PERMISSIONS_CONFIG_FILE_WITH_TEMPLATE_URL =
+  "[global]\n"
+  "enabled=true\n"
+  "uploading_enabled=true\n"
+  "environment=dev\n"
+  "server_url=https://${environment}.example.com/";
+const char *PERMISSIONS_CONFIG_FILE_WITH_PLAIN_URL =
+  "[global]\n"
+  "enabled=true\n"
+  "uploading_enabled=true\n"
+  "environment=dev\n"
+  "server_url=https://example.com/";
+
+const char *OSTREE_CONFIG_FILE_STAGING_URL =
+  "[core]\n"
+  "repo_version=1\n"
+  "mode=bare\n\n"
+  "[remote \"eos\"]\n"
+  "url=http://fakeurl.with/staging/in/path\n"
+  "branches=master/i386;";
+const char *OSTREE_CONFIG_FILE_NON_STAGING_URL =
+  "[core]\n"
+  "repo_version=1\n"
+  "mode=bare\n\n"
+  "[remote \"eos\"]\n"
+  "url=http://fakeurl.without/term/in/path\n"
+  "branches=master/i386;";
 
 typedef struct {
   GFile *permissions_config_file;
@@ -520,6 +533,46 @@ test_permissions_provider_set_uploading_enabled_updates_config_file (Fixture    
                                       "^uploading_enabled=false$"));
 }
 
+static void
+test_permissions_provider_returns_valid_default_url (Fixture *fixture,
+                                             gconstpointer unused)
+{
+  g_autofree gchar *url = NULL;
+  g_autoptr(GUri) gellar = NULL;
+  g_autoptr(GError) error = NULL;
+
+  url = emer_permissions_provider_get_server_url (fixture->test_object);
+  g_assert_nonnull (url);
+
+  /* We can't make any specific assertion about the URL because it is a
+   * build-time parameter. But we can verify that that build-time parameter
+   * is a valid URL.
+   */
+  gellar = g_uri_parse (url, G_URI_FLAGS_NONE, &error);
+  g_assert_no_error (error);
+
+}
+
+static void
+test_permissions_provider_expands_url (Fixture *fixture,
+                                       gconstpointer unused)
+{
+  g_autofree gchar *url = NULL;
+
+  url = emer_permissions_provider_get_server_url (fixture->test_object);
+  g_assert_cmpstr (url, ==, "https://dev.example.com/");
+}
+
+static void
+test_permissions_provider_handles_plain_url (Fixture       *fixture,
+                                             gconstpointer  unused)
+{
+  g_autofree gchar *url = NULL;
+
+  url = emer_permissions_provider_get_server_url (fixture->test_object);
+  g_assert_cmpstr (url, ==, "https://example.com/");
+}
+
 gint
 main (gint                argc,
       const gchar * const argv[])
@@ -608,6 +661,18 @@ main (gint                argc,
                                  PERMISSIONS_CONFIG_FILE_ENABLED_TEST,
                                  setup_with_config_file,
                                  test_permissions_provider_set_uploading_enabled_updates_config_file);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-server-url/returns-valid-default-url",
+                                 PERMISSIONS_CONFIG_FILE_ENABLED_PRODUCTION,
+                                 setup_with_config_file,
+                                 test_permissions_provider_returns_valid_default_url);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-server-url/expands-template",
+                                 PERMISSIONS_CONFIG_FILE_WITH_TEMPLATE_URL,
+                                 setup_with_config_file,
+                                 test_permissions_provider_expands_url);
+  ADD_PERMISSIONS_PROVIDER_TEST ("/permissions-provider/get-server-url/handles-plain-url",
+                                 PERMISSIONS_CONFIG_FILE_WITH_PLAIN_URL,
+                                 setup_with_config_file,
+                                 test_permissions_provider_handles_plain_url);
 
 #undef ADD_PERMISSIONS_PROVIDER_TEST
 

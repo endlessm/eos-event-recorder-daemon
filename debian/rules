@@ -14,7 +14,7 @@
 
 # Build our documentation as well
 override_dh_auto_configure:
-	dh_auto_configure -- -Ddefault_metrics_server_url='https://${environment}.metrics.endlessm.com'
+	dh_auto_configure -- -Ddefault_metrics_server_url='https://$${environment}.metrics.endlessm.com'
 
 # Avoid changing the owner of configuration files and the persistent cache
 # directory to root:root.

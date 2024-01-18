@@ -40,7 +40,6 @@ EmerDaemon *             emer_daemon_new                      (const gchar      
                                                                EmerPermissionsProvider *permissions_provider);
 
 EmerDaemon *             emer_daemon_new_full                 (GRand                   *rand,
-                                                               const gchar             *server_url,
                                                                guint                    network_send_interval,
                                                                EmerPermissionsProvider *permissions_provider,
                                                                EmerPersistentCache     *persistent_cache,

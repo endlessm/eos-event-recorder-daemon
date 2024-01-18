@@ -3,19 +3,24 @@ project('eos-event-recorder-daemon',
         license: 'GPL-2.0-or-later',
         version: '0.0.0',
         default_options: ['c_std=c11', 'warning_level=2'],
-        meson_version: '>= 0.52.0',
+        meson_version: '>= 0.55',
 )
 
 cc = meson.get_compiler('c')
 
-glib_dep = dependency('glib-2.0', version: '>= 2.68')
+glib_major_version = '2'
+glib_minor_version = '74'
+glib_dep_version = '>= @0@.@1@'.format(glib_major_version, glib_minor_version)
+glib_version_define = 'GLIB_VERSION_@0@_@1@'.format(glib_major_version, glib_minor_version)
+
+glib_dep = dependency('glib-2.0', version: glib_dep_version)
 eosmetrics_dep = dependency('eosmetrics-0', version: '>= 0.2')
 polkit_gobject_dep = dependency('polkit-gobject-1')
 
 emer_shared_required_modules = [
     glib_dep,
-    dependency('gio-unix-2.0', version: '>= 2.46'),
-    dependency('gobject-2.0', version: '>= 2.58'),
+    dependency('gio-unix-2.0', version: glib_dep_version),
+    dependency('gobject-2.0', version: glib_dep_version),
     dependency('sqlite3'),
     dependency('uuid'),
 ]
@@ -53,8 +58,8 @@ add_project_arguments(
     '-DPERMISSIONS_FILE="@0@"'.format(permissions_file),
     '-DPERSISTENT_CACHE_DIR="@0@"'.format(persistent_cache_dir),
     '-DSYSCONFDIR="@0@"'.format(get_option('sysconfdir')),
-    '-DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_68',
-    '-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_68',
+    '-DGLIB_VERSION_MIN_REQUIRED=@0@'.format(glib_version_define),
+    '-DGLIB_VERSION_MAX_ALLOWED=@0@'.format(glib_version_define),
     '-Wno-unused-parameter',
   ],
   language: 'c',
@@ -89,10 +94,7 @@ if valgrind.found()
     # --trace-children=yes because that test also spawns other things such as
     # a dbus-daemon and we don't want to valgrind those.
     env: {
-      'EXE_WRAPPER': ' '.join(
-        # TODO: use .full_path() once we require meson ≥ 0.55
-        [valgrind.path()] + valgrind_arguments
-      ),
+      'EXE_WRAPPER': ' '.join([valgrind.full_path()] + valgrind_arguments),
     },
     timeout_multiplier: 10,
   )

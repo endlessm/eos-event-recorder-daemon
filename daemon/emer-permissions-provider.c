@@ -31,8 +31,10 @@
 
 #include "shared/metrics-util.h"
 
-typedef struct _EmerPermissionsProviderPrivate
+typedef struct _EmerPermissionsProvider
 {
+  GObject parent;
+
   /* Permissions, cached from config file */
   GKeyFile *permissions;
 
@@ -44,9 +46,9 @@ typedef struct _EmerPermissionsProviderPrivate
 
   /* For reading the OSTree config file */
   GFile *ostree_config_file;
-} EmerPermissionsProviderPrivate;
+} EmerPermissionsProvider;
 
-G_DEFINE_TYPE_WITH_PRIVATE (EmerPermissionsProvider, emer_permissions_provider, G_TYPE_OBJECT)
+G_DEFINE_TYPE (EmerPermissionsProvider, emer_permissions_provider, G_TYPE_OBJECT)
 
 #define DAEMON_GLOBAL_GROUP_NAME "global"
 #define DAEMON_ENABLED_KEY_NAME "enabled"
@@ -58,7 +60,8 @@ G_DEFINE_TYPE_WITH_PRIVATE (EmerPermissionsProvider, emer_permissions_provider, 
   "[" DAEMON_GLOBAL_GROUP_NAME "]\n" \
   DAEMON_ENABLED_KEY_NAME "=true\n" \
   DAEMON_UPLOADING_ENABLED_KEY_NAME "=false\n" \
-  DAEMON_ENVIRONMENT_KEY_NAME "=production\n"
+  DAEMON_ENVIRONMENT_KEY_NAME "=production\n" \
+  DAEMON_SERVER_URL_KEY_NAME "=" DEFAULT_METRICS_SERVER_URL "\n"
 
 enum
 {
@@ -77,10 +80,7 @@ static GParamSpec *emer_permissions_provider_props[NPROPS] = { NULL, };
 static void
 load_fallback_data (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  if (g_key_file_load_from_data (priv->permissions, FALLBACK_CONFIG_FILE_DATA,
+  if (g_key_file_load_from_data (self->permissions, FALLBACK_CONFIG_FILE_DATA,
                                  -1, G_KEY_FILE_NONE, NULL))
     return;
 
@@ -93,33 +93,25 @@ load_fallback_data (EmerPermissionsProvider *self)
 static void
 write_config_file_sync (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
+  g_autofree gchar *permissions_config_file_path =
+    g_file_get_path (self->permissions_config_file);
+  g_autoptr(GError) error = NULL;
 
-  gchar *permissions_config_file_path =
-    g_file_get_path (priv->permissions_config_file);
-  GError *error = NULL;
-
-  if (!g_key_file_save_to_file (priv->permissions, permissions_config_file_path,
+  if (!g_key_file_save_to_file (self->permissions, permissions_config_file_path,
       &error))
     {
       g_critical ("Could not write to permissions config file '%s'. Error: %s.",
                   permissions_config_file_path, error->message);
-      g_clear_error (&error);
     }
-
-  g_free (permissions_config_file_path);
 }
 
 static gboolean
 write_config_file_idle_cb (gpointer data)
 {
   EmerPermissionsProvider *self = EMER_PERMISSIONS_PROVIDER (data);
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
 
   write_config_file_sync (self);
-  priv->write_config_file_idle_id = 0;
+  self->write_config_file_idle_id = 0;
 
   return G_SOURCE_REMOVE;
 }
@@ -128,13 +120,10 @@ write_config_file_idle_cb (gpointer data)
 static void
 schedule_config_file_update (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  if (priv->write_config_file_idle_id != 0)
+  if (self->write_config_file_idle_id != 0)
     return;
 
-  priv->write_config_file_idle_id =
+  self->write_config_file_idle_id =
     g_idle_add_full (G_PRIORITY_DEFAULT_IDLE,
                      write_config_file_idle_cb,
                      g_object_ref (self),
@@ -146,14 +135,11 @@ default. Also emits a property notification. */
 static void
 read_config_file_sync (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
+  g_autoptr(GError) error = NULL;
 
-  GError *error = NULL;
-
-  gchar *path = g_file_get_path (priv->permissions_config_file);
+  const gchar *path = g_file_peek_path (self->permissions_config_file);
   gboolean load_succeeded =
-    g_key_file_load_from_file (priv->permissions, path, G_KEY_FILE_NONE, &error);
+    g_key_file_load_from_file (self->permissions, path, G_KEY_FILE_NONE, &error);
   if (!load_succeeded)
     {
       load_fallback_data (self);
@@ -168,8 +154,6 @@ read_config_file_sync (EmerPermissionsProvider *self)
 
       g_clear_error (&error);
     }
-
-  g_free (path);
 
   GParamSpec *daemon_enabled_pspec =
     emer_permissions_provider_props[PROP_DAEMON_ENABLED];
@@ -187,10 +171,7 @@ read_config_file_sync (EmerPermissionsProvider *self)
 static gchar *
 get_ostree_url_from_file (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  gchar *path = g_file_get_path (priv->ostree_config_file);
+  const gchar *path = g_file_peek_path (self->ostree_config_file);
 
   if (path == NULL)
     {
@@ -198,31 +179,24 @@ get_ostree_url_from_file (EmerPermissionsProvider *self)
       return NULL;
     }
 
-  GKeyFile *ostree_configuration_key_file = g_key_file_new ();
-  GError *error = NULL;
+  g_autoptr(GKeyFile) ostree_configuration_key_file = g_key_file_new ();
+  g_autoptr(GError) error = NULL;
   if (!g_key_file_load_from_file (ostree_configuration_key_file, path,
                                  G_KEY_FILE_NONE, &error))
     {
       g_warning ("Unable to load OSTree GKeyFile from given OSTree config "
                  "file path %s. Error: %s.", path, error->message);
-      g_free (path);
-      g_clear_error (&error);
       return NULL;
     }
-
-  g_free (path);
 
   gchar *ostree_url = g_key_file_get_value (ostree_configuration_key_file,
                                             "remote \"eos\"",
                                             "url",
                                             &error);
-  g_key_file_unref (ostree_configuration_key_file);
-
   if (ostree_url == NULL)
     {
       g_warning ("Unable to read OSTree URL from given OSTree config file. "
                  "Error: %s.", error->message);
-      g_clear_error (&error);
     }
 
   return ostree_url;
@@ -232,15 +206,14 @@ static gchar *
 get_ostree_url_from_ostree_repo (void)
 {
   OstreeRepo *ostree_repo = ostree_repo_new_default ();
+  g_autoptr(GError) error = NULL;
 
-  GError *error = NULL;
   if (!ostree_repo_open (ostree_repo, NULL /* GCancellable */, &error))
     {
       /* Don't warn if simply not on an OSTree system. */
       if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
        g_warning ("Unable to open OSTree repo: %s", error->message);
 
-      g_clear_error (&error);
       g_object_unref (ostree_repo);
       return NULL;
     }
@@ -263,7 +236,6 @@ get_ostree_url_from_ostree_repo (void)
   if (ostree_url == NULL)
     {
       g_warning ("Unable to read OSTree URL. Error: %s.", error->message);
-      g_clear_error (&error);
     }
 
   return ostree_url;
@@ -272,10 +244,7 @@ get_ostree_url_from_ostree_repo (void)
 static gchar *
 read_ostree_url (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  if (priv->ostree_config_file == NULL)
+  if (self->ostree_config_file == NULL)
     return get_ostree_url_from_ostree_repo ();
   else
     return get_ostree_url_from_file (self);
@@ -284,11 +253,8 @@ read_ostree_url (EmerPermissionsProvider *self)
 static gchar *
 read_environment (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  GError *error = NULL;
-  gchar *environment = g_key_file_get_value (priv->permissions,
+  g_autoptr(GError) error = NULL;
+  gchar *environment = g_key_file_get_value (self->permissions,
                                              DAEMON_GLOBAL_GROUP_NAME,
                                              DAEMON_ENVIRONMENT_KEY_NAME,
                                              &error);
@@ -298,7 +264,6 @@ read_environment (EmerPermissionsProvider *self)
                   "Returning default value. Error: %s.",
                   DAEMON_GLOBAL_GROUP_NAME, DAEMON_ENVIRONMENT_KEY_NAME,
                   error->message);
-      g_error_free (error);
     }
 
   if (g_strcmp0 (environment, "dev") != 0 &&
@@ -325,10 +290,7 @@ static void
 set_environment (EmerPermissionsProvider *self,
                  const gchar             *environment)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  g_key_file_set_string (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
+  g_key_file_set_string (self->permissions, DAEMON_GLOBAL_GROUP_NAME,
                          DAEMON_ENVIRONMENT_KEY_NAME, environment);
 
   schedule_config_file_update (self);
@@ -350,10 +312,7 @@ static void
 set_config_file_path (EmerPermissionsProvider *self,
                       const gchar             *path)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  priv->permissions_config_file = g_file_new_for_path (path);
+  self->permissions_config_file = g_file_new_for_path (path);
 }
 
 /* Construct-only setter */
@@ -364,10 +323,7 @@ set_ostree_config_file_path (EmerPermissionsProvider *self,
   if (path == NULL)
     return;
 
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  priv->ostree_config_file = g_file_new_for_path (path);
+  self->ostree_config_file = g_file_new_for_path (path);
 }
 
 static void
@@ -428,11 +384,6 @@ emer_permissions_provider_set_property (GObject      *object,
                                                        g_value_get_boolean (value));
       break;
 
-    case PROP_SERVER_URL:
-      emer_permissions_provider_set_server_url (self,
-                                                g_value_get_string (value));
-      break;
-
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
     }
@@ -442,12 +393,10 @@ static void
 emer_permissions_provider_finalize (GObject *object)
 {
   EmerPermissionsProvider *self = EMER_PERMISSIONS_PROVIDER (object);
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
 
-  g_key_file_unref (priv->permissions);
-  g_clear_object (&priv->permissions_config_file);
-  g_clear_object (&priv->ostree_config_file);
+  g_key_file_unref (self->permissions);
+  g_clear_object (&self->permissions_config_file);
+  g_clear_object (&self->ostree_config_file);
 
   G_OBJECT_CLASS (emer_permissions_provider_parent_class)->finalize (object);
 }
@@ -486,7 +435,7 @@ emer_permissions_provider_class_init (EmerPermissionsProviderClass *klass)
     g_param_spec_string ("server-url", "Server URL",
                          "Metrics server URL to use",
                          NULL,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+                         G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
   g_object_class_install_properties (object_class, NPROPS,
                                      emer_permissions_provider_props);
@@ -495,11 +444,8 @@ emer_permissions_provider_class_init (EmerPermissionsProviderClass *klass)
 static void
 emer_permissions_provider_init (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  priv->permissions = g_key_file_new ();
-  priv->ostree_config_file = NULL;
+  self->permissions = g_key_file_new ();
+  self->ostree_config_file = NULL;
 }
 
 /* PUBLIC API */
@@ -551,12 +497,9 @@ emer_permissions_provider_new_full (const gchar *permissions_config_file_path,
 gboolean
 emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  GError *error = NULL;
+  g_autoptr(GError) error = NULL;
   gboolean daemon_enabled =
-    g_key_file_get_boolean (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
+    g_key_file_get_boolean (self->permissions, DAEMON_GLOBAL_GROUP_NAME,
                             DAEMON_ENABLED_KEY_NAME, &error);
   if (error != NULL)
     {
@@ -564,7 +507,6 @@ emer_permissions_provider_get_daemon_enabled (EmerPermissionsProvider *self)
                   "Returning default value. Error: %s.",
                   DAEMON_GLOBAL_GROUP_NAME, DAEMON_ENABLED_KEY_NAME,
                   error->message);
-      g_error_free (error);
     }
 
   return daemon_enabled;
@@ -581,10 +523,7 @@ void
 emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
                                               gboolean                 enabled)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  g_key_file_set_boolean (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
+  g_key_file_set_boolean (self->permissions, DAEMON_GLOBAL_GROUP_NAME,
                           DAEMON_ENABLED_KEY_NAME, enabled);
 
   schedule_config_file_update (self);
@@ -608,12 +547,9 @@ emer_permissions_provider_set_daemon_enabled (EmerPermissionsProvider *self,
 gboolean
 emer_permissions_provider_get_uploading_enabled (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  GError *error = NULL;
+  g_autoptr(GError) error = NULL;
   gboolean uploading_enabled =
-    g_key_file_get_boolean (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
+    g_key_file_get_boolean (self->permissions, DAEMON_GLOBAL_GROUP_NAME,
                             DAEMON_UPLOADING_ENABLED_KEY_NAME, &error);
   if (error != NULL)
     {
@@ -621,7 +557,6 @@ emer_permissions_provider_get_uploading_enabled (EmerPermissionsProvider *self)
                   "Returning default value. Error: %s.",
                   DAEMON_GLOBAL_GROUP_NAME, DAEMON_UPLOADING_ENABLED_KEY_NAME,
                   error->message);
-      g_error_free (error);
       return TRUE;
     }
 
@@ -641,10 +576,7 @@ void
 emer_permissions_provider_set_uploading_enabled (EmerPermissionsProvider *self,
                                                  gboolean                 enabled)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
-
-  g_key_file_set_boolean (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
+  g_key_file_set_boolean (self->permissions, DAEMON_GLOBAL_GROUP_NAME,
                           DAEMON_UPLOADING_ENABLED_KEY_NAME, enabled);
 
   schedule_config_file_update (self);
@@ -671,7 +603,7 @@ emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
   read_config_file_sync (self);
 
   gchar *environment = read_environment (self);
-  gchar *ostree_url = read_ostree_url (self);
+  g_autofree gchar *ostree_url = read_ostree_url (self);
 
   if (ostree_url == NULL)
     {
@@ -691,7 +623,6 @@ emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
       set_environment (self, environment);
     }
 
-  g_clear_pointer (&ostree_url, g_free);
   return environment;
 }
 
@@ -699,53 +630,35 @@ emer_permissions_provider_get_environment (EmerPermissionsProvider *self)
  * emer_permissions_provider_get_server_url:
  * @self: the permissions provider
  *
- * Gets the metrics server URL from the configuration file.
+ * Gets the metrics server base URL from the configuration file, with any
+ * placeholders expanded.
  *
  * Returns: The metrics server URL.
  */
 gchar *
 emer_permissions_provider_get_server_url (EmerPermissionsProvider *self)
 {
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
+  g_autofree gchar *server_url = NULL;
+  g_autoptr(GError) error = NULL;
 
-  GError *error = NULL;
-  gchar *server_url =
-    g_key_file_get_value (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
+  server_url =
+    g_key_file_get_value (self->permissions, DAEMON_GLOBAL_GROUP_NAME,
                           DAEMON_SERVER_URL_KEY_NAME, &error);
-  if (error != NULL)
+  if (server_url == NULL)
     {
-      g_debug ("Couldn't find key '%s:%s' in permissions config file. "
-               "Returning default value. Error: %s.",
-               DAEMON_GLOBAL_GROUP_NAME, DAEMON_SERVER_URL_KEY_NAME,
-               error->message);
-      g_error_free (error);
-      return NULL;
+      g_debug ("%s: %s", G_STRFUNC, error->message);
+      server_url = g_strdup (DEFAULT_METRICS_SERVER_URL);
     }
 
-  return server_url;
-}
+  if (strstr (server_url, "${environment}") != NULL)
+    {
+      GString *s = g_string_new (server_url);
+      g_autofree gchar *environment =
+        emer_permissions_provider_get_environment (self);
+      g_string_replace (s, "${environment}", environment, 0);
 
-/*
- * emer_permissions_provider_set_server_url:
- * @self: the permissions provider
- * @server_url: the metrics server URL to use
- *
- * Sets the metrics server URL in the configuration file.
- */
-void
-emer_permissions_provider_set_server_url (EmerPermissionsProvider *self,
-                                          const gchar             *server_url)
-{
-  EmerPermissionsProviderPrivate *priv =
-    emer_permissions_provider_get_instance_private (self);
+      return g_string_free (s, FALSE);
+    }
 
-  g_key_file_set_value (priv->permissions, DAEMON_GLOBAL_GROUP_NAME,
-                        DAEMON_SERVER_URL_KEY_NAME, server_url);
-
-  schedule_config_file_update (self);
-
-  GParamSpec *server_url_pspec =
-    emer_permissions_provider_props[PROP_SERVER_URL];
-  g_object_notify_by_pspec (G_OBJECT (self), server_url_pspec);
+  return g_steal_pointer (&server_url);
 }

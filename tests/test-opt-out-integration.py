@@ -156,17 +156,15 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         EmerPermissionsProvider:uploading-enabled so caused that property to
         be set to TRUE.
         """
-        # Check defaults look good and erase the file before our next change
-        self._check_config_file(enabled="true", uploading_enabled="false")
-
-        with self.assertRaisesRegex(
-            dbus.exceptions.DBusException, r"uploading is disabled"
-        ) as context:
-            self.interface.UploadEvents()
-        self.assertEqual(
-            context.exception.get_dbus_name(),
-            "com.endlessm.Metrics.Error.UploadingDisabled",
-        )
+        for _ in range(2):
+            with self.assertRaisesRegex(
+                dbus.exceptions.DBusException, r"uploading is disabled"
+            ) as context:
+                self.interface.UploadEvents()
+            self.assertEqual(
+                context.exception.get_dbus_name(),
+                "com.endlessm.Metrics.Error.UploadingDisabled",
+            )
 
         self._check_config_file(enabled="true", uploading_enabled="false")
 
@@ -262,7 +260,7 @@ class TestOptOutIntegration(dbusmock.DBusTestCase):
         self.assertEqual(config.get("global", "uploading_enabled"), uploading_enabled)
 
         # erase the file after reading it to guarantee that the next time it
-        # exists, it's up to date. the daemon doesn't read it once started.
+        # exists, it's up to date.
         os.unlink(self.config_file)
 
 

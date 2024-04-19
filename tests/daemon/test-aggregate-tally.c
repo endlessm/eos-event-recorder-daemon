@@ -737,16 +737,11 @@ test_aggregate_tally_read_only (struct Fixture *fixture,
   g_assert_cmpuint (events->len, ==, 1);
 #endif
 
-  /* Try to insert via the read-only connection */
-  /* TODO: This fails successfully™ but then the sqlite3_close() call when tally_ro is disposed fails with SQLITE_BUSY: database is locked.
-   * I believe this is because sqlite3_finalize() is not called in the error path: a real bug.
-   */
-#if 0
+  /* Try to insert via the read-only connection: this should fail. */
   gboolean ret = emer_aggregate_tally_store_event (tally_ro, EMER_TALLY_DAILY_EVENTS, 0, uuids[1], NULL, 2, datetime, &error);
   /* No particular assertion about the error */
   g_assert_nonnull (error);
   g_assert_false (ret);
-#endif
 }
 
 gint

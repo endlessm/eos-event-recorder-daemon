@@ -187,16 +187,19 @@ delete_tally_entries (EmerAggregateTally  *self,
     }
   g_string_append (query, ");");
 
-  if (!CHECK (sqlite3_prepare_v2 (self->db, query->str, -1, &stmt, NULL)) ||
-      !CHECK (sqlite3_step (stmt)) ||
-      !CHECK (sqlite3_reset (stmt)) ||
-      !CHECK (sqlite3_finalize (stmt)))
-    {
-      g_prefix_error (error, "Failed to delete %u tally entries: ", rows_to_delete->len);
-      return FALSE;
-    }
+  gboolean ret =
+      CHECK (sqlite3_prepare_v2 (self->db, query->str, -1, &stmt, NULL)) &&
+      CHECK (sqlite3_step (stmt));
 
-  return TRUE;
+  if (ret)
+    ret = CHECK (sqlite3_finalize (stmt));
+  else
+    sqlite3_finalize (stmt);
+
+  if (!ret)
+    g_prefix_error (error, "Failed to delete %u tally entries: ", rows_to_delete->len);
+
+  return ret;
 }
 
 static void
@@ -226,10 +229,10 @@ emer_aggregate_tally_read_user_version (sqlite3  *db,
   if (ret == SQLITE_ROW)
     version = sqlite3_column_int64 (stmt, 0);
   else if (!CHECK (ret))
-    return -1;
+    version = -1;
 
-  if (!CHECK (sqlite3_finalize (stmt)))
-    return -1;
+  /* Ignore errors here: we have got what we came for. */
+  sqlite3_finalize (stmt);
 
   return version;
 }
@@ -554,8 +557,12 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
                                 payload ? g_variant_get_size (payload) : 0,
                                 SQLITE_TRANSIENT)) &&
       CHECK (sqlite3_bind_int64 (stmt, 5, counter)) &&
-      CHECK (sqlite3_step (stmt)) &&
-      CHECK (sqlite3_finalize (stmt));
+      CHECK (sqlite3_step (stmt));
+
+  if (ret)
+    ret = CHECK (sqlite3_finalize (stmt));
+  else
+    sqlite3_finalize (stmt);
 
   g_clear_pointer (&payload, g_variant_unref);
 
@@ -632,9 +639,14 @@ emer_aggregate_tally_iter_internal (EmerAggregateTally *self,
         break;
     }
 
+  /* Close the cursor before we try to delete the rows it returned */
+  if (ret == SQLITE_DONE)
+    ret = sqlite3_finalize (stmt);
+  else
+    sqlite3_finalize (stmt);
+
   return
       CHECK (ret) &&
-      CHECK (sqlite3_finalize (stmt)) &&
       delete_tally_entries (self, rows_to_delete, error);
 }
 

@@ -17,6 +17,21 @@ executable('print-persistent-cache',
     install: false,
 )
 
+print_aggregates_sources = [
+    '../daemon/emer-aggregate-tally.c',
+    'print-aggregates.c',
+]
+
+executable('print-aggregates',
+    print_aggregates_sources,
+    dependencies: [
+        emer_required_modules,
+        emer_shared_dep,
+    ],
+    include_directories: include_directories('../daemon'),
+    install: false,
+)
+
 install_data('eos-metrics-collector.exe',
     install_dir: get_option('libexecdir'),
     install_mode: 'rwxr-xr-x',

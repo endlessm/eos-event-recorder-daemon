@@ -379,15 +379,6 @@ emer_aggregate_tally_initable_init (GInitable     *initable,
   if (!self->read_only)
     ensure_folder_exists (self, self->persistent_cache_directory, NULL);
 
- /* No daemon version that used this path made it into a production release,
-  * or even beta. So rather than migrating the data for the schema & filename
-  * change, just delete it (and ignore errors).
-  */
-  old_path = g_build_filename (self->persistent_cache_directory,
-                               "aggregate-events.db",
-                               NULL);
-  emer_aggregate_tally_delete_db (self, old_path);
-
   path = g_build_filename (self->persistent_cache_directory,
                            "metrics.db",
                            NULL);

@@ -36,7 +36,14 @@ struct _EmerAggregateTally
   sqlite3 *db;
 };
 
-G_DEFINE_TYPE (EmerAggregateTally, emer_aggregate_tally, G_TYPE_OBJECT)
+static void emer_aggregate_tally_initable_iface_init (gpointer g_iface,
+                                                      gpointer iface_data);
+
+G_DEFINE_TYPE_WITH_CODE (EmerAggregateTally,
+                         emer_aggregate_tally,
+                         G_TYPE_OBJECT,
+                         G_IMPLEMENT_INTERFACE (G_TYPE_INITABLE,
+                                                emer_aggregate_tally_initable_iface_init))
 
 /* Error domain; codes from https://www.sqlite.org/rescode.html */
 G_DEFINE_QUARK ("emer-sqlite-error", emer_sqlite_error)
@@ -348,15 +355,15 @@ emer_aggregate_tally_delete_db (EmerAggregateTally *self,
     }
 }
 
-static void
-emer_aggregate_tally_constructed (GObject *object)
+static gboolean
+emer_aggregate_tally_initable_init (GInitable     *initable,
+                                    GCancellable  *cancellable,
+                                    GError       **error)
 {
-  EmerAggregateTally *self = EMER_AGGREGATE_TALLY (object);
+  EmerAggregateTally *self = EMER_AGGREGATE_TALLY (initable);
   g_autofree gchar *old_path = NULL;
   g_autofree gchar *path = NULL;
-  g_autoptr(GError) error = NULL;
-
-  G_OBJECT_CLASS (emer_aggregate_tally_parent_class)->constructed (object);
+  g_autoptr(GError) local_error = NULL;
 
   g_assert (self->persistent_cache_directory != NULL);
   ensure_folder_exists (self, self->persistent_cache_directory, NULL);
@@ -373,20 +380,27 @@ emer_aggregate_tally_constructed (GObject *object)
   path = g_build_filename (self->persistent_cache_directory,
                            "metrics.db",
                            NULL);
-  if (!emer_aggregate_tally_init_db (self, path, &error))
+  if (emer_aggregate_tally_init_db (self, path, &local_error))
+    return TRUE;
+
+
+  g_warning ("Failed to initialize %s: %s; trying to delete and recreate it",
+             path, local_error->message);
+  g_clear_error (&local_error);
+
+  g_clear_pointer (&self->db, close_db);
+  emer_aggregate_tally_delete_db (self, path);
+
+  if (!emer_aggregate_tally_init_db (self, path, &local_error))
     {
-      g_warning ("Failed to initialize %s: %s; trying to delete and recreate it",
-                 path, error->message);
-      g_clear_error (&error);
-
-      g_clear_pointer (&self->db, close_db);
-      emer_aggregate_tally_delete_db (self, path);
-
-      if (!emer_aggregate_tally_init_db (self, path, &error))
-        {
-          g_error ("Failed to initialize %s again: %s", path, error->message);
-        }
+      g_propagate_prefixed_error (error,
+                                  g_steal_pointer (&local_error),
+                                  "Failed to initialize %s: ",
+                                  path);
+      return FALSE;
     }
+
+  return TRUE;
 }
 
 static void
@@ -425,7 +439,6 @@ emer_aggregate_tally_class_init (EmerAggregateTallyClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
-  object_class->constructed = emer_aggregate_tally_constructed;
   object_class->finalize = emer_aggregate_tally_finalize;
   object_class->set_property = emer_aggregate_tally_set_property;
 
@@ -452,12 +465,25 @@ emer_aggregate_tally_init (EmerAggregateTally *self)
 {
 }
 
-EmerAggregateTally *
-emer_aggregate_tally_new (const char *persistent_cache_directory)
+static void
+emer_aggregate_tally_initable_iface_init (gpointer g_iface,
+                                          gpointer iface_data)
 {
-  return g_object_new (EMER_TYPE_AGGREGATE_TALLY,
-                       "persistent-cache-directory", persistent_cache_directory,
-                       NULL);
+  GInitableIface *initable_iface = g_iface;
+
+  initable_iface->init = emer_aggregate_tally_initable_init;
+}
+
+EmerAggregateTally *
+emer_aggregate_tally_new (const char  *persistent_cache_directory,
+                          GError     **error)
+{
+  GCancellable *cancellable = NULL;
+  return g_initable_new (EMER_TYPE_AGGREGATE_TALLY,
+                         cancellable,
+                         error,
+                         "persistent-cache-directory", persistent_cache_directory,
+                         NULL);
 }
 
 gboolean

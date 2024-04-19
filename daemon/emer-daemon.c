@@ -1375,8 +1375,13 @@ emer_daemon_constructed (GObject *object)
 
   if (self->aggregate_tally == NULL)
     {
+      g_autoptr(GError) error = NULL;
       self->aggregate_tally =
-        emer_aggregate_tally_new (self->persistent_cache_directory ?: g_get_user_cache_dir ());
+        emer_aggregate_tally_new (self->persistent_cache_directory ?: g_get_user_cache_dir (),
+                                  &error);
+      if (self->aggregate_tally == NULL)
+        g_error ("Failed to construct EmerAggregateTally: %s",
+                 error ? error->message : "(null error)");
     }
   buffer_past_aggregate_events (self);
 

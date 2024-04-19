@@ -109,7 +109,10 @@ setup (struct Fixture *fixture,
        gconstpointer   dontuseme)
 {
   const gchar *cache_dir = g_get_user_cache_dir ();
-  fixture->tally = emer_aggregate_tally_new (cache_dir);
+  g_autoptr(GError) error = NULL;
+  fixture->tally = emer_aggregate_tally_new (cache_dir, &error);
+  g_assert_no_error (error);
+  g_assert_nonnull (fixture->tally);
 }
 
 // Testing Cases

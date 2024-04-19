@@ -63,11 +63,18 @@ print_event (guint32     unix_user_id,
   return EMER_TALLY_ITER_CONTINUE;
 }
 
-static void
-print_events (EmerAggregateTally *tally,
-              EmerTallyType tally_type)
+static gboolean
+print_events (EmerAggregateTally  *tally,
+              EmerTallyType        tally_type,
+              GError             **error)
 {
-  emer_aggregate_tally_iter (tally, tally_type, NULL, EMER_TALLY_ITER_FLAG_DEFAULT, print_event, NULL);
+  return emer_aggregate_tally_iter (tally,
+                                    tally_type,
+                                    NULL,
+                                    EMER_TALLY_ITER_FLAG_DEFAULT,
+                                    print_event,
+                                    NULL,
+                                    error);
 }
 
 gint
@@ -118,8 +125,12 @@ main (gint   argc,
     }
 
   g_print ("%s", HEADER);
-  print_events (tally, EMER_TALLY_DAILY_EVENTS);
-  print_events (tally, EMER_TALLY_MONTHLY_EVENTS);
+  if (!print_events (tally, EMER_TALLY_DAILY_EVENTS, &error) ||
+      !print_events (tally, EMER_TALLY_MONTHLY_EVENTS, &error))
+    {
+      g_printerr ("Error while listing events: %s\n", error->message);
+      return EXIT_FAILURE;
+    }
 
   return 0;
 }

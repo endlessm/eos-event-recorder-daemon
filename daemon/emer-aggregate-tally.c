@@ -659,18 +659,23 @@ emer_aggregate_tally_iter_internal (EmerAggregateTally *self,
  * @flags: Whether to delete events while iterating
  * @func: (scope call): Callback to call for each matching event
  * @user_data: (closure func): Data to pass to @func
+ * @error: Location to store an error if one occurs while iterating or
+ *         deleting events.
  *
  * Iterate all events in the tally for the given frequency, either on a
  * specific date/month or (if @datetime is %NULL) on all dates at that
  * frequency.
+ *
+ * Returns: %TRUE on success, or %FALSE with @error set otherwise.
  */
-void
-emer_aggregate_tally_iter (EmerAggregateTally *self,
-                           EmerTallyType       tally_type,
-                           GDateTime          *datetime,
-                           EmerTallyIterFlags  flags,
-                           EmerTallyIterFunc   func,
-                           gpointer            user_data)
+gboolean
+emer_aggregate_tally_iter (EmerAggregateTally  *self,
+                           EmerTallyType        tally_type,
+                           GDateTime           *datetime,
+                           EmerTallyIterFlags   flags,
+                           EmerTallyIterFunc    func,
+                           gpointer             user_data,
+                           GError             **error)
 {
   const char *SELECT_SQL =
     "SELECT id, event_id, unix_user_id, "
@@ -683,43 +688,40 @@ emer_aggregate_tally_iter (EmerAggregateTally *self,
     "FROM tally "
     "WHERE length(date) = ?";
   const char *query = (datetime != NULL) ? SELECT_SQL : SELECT_ALL_SQL;
-  g_autoptr(GError) error = NULL;
 
-  if (!emer_aggregate_tally_iter_internal (self,
-                                           query,
-                                           tally_type,
-                                           datetime,
-                                           flags,
-                                           func,
-                                           user_data,
-                                           &error))
-    g_critical ("%s: %s", G_STRFUNC, error->message);
+  return emer_aggregate_tally_iter_internal (self,
+                                             query,
+                                             tally_type,
+                                             datetime,
+                                             flags,
+                                             func,
+                                             user_data,
+                                             error);
 }
 
-void
-emer_aggregate_tally_iter_before (EmerAggregateTally *self,
-                                  EmerTallyType       tally_type,
-                                  GDateTime          *datetime,
-                                  EmerTallyIterFlags  flags,
-                                  EmerTallyIterFunc   func,
-                                  gpointer            user_data)
+gboolean
+emer_aggregate_tally_iter_before (EmerAggregateTally  *self,
+                                  EmerTallyType        tally_type,
+                                  GDateTime           *datetime,
+                                  EmerTallyIterFlags   flags,
+                                  EmerTallyIterFunc    func,
+                                  gpointer             user_data,
+                                  GError             **error)
 {
   const char *SELECT_SQL =
     "SELECT id, event_id, unix_user_id, "
     "       payload, counter, date "
     "FROM tally "
     "WHERE length(date) = length(?1) AND date < ?1;";
-  g_autoptr(GError) error = NULL;
 
-  if (!emer_aggregate_tally_iter_internal (self,
-                                           SELECT_SQL,
-                                           tally_type,
-                                           datetime,
-                                           flags,
-                                           func,
-                                           user_data,
-                                           &error))
-    g_critical ("%s: %s", G_STRFUNC, error->message);
+  return emer_aggregate_tally_iter_internal (self,
+                                             SELECT_SQL,
+                                             tally_type,
+                                             datetime,
+                                             flags,
+                                             func,
+                                             user_data,
+                                             error);
 }
 
 gboolean

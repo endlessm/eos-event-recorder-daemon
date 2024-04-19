@@ -199,14 +199,13 @@ test_aggregate_tally_iter (struct Fixture *fixture,
   g_autoptr(GVariant) payload = v_str (payload_str);
   g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
   int i;
+  g_autoptr(GError) error = NULL;
 
   // Add the same aggregate event multiple times. It must
   // result in a single aggregate event with the sum of
   // counters
   for (i = 0; i < 10; i++)
     {
-      g_autoptr(GError) error = NULL;
-
       emer_aggregate_tally_store_event (fixture->tally,
                                         EMER_TALLY_DAILY_EVENTS,
                                         1001,
@@ -224,7 +223,9 @@ test_aggregate_tally_iter (struct Fixture *fixture,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             events);
+                             events,
+                             &error);
+  g_assert_no_error (error);
 
   g_assert_cmpuint (events->len, ==, 1);
   AggregateEvent *e = g_ptr_array_index (events, 0);
@@ -243,7 +244,9 @@ test_aggregate_tally_iter (struct Fixture *fixture,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             events);
+                             events,
+                             &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 0);
 }
 
@@ -288,8 +291,9 @@ test_aggregate_tally_permutations (struct Fixture *fixture,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             events);
-
+                             events,
+                             &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, n_unix_uids * G_N_ELEMENTS (uuids) * G_N_ELEMENTS (payloads));
   for (size_t i = 0; i < events->len; i++)
     {
@@ -307,7 +311,9 @@ test_aggregate_tally_permutations (struct Fixture *fixture,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             events);
+                             events,
+                             &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 0);
 }
 
@@ -337,7 +343,9 @@ test_aggregate_tally_large_counter_single (struct Fixture *fixture,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             events);
+                             events,
+                             &error);
+  g_assert_no_error (error);
 
   g_assert_cmpuint (events->len, ==, 1);
   AggregateEvent *e = g_ptr_array_index (events, 0);
@@ -381,8 +389,9 @@ test_aggregate_tally_large_counter_add (struct Fixture *fixture,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             events);
-
+                             events,
+                             &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 1);
   AggregateEvent *e = g_ptr_array_index (events, 0);
   g_assert_cmpuint (e->counter, ==, ((guint32) G_MAXINT32) + 1);
@@ -419,8 +428,9 @@ test_aggregate_tally_large_counter_upper_bound (struct Fixture *fixture,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             events);
-
+                             events,
+                             &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 1);
   AggregateEvent *e = g_ptr_array_index (events, 0);
   g_assert_cmpuint (e->counter, ==, G_MAXUINT32);
@@ -475,8 +485,9 @@ test_aggregate_tally_iter_before_daily (struct Fixture *fixture,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
                                     tally_iter_func,
-                                    events);
-
+                                    events,
+                                    &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 25);
   for (i = 0; i < events->len; i++)
     {
@@ -494,8 +505,9 @@ test_aggregate_tally_iter_before_daily (struct Fixture *fixture,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DELETE,
                                     tally_iter_func,
-                                    events);
-
+                                    events,
+                                    &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 25);
   for (i = 0; i < events->len; i++)
     {
@@ -511,8 +523,9 @@ test_aggregate_tally_iter_before_daily (struct Fixture *fixture,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
                                     tally_iter_func,
-                                    events);
-
+                                    events,
+                                    &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 0);
 }
 
@@ -565,8 +578,9 @@ test_aggregate_tally_iter_before_monthly (struct Fixture *fixture,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
                                     tally_iter_func,
-                                    events);
-
+                                    events,
+                                    &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 12);
   for (i = 0; i < events->len; i++)
     {
@@ -584,8 +598,9 @@ test_aggregate_tally_iter_before_monthly (struct Fixture *fixture,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DELETE,
                                     tally_iter_func,
-                                    events);
-
+                                    events,
+                                    &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 12);
   for (i = 0; i < events->len; i++)
     {
@@ -601,8 +616,9 @@ test_aggregate_tally_iter_before_monthly (struct Fixture *fixture,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
                                     tally_iter_func,
-                                    events);
-
+                                    events,
+                                    &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 0);
 }
 
@@ -656,7 +672,9 @@ test_aggregate_tally_iter_all (struct Fixture *fixture,
                              NULL,
                              EMER_TALLY_ITER_FLAG_DEFAULT,
                              tally_iter_func,
-                             events);
+                             events,
+                             &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 50);
   g_ptr_array_set_size (events, 0);
 
@@ -666,7 +684,9 @@ test_aggregate_tally_iter_all (struct Fixture *fixture,
                              NULL,
                              EMER_TALLY_ITER_FLAG_DEFAULT,
                              tally_iter_func,
-                             events);
+                             events,
+                             &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 1);
 }
 
@@ -721,21 +741,24 @@ test_aggregate_tally_read_only (struct Fixture *fixture,
                              NULL,
                              EMER_TALLY_ITER_FLAG_DEFAULT,
                              tally_iter_func,
-                             events);
+                             events,
+                             &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 1);
 
   /* Try to delete – this should fail */
-  /* TODO: this currently just prints a CRITICAL (and crashes the test) */
-#if 0
   g_ptr_array_set_size (events, 0);
   emer_aggregate_tally_iter (tally_ro,
                              EMER_TALLY_DAILY_EVENTS,
                              NULL,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             events);
+                             events,
+                             &error);
+  /* No particular assertion about the error */
+  g_assert_nonnull (error);
   g_assert_cmpuint (events->len, ==, 1);
-#endif
+  g_clear_error (&error);
 
   /* Try to insert via the read-only connection: this should fail. */
   gboolean ret = emer_aggregate_tally_store_event (tally_ro, EMER_TALLY_DAILY_EVENTS, 0, uuids[1], NULL, 2, datetime, &error);

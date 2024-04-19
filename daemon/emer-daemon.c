@@ -1152,6 +1152,7 @@ clock_ticked_midnight_cb (gpointer user_data)
   g_autoptr (GDateTime) now = NULL;
   g_autofree char *date = NULL;
   gint64 now_monotonic_us;
+  g_autoptr(GError) error = NULL;
 
   now_monotonic_us = g_get_monotonic_time ();
 
@@ -1167,12 +1168,17 @@ clock_ticked_midnight_cb (gpointer user_data)
                                   self->current_aggregate_tally_date,
                                   now_monotonic_us);
 
-  emer_aggregate_tally_iter (self->aggregate_tally,
-                             EMER_TALLY_DAILY_EVENTS,
-                             self->current_aggregate_tally_date,
-                             EMER_TALLY_ITER_FLAG_DELETE,
-                             buffer_aggregate_event_to_queue,
-                             self);
+  if (!emer_aggregate_tally_iter (self->aggregate_tally,
+                                  EMER_TALLY_DAILY_EVENTS,
+                                  self->current_aggregate_tally_date,
+                                  EMER_TALLY_ITER_FLAG_DELETE,
+                                  buffer_aggregate_event_to_queue,
+                                  self,
+                                  &error))
+    {
+      g_warning ("Failed to buffer daily events for %s: %s", date, error->message);
+      g_clear_error (&error);
+    }
 
   /* Monthly events */
   now = g_date_time_new_now_local ();
@@ -1191,12 +1197,17 @@ clock_ticked_midnight_cb (gpointer user_data)
                                       self->current_aggregate_tally_date,
                                       now_monotonic_us);
 
-      emer_aggregate_tally_iter (self->aggregate_tally,
-                                 EMER_TALLY_MONTHLY_EVENTS,
-                                 self->current_aggregate_tally_date,
-                                 EMER_TALLY_ITER_FLAG_DELETE,
-                                 buffer_aggregate_event_to_queue,
-                                 self);
+      if (!emer_aggregate_tally_iter (self->aggregate_tally,
+                                      EMER_TALLY_MONTHLY_EVENTS,
+                                      self->current_aggregate_tally_date,
+                                      EMER_TALLY_ITER_FLAG_DELETE,
+                                      buffer_aggregate_event_to_queue,
+                                      self,
+                                      &error))
+        {
+          g_warning ("Failed to buffer monthly events for %s: %s", month_date, error->message);
+          g_clear_error (&error);
+        }
     }
 
   split_aggregate_timers (self, now_monotonic_us);
@@ -1318,21 +1329,31 @@ static void
 buffer_past_aggregate_events (EmerDaemon *self)
 {
   g_autoptr(GDateTime) now = g_date_time_new_now_local ();
+  g_autoptr(GError) error = NULL;
 
-  emer_aggregate_tally_iter_before (self->aggregate_tally,
-                                    EMER_TALLY_DAILY_EVENTS,
-                                    now,
-                                    EMER_TALLY_ITER_FLAG_DELETE,
-                                    buffer_aggregate_event_to_queue,
-                                    self);
+  if (!emer_aggregate_tally_iter_before (self->aggregate_tally,
+                                         EMER_TALLY_DAILY_EVENTS,
+                                         now,
+                                         EMER_TALLY_ITER_FLAG_DELETE,
+                                         buffer_aggregate_event_to_queue,
+                                         self,
+                                         &error))
+    {
+      g_warning ("Failed to buffer past daily events: %s", error->message);
+      g_clear_error (&error);
+    }
 
-  emer_aggregate_tally_iter_before (self->aggregate_tally,
-                                    EMER_TALLY_MONTHLY_EVENTS,
-                                    now,
-                                    EMER_TALLY_ITER_FLAG_DELETE,
-                                    buffer_aggregate_event_to_queue,
-                                    self);
-
+  if (!emer_aggregate_tally_iter_before (self->aggregate_tally,
+                                         EMER_TALLY_MONTHLY_EVENTS,
+                                         now,
+                                         EMER_TALLY_ITER_FLAG_DELETE,
+                                         buffer_aggregate_event_to_queue,
+                                         self,
+                                         &error))
+    {
+      g_warning ("Failed to buffer past monthly events: %s", error->message);
+      g_clear_error (&error);
+    }
 }
 
 static void

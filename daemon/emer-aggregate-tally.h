@@ -68,19 +68,21 @@ gboolean emer_aggregate_tally_store_event (EmerAggregateTally  *self,
                                            GDateTime            *datetime,
                                            GError             **error);
 
-void emer_aggregate_tally_iter (EmerAggregateTally *self,
-                                EmerTallyType       tally_type,
-                                GDateTime          *datetime,
-                                EmerTallyIterFlags  flags,
-                                EmerTallyIterFunc   func,
-                                gpointer            user_data);
+gboolean emer_aggregate_tally_iter (EmerAggregateTally  *self,
+                                    EmerTallyType        tally_type,
+                                    GDateTime           *datetime,
+                                    EmerTallyIterFlags   flags,
+                                    EmerTallyIterFunc    func,
+                                    gpointer             user_data,
+                                    GError             **error);
 
-void emer_aggregate_tally_iter_before (EmerAggregateTally *self,
-                                       EmerTallyType       tally_type,
-                                       GDateTime          *datetime,
-                                       EmerTallyIterFlags  flags,
-                                       EmerTallyIterFunc   func,
-                                       gpointer            user_data);
+gboolean emer_aggregate_tally_iter_before (EmerAggregateTally  *self,
+                                           EmerTallyType        tally_type,
+                                           GDateTime           *datetime,
+                                           EmerTallyIterFlags   flags,
+                                           EmerTallyIterFunc    func,
+                                           gpointer             user_data,
+                                           GError             **error);
 
 gboolean emer_aggregate_tally_clear (EmerAggregateTally  *self,
                                      GError             **error);

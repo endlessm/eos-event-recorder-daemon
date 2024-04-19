@@ -518,18 +518,36 @@ emer_aggregate_tally_iter_internal (EmerAggregateTally *self,
                                     GError             **error)
 {
   g_autoptr(GArray) rows_to_delete = NULL;
-  g_autofree gchar *date = NULL;
   sqlite3_stmt *stmt = NULL;
   int ret;
 
-  date = format_datetime_for_tally_type (datetime, tally_type);
   rows_to_delete = g_array_new (FALSE, FALSE, sizeof (sqlite3_int64));
 
-  if (!CHECK (sqlite3_prepare_v2 (self->db, query, -1, &stmt, NULL)) ||
-      !CHECK (sqlite3_bind_text (stmt, 1, date, -1, SQLITE_TRANSIENT)))
+  if (!CHECK (sqlite3_prepare_v2 (self->db, query, -1, &stmt, NULL)))
     {
       g_prefix_error (error, "While preparing query: ");
       return FALSE;
+    }
+
+  if (datetime != NULL)
+    {
+      gchar *date = format_datetime_for_tally_type (datetime, tally_type);
+      if (!CHECK (sqlite3_bind_text (stmt, 1, date, strlen (date), g_free)))
+        {
+          g_prefix_error (error, "While binding date parameter: ");
+          return FALSE;
+        }
+    }
+  else
+    {
+      g_autoptr(GDateTime) now = g_date_time_new_now_utc ();
+      g_autofree gchar *now_str = format_datetime_for_tally_type (now, tally_type);
+
+      if (!CHECK (sqlite3_bind_int (stmt, 1, strlen (now_str))))
+        {
+          g_prefix_error (error, "While binding date length parameter: ");
+          return FALSE;
+        }
     }
 
   while ((ret = sqlite3_step (stmt)) == SQLITE_ROW)
@@ -563,6 +581,20 @@ emer_aggregate_tally_iter_internal (EmerAggregateTally *self,
       delete_tally_entries (self, rows_to_delete, error);
 }
 
+/**
+ * emer_aggregate_tally_iter:
+ * @self:
+ * @tally_type: Frequency of events to iterate (daily or monthly)
+ * @datetime: (nullable): Date to iterate, or %NULL to iterate all events
+ *                        with frequency @tally_type
+ * @flags: Whether to delete events while iterating
+ * @func: (scope call): Callback to call for each matching event
+ * @user_data: (closure func): Data to pass to @func
+ *
+ * Iterate all events in the tally for the given frequency, either on a
+ * specific date/month or (if @datetime is %NULL) on all dates at that
+ * frequency.
+ */
 void
 emer_aggregate_tally_iter (EmerAggregateTally *self,
                            EmerTallyType       tally_type,
@@ -576,10 +608,16 @@ emer_aggregate_tally_iter (EmerAggregateTally *self,
     "       payload, counter, date "
     "FROM tally "
     "WHERE date = ?";
+  const char *SELECT_ALL_SQL =
+  "SELECT id, event_id, unix_user_id, "
+    "       payload, counter, date "
+    "FROM tally "
+    "WHERE length(date) = ?";
+  const char *query = (datetime != NULL) ? SELECT_SQL : SELECT_ALL_SQL;
   g_autoptr(GError) error = NULL;
 
   if (!emer_aggregate_tally_iter_internal (self,
-                                           SELECT_SQL,
+                                           query,
                                            tally_type,
                                            datetime,
                                            flags,

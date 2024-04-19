@@ -603,6 +603,70 @@ test_aggregate_tally_iter_before_monthly (struct Fixture *fixture,
   g_assert_cmpuint (events->len, ==, 0);
 }
 
+
+static void
+test_aggregate_tally_iter_all (struct Fixture *fixture,
+                               gconstpointer   dontuseme)
+{
+  g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+  g_autoptr(GVariant) v = v_str (G_STRFUNC);
+  g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
+  size_t i;
+  g_autoptr(GError) error = NULL;
+
+  // Add the same aggregate event to different days
+  for (i = 0; i < 50; i++)
+    {
+      g_autoptr(GDateTime) dt = g_date_time_add_days (datetime, i - 25);
+
+      emer_aggregate_tally_store_event (fixture->tally,
+                                        EMER_TALLY_DAILY_EVENTS,
+                                        1001,
+                                        uuids[0],
+                                        v,
+                                        1,
+                                        dt,
+                                        &error);
+
+      g_assert_no_error (error);
+    }
+
+  // Add a monthly event
+    {
+      g_autoptr(GDateTime) dt = g_date_time_add_months (datetime, -1);
+
+      emer_aggregate_tally_store_event (fixture->tally,
+                                        EMER_TALLY_MONTHLY_EVENTS,
+                                        1001,
+                                        uuids[0],
+                                        v,
+                                        1,
+                                        dt,
+                                        &error);
+
+      g_assert_no_error (error);
+    }
+
+  /* Iterate all daily events */
+  emer_aggregate_tally_iter (fixture->tally,
+                             EMER_TALLY_DAILY_EVENTS,
+                             NULL,
+                             EMER_TALLY_ITER_FLAG_DEFAULT,
+                             tally_iter_func,
+                             events);
+  g_assert_cmpuint (events->len, ==, 50);
+  g_ptr_array_set_size (events, 0);
+
+  /* Iterate all monthly events */
+  emer_aggregate_tally_iter (fixture->tally,
+                             EMER_TALLY_MONTHLY_EVENTS,
+                             NULL,
+                             EMER_TALLY_ITER_FLAG_DEFAULT,
+                             tally_iter_func,
+                             events);
+  g_assert_cmpuint (events->len, ==, 1);
+}
+
 gint
 main (gint                argc,
       const gchar * const argv[])
@@ -646,6 +710,8 @@ main (gint                argc,
                                  test_aggregate_tally_iter_before_daily);
   ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/iter-before/monthly",
                                  test_aggregate_tally_iter_before_monthly);
+  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/iter-all",
+                                 test_aggregate_tally_iter_all);
 
 #undef ADD_AGGREGATE_TALLY_TEST_FUNC
 

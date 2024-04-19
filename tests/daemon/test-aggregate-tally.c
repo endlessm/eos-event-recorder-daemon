@@ -82,7 +82,6 @@ aggregate_event_free (gpointer e_)
 struct Fixture
 {
   EmerAggregateTally *tally;
-  GFile *tally_folder;
 };
 
 /**

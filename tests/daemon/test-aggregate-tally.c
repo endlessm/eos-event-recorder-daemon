@@ -109,8 +109,9 @@ setup (struct Fixture *fixture,
        gconstpointer   dontuseme)
 {
   const gchar *cache_dir = g_get_user_cache_dir ();
+  const gboolean readonly = FALSE;
   g_autoptr(GError) error = NULL;
-  fixture->tally = emer_aggregate_tally_new (cache_dir, &error);
+  fixture->tally = emer_aggregate_tally_new (cache_dir, readonly, &error);
   g_assert_no_error (error);
   g_assert_nonnull (fixture->tally);
 }
@@ -670,6 +671,85 @@ test_aggregate_tally_iter_all (struct Fixture *fixture,
   g_assert_cmpuint (events->len, ==, 1);
 }
 
+static void
+test_aggregate_tally_read_only_open_nonexistent_db (void)
+{
+  const gchar *cache_dir = g_get_user_cache_dir ();
+  const gboolean readonly = TRUE;
+  g_autoptr(GError) error = NULL;
+  EmerAggregateTally *tally = emer_aggregate_tally_new (cache_dir, readonly, &error);
+  g_assert_null (tally);
+  /* No particular assertion about what the error should be */
+  g_assert_nonnull (error);
+
+  /* The file should not have been created */
+  g_autofree gchar *metrics_db_path = g_build_filename (cache_dir, "metrics.db", NULL);
+  g_assert_false (g_file_test (metrics_db_path, G_FILE_TEST_EXISTS));
+
+  /* Nor should the directory. Somewhat surprisingly the GLib test harness
+   * specifies that it doesn't create the isolated test directories. */
+  g_assert_false (g_file_test (cache_dir, G_FILE_TEST_EXISTS));
+}
+
+static void
+test_aggregate_tally_read_only (struct Fixture *fixture,
+                                gconstpointer   dontuseme)
+{
+  g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+  g_autoptr(GError) error = NULL;
+
+  /* Store an event via a writable object */
+  emer_aggregate_tally_store_event (fixture->tally,
+                                    EMER_TALLY_DAILY_EVENTS,
+                                    1001,
+                                    uuids[0],
+                                    NULL,
+                                    2,
+                                    datetime,
+                                    &error);
+  g_assert_no_error (error);
+
+  /* Now open the same database, read-only */
+  const gchar *cache_dir = g_get_user_cache_dir ();
+  g_autoptr(EmerAggregateTally) tally_ro = emer_aggregate_tally_new (cache_dir, TRUE, &error);
+  g_assert_no_error (error);
+  g_assert_nonnull (tally_ro);
+
+  /* Read back the event from the read-only connection */
+  g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
+  emer_aggregate_tally_iter (tally_ro,
+                             EMER_TALLY_DAILY_EVENTS,
+                             NULL,
+                             EMER_TALLY_ITER_FLAG_DEFAULT,
+                             tally_iter_func,
+                             events);
+  g_assert_cmpuint (events->len, ==, 1);
+
+  /* Try to delete – this should fail */
+  /* TODO: this currently just prints a CRITICAL (and crashes the test) */
+#if 0
+  g_ptr_array_set_size (events, 0);
+  emer_aggregate_tally_iter (tally_ro,
+                             EMER_TALLY_DAILY_EVENTS,
+                             NULL,
+                             EMER_TALLY_ITER_FLAG_DELETE,
+                             tally_iter_func,
+                             events);
+  g_assert_cmpuint (events->len, ==, 1);
+#endif
+
+  /* Try to insert via the read-only connection */
+  /* TODO: This fails successfully™ but then the sqlite3_close() call when tally_ro is disposed fails with SQLITE_BUSY: database is locked.
+   * I believe this is because sqlite3_finalize() is not called in the error path: a real bug.
+   */
+#if 0
+  gboolean ret = emer_aggregate_tally_store_event (tally_ro, EMER_TALLY_DAILY_EVENTS, 0, uuids[1], NULL, 2, datetime, &error);
+  /* No particular assertion about the error */
+  g_assert_nonnull (error);
+  g_assert_false (ret);
+#endif
+}
+
 gint
 main (gint                argc,
       const gchar * const argv[])
@@ -715,6 +795,12 @@ main (gint                argc,
                                  test_aggregate_tally_iter_before_monthly);
   ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/iter-all",
                                  test_aggregate_tally_iter_all);
+
+  /* No fixture for this one */
+  g_test_add_func ("/aggregate-tally/read-only/open-nonexistent-db",
+                   test_aggregate_tally_read_only_open_nonexistent_db);
+  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/read-only/access",
+                                 test_aggregate_tally_read_only);
 
 #undef ADD_AGGREGATE_TALLY_TEST_FUNC
 

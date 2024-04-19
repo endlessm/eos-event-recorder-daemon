@@ -854,7 +854,8 @@ setup_most (Fixture      *fixture,
   fixture->mock_permissions_provider = mock_permissions_provider_new (fixture->server_url);
   fixture->mock_persistent_cache = NULL;
   /* Not actually a mock! */
-  fixture->mock_aggregate_tally = emer_aggregate_tally_new (g_get_user_cache_dir (), &error);
+  const gboolean read_only = FALSE;
+  fixture->mock_aggregate_tally = emer_aggregate_tally_new (g_get_user_cache_dir (), read_only, &error);
   g_assert_no_error (error);
   g_assert_nonnull (fixture->mock_aggregate_tally);
 }

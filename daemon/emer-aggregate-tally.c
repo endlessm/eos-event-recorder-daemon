@@ -33,6 +33,7 @@ struct _EmerAggregateTally
   GObject parent_instance;
 
   gchar *persistent_cache_directory;
+  gboolean read_only;
   sqlite3 *db;
 };
 
@@ -51,6 +52,7 @@ G_DEFINE_QUARK ("emer-sqlite-error", emer_sqlite_error)
 
 enum {
   PROP_PERSISTENT_CACHE_DIRECTORY = 1,
+  PROP_READ_ONLY,
   N_PROPS,
 };
 
@@ -237,9 +239,13 @@ emer_aggregate_tally_init_db (EmerAggregateTally  *self,
                               const char          *path,
                               GError             **error)
 {
+  int flags = self->read_only
+    ? SQLITE_OPEN_READONLY
+    : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
+
   g_assert (self->db == NULL);
 
-  if (!CHECK (sqlite3_open (path, &self->db)))
+  if (!CHECK (sqlite3_open_v2 (path, &self->db, flags, /* vfs */ NULL)))
     {
       g_prefix_error (error, "Failed to open %s: ", path);
       return FALSE;
@@ -263,7 +269,8 @@ emer_aggregate_tally_init_db (EmerAggregateTally  *self,
     return FALSE;
 
   /* Magic number is "emer" in ASCII */
-  if (!CHECK (sqlite3_exec (self->db, "PRAGMA application_id = 0x656d6572", NULL, NULL, NULL)))
+  if (!self->read_only &&
+      !CHECK (sqlite3_exec (self->db, "PRAGMA application_id = 0x656d6572", NULL, NULL, NULL)))
     return FALSE;
 
   sqlite3_int64 user_version = emer_aggregate_tally_read_user_version (self->db, error);
@@ -366,7 +373,8 @@ emer_aggregate_tally_initable_init (GInitable     *initable,
   g_autoptr(GError) local_error = NULL;
 
   g_assert (self->persistent_cache_directory != NULL);
-  ensure_folder_exists (self, self->persistent_cache_directory, NULL);
+  if (!self->read_only)
+    ensure_folder_exists (self, self->persistent_cache_directory, NULL);
 
  /* No daemon version that used this path made it into a production release,
   * or even beta. So rather than migrating the data for the schema & filename
@@ -383,6 +391,11 @@ emer_aggregate_tally_initable_init (GInitable     *initable,
   if (emer_aggregate_tally_init_db (self, path, &local_error))
     return TRUE;
 
+  if (self->read_only)
+    {
+      g_propagate_error (error, g_steal_pointer (&local_error));
+      return FALSE;
+    }
 
   g_warning ("Failed to initialize %s: %s; trying to delete and recreate it",
              path, local_error->message);
@@ -429,6 +442,10 @@ emer_aggregate_tally_set_property (GObject      *object,
       self->persistent_cache_directory = g_value_dup_string (value);
       break;
 
+    case PROP_READ_ONLY:
+      self->read_only = g_value_get_boolean (value);
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
     }
@@ -457,6 +474,18 @@ emer_aggregate_tally_class_init (EmerAggregateTallyClass *klass)
                          G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                          G_PARAM_STATIC_STRINGS);
 
+  /*
+   * EmerDaemon:read-only:
+   *
+   * If %TRUE, the underlying database will be opened read-only.
+   */
+  properties[PROP_READ_ONLY] =
+    g_param_spec_boolean ("read-only", NULL, NULL,
+                          FALSE,
+                          (G_PARAM_CONSTRUCT_ONLY |
+                           G_PARAM_WRITABLE |
+                           G_PARAM_STATIC_STRINGS));
+
   g_object_class_install_properties (object_class, N_PROPS, properties);
 }
 
@@ -476,6 +505,7 @@ emer_aggregate_tally_initable_iface_init (gpointer g_iface,
 
 EmerAggregateTally *
 emer_aggregate_tally_new (const char  *persistent_cache_directory,
+                          gboolean     read_only,
                           GError     **error)
 {
   GCancellable *cancellable = NULL;
@@ -483,6 +513,7 @@ emer_aggregate_tally_new (const char  *persistent_cache_directory,
                          cancellable,
                          error,
                          "persistent-cache-directory", persistent_cache_directory,
+                         "read-only", read_only,
                          NULL);
 }
 

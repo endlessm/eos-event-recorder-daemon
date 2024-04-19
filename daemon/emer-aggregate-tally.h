@@ -56,6 +56,7 @@ G_DECLARE_FINAL_TYPE (EmerAggregateTally,
                       EMER, AGGREGATE_TALLY, GObject)
 
 EmerAggregateTally *emer_aggregate_tally_new (const gchar  *persistent_cache_directory,
+                                              gboolean      read_only,
                                               GError      **error);
 
 gboolean emer_aggregate_tally_store_event (EmerAggregateTally  *self,

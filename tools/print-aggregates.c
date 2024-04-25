@@ -35,7 +35,7 @@ static const char *HEADER =
   "   Counter "
   "Payload\n";
 
-static EmerTallyIterResult
+static void
 print_event (guint32     unix_user_id,
              uuid_t      event_id,
              GVariant   *payload,
@@ -59,8 +59,6 @@ print_event (guint32     unix_user_id,
            event_id_str,
            counter,
            payload_str ?: "");
-
-  return EMER_TALLY_ITER_CONTINUE;
 }
 
 static gboolean

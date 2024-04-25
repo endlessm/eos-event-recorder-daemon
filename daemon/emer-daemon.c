@@ -1118,7 +1118,7 @@ split_aggregate_timers (EmerDaemon *self,
     emer_aggregate_timer_impl_split (timer_impl, monotonic_time_us);
 }
 
-static EmerTallyIterResult
+static void
 buffer_aggregate_event_to_queue (guint32     unix_user_id,
                                  uuid_t      event_uuid,
                                  GVariant   *payload,
@@ -1133,8 +1133,6 @@ buffer_aggregate_event_to_queue (guint32     unix_user_id,
                                        date,
                                        counter,
                                        payload);
-
-  return EMER_TALLY_ITER_CONTINUE;
 }
 
 static inline gboolean

@@ -32,18 +32,13 @@ typedef enum {
   EMER_TALLY_ITER_FLAG_DELETE = 1 << 0,
 } EmerTallyIterFlags;
 
-typedef enum {
-  EMER_TALLY_ITER_CONTINUE = 0,
-  EMER_TALLY_ITER_STOP = 1,
-} EmerTallyIterResult;
-
 typedef enum
 {
   EMER_TALLY_DAILY_EVENTS,
   EMER_TALLY_MONTHLY_EVENTS,
 } EmerTallyType;
 
-typedef EmerTallyIterResult (*EmerTallyIterFunc) (guint32     unix_user_id,
+typedef void                (*EmerTallyIterFunc) (guint32     unix_user_id,
                                                   uuid_t      event_id,
                                                   GVariant   *payload,
                                                   guint32     counter,

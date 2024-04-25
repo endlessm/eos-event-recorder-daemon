@@ -612,22 +612,16 @@ emer_aggregate_tally_iter_internal (EmerAggregateTally *self,
       guint32 counter = column_to_uint32 (stmt, 4);
       const char *event_date = (const char *) sqlite3_column_text (stmt, 5);
       uuid_t event_id = { 0 };
-      EmerTallyIterResult result;
 
       column_to_uuid (stmt, 1, event_id);
 
-      result = func (unix_user_id, event_id,
-                     payload,
-                     counter, event_date, user_data);
+      func (unix_user_id, event_id, payload, counter, event_date, user_data);
 
       if (flags & EMER_TALLY_ITER_FLAG_DELETE)
         {
           const sqlite3_int64 row_id = sqlite3_column_int64 (stmt, 0);
           g_array_append_val (rows_to_delete, row_id);
         }
-
-      if (result & EMER_TALLY_ITER_STOP)
-        break;
     }
 
   /* Close the cursor before we try to delete the rows it returned */

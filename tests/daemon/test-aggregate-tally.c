@@ -176,7 +176,7 @@ test_aggregate_tally_store_events (struct Fixture *fixture,
   g_assert_no_error (error);
 }
 
-static EmerTallyIterResult
+static void
 tally_iter_func (guint32     unix_user_id,
                  uuid_t      event_id,
                  GVariant   *payload,
@@ -187,8 +187,6 @@ tally_iter_func (guint32     unix_user_id,
   GPtrArray *events = user_data;
 
   g_ptr_array_add (events, aggregate_event_new (unix_user_id, event_id, payload, counter, date));
-
-  return EMER_TALLY_ITER_CONTINUE;
 }
 
 static void

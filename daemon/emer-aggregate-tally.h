@@ -32,18 +32,13 @@ typedef enum {
   EMER_TALLY_ITER_FLAG_DELETE = 1 << 0,
 } EmerTallyIterFlags;
 
-typedef enum {
-  EMER_TALLY_ITER_CONTINUE = 0,
-  EMER_TALLY_ITER_STOP = 1,
-} EmerTallyIterResult;
-
 typedef enum
 {
   EMER_TALLY_DAILY_EVENTS,
   EMER_TALLY_MONTHLY_EVENTS,
 } EmerTallyType;
 
-typedef EmerTallyIterResult (*EmerTallyIterFunc) (guint32     unix_user_id,
+typedef void                (*EmerTallyIterFunc) (guint32     unix_user_id,
                                                   uuid_t      event_id,
                                                   GVariant   *payload,
                                                   guint32     counter,
@@ -55,8 +50,9 @@ G_DECLARE_FINAL_TYPE (EmerAggregateTally,
                       emer_aggregate_tally,
                       EMER, AGGREGATE_TALLY, GObject)
 
-EmerAggregateTally *
-emer_aggregate_tally_new (const gchar *persistent_cache_directory);
+EmerAggregateTally *emer_aggregate_tally_new (const gchar  *persistent_cache_directory,
+                                              gboolean      read_only,
+                                              GError      **error);
 
 gboolean emer_aggregate_tally_store_event (EmerAggregateTally  *self,
                                            EmerTallyType        tally_type,
@@ -67,19 +63,21 @@ gboolean emer_aggregate_tally_store_event (EmerAggregateTally  *self,
                                            GDateTime            *datetime,
                                            GError             **error);
 
-void emer_aggregate_tally_iter (EmerAggregateTally *self,
-                                EmerTallyType       tally_type,
-                                GDateTime          *datetime,
-                                EmerTallyIterFlags  flags,
-                                EmerTallyIterFunc   func,
-                                gpointer            user_data);
+gboolean emer_aggregate_tally_iter (EmerAggregateTally  *self,
+                                    EmerTallyType        tally_type,
+                                    GDateTime           *datetime,
+                                    EmerTallyIterFlags   flags,
+                                    EmerTallyIterFunc    func,
+                                    gpointer             user_data,
+                                    GError             **error);
 
-void emer_aggregate_tally_iter_before (EmerAggregateTally *self,
-                                       EmerTallyType       tally_type,
-                                       GDateTime          *datetime,
-                                       EmerTallyIterFlags  flags,
-                                       EmerTallyIterFunc   func,
-                                       gpointer            user_data);
+gboolean emer_aggregate_tally_iter_before (EmerAggregateTally  *self,
+                                           EmerTallyType        tally_type,
+                                           GDateTime           *datetime,
+                                           EmerTallyIterFlags   flags,
+                                           EmerTallyIterFunc    func,
+                                           gpointer             user_data,
+                                           GError             **error);
 
 gboolean emer_aggregate_tally_clear (EmerAggregateTally  *self,
                                      GError             **error);

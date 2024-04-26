@@ -82,7 +82,6 @@ aggregate_event_free (gpointer e_)
 struct Fixture
 {
   EmerAggregateTally *tally;
-  GFile *tally_folder;
 };
 
 /**
@@ -109,7 +108,11 @@ setup (struct Fixture *fixture,
        gconstpointer   dontuseme)
 {
   const gchar *cache_dir = g_get_user_cache_dir ();
-  fixture->tally = emer_aggregate_tally_new (cache_dir);
+  const gboolean readonly = FALSE;
+  g_autoptr(GError) error = NULL;
+  fixture->tally = emer_aggregate_tally_new (cache_dir, readonly, &error);
+  g_assert_no_error (error);
+  g_assert_nonnull (fixture->tally);
 }
 
 // Testing Cases
@@ -173,7 +176,7 @@ test_aggregate_tally_store_events (struct Fixture *fixture,
   g_assert_no_error (error);
 }
 
-static EmerTallyIterResult
+static void
 tally_iter_func (guint32     unix_user_id,
                  uuid_t      event_id,
                  GVariant   *payload,
@@ -184,8 +187,6 @@ tally_iter_func (guint32     unix_user_id,
   GPtrArray *events = user_data;
 
   g_ptr_array_add (events, aggregate_event_new (unix_user_id, event_id, payload, counter, date));
-
-  return EMER_TALLY_ITER_CONTINUE;
 }
 
 static void
@@ -196,14 +197,13 @@ test_aggregate_tally_iter (struct Fixture *fixture,
   g_autoptr(GVariant) payload = v_str (payload_str);
   g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
   int i;
+  g_autoptr(GError) error = NULL;
 
   // Add the same aggregate event multiple times. It must
   // result in a single aggregate event with the sum of
   // counters
   for (i = 0; i < 10; i++)
     {
-      g_autoptr(GError) error = NULL;
-
       emer_aggregate_tally_store_event (fixture->tally,
                                         EMER_TALLY_DAILY_EVENTS,
                                         1001,
@@ -221,7 +221,9 @@ test_aggregate_tally_iter (struct Fixture *fixture,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             events);
+                             events,
+                             &error);
+  g_assert_no_error (error);
 
   g_assert_cmpuint (events->len, ==, 1);
   AggregateEvent *e = g_ptr_array_index (events, 0);
@@ -240,7 +242,9 @@ test_aggregate_tally_iter (struct Fixture *fixture,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             events);
+                             events,
+                             &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 0);
 }
 
@@ -285,8 +289,9 @@ test_aggregate_tally_permutations (struct Fixture *fixture,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             events);
-
+                             events,
+                             &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, n_unix_uids * G_N_ELEMENTS (uuids) * G_N_ELEMENTS (payloads));
   for (size_t i = 0; i < events->len; i++)
     {
@@ -304,7 +309,9 @@ test_aggregate_tally_permutations (struct Fixture *fixture,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             events);
+                             events,
+                             &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 0);
 }
 
@@ -334,7 +341,9 @@ test_aggregate_tally_large_counter_single (struct Fixture *fixture,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             events);
+                             events,
+                             &error);
+  g_assert_no_error (error);
 
   g_assert_cmpuint (events->len, ==, 1);
   AggregateEvent *e = g_ptr_array_index (events, 0);
@@ -378,8 +387,9 @@ test_aggregate_tally_large_counter_add (struct Fixture *fixture,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             events);
-
+                             events,
+                             &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 1);
   AggregateEvent *e = g_ptr_array_index (events, 0);
   g_assert_cmpuint (e->counter, ==, ((guint32) G_MAXINT32) + 1);
@@ -416,8 +426,9 @@ test_aggregate_tally_large_counter_upper_bound (struct Fixture *fixture,
                              datetime,
                              EMER_TALLY_ITER_FLAG_DELETE,
                              tally_iter_func,
-                             events);
-
+                             events,
+                             &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 1);
   AggregateEvent *e = g_ptr_array_index (events, 0);
   g_assert_cmpuint (e->counter, ==, G_MAXUINT32);
@@ -472,8 +483,9 @@ test_aggregate_tally_iter_before_daily (struct Fixture *fixture,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
                                     tally_iter_func,
-                                    events);
-
+                                    events,
+                                    &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 25);
   for (i = 0; i < events->len; i++)
     {
@@ -491,8 +503,9 @@ test_aggregate_tally_iter_before_daily (struct Fixture *fixture,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DELETE,
                                     tally_iter_func,
-                                    events);
-
+                                    events,
+                                    &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 25);
   for (i = 0; i < events->len; i++)
     {
@@ -508,8 +521,9 @@ test_aggregate_tally_iter_before_daily (struct Fixture *fixture,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
                                     tally_iter_func,
-                                    events);
-
+                                    events,
+                                    &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 0);
 }
 
@@ -562,8 +576,9 @@ test_aggregate_tally_iter_before_monthly (struct Fixture *fixture,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
                                     tally_iter_func,
-                                    events);
-
+                                    events,
+                                    &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 12);
   for (i = 0; i < events->len; i++)
     {
@@ -581,8 +596,9 @@ test_aggregate_tally_iter_before_monthly (struct Fixture *fixture,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DELETE,
                                     tally_iter_func,
-                                    events);
-
+                                    events,
+                                    &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 12);
   for (i = 0; i < events->len; i++)
     {
@@ -598,9 +614,155 @@ test_aggregate_tally_iter_before_monthly (struct Fixture *fixture,
                                     datetime,
                                     EMER_TALLY_ITER_FLAG_DEFAULT,
                                     tally_iter_func,
-                                    events);
-
+                                    events,
+                                    &error);
+  g_assert_no_error (error);
   g_assert_cmpuint (events->len, ==, 0);
+}
+
+
+static void
+test_aggregate_tally_iter_all (struct Fixture *fixture,
+                               gconstpointer   dontuseme)
+{
+  g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+  g_autoptr(GVariant) v = v_str (G_STRFUNC);
+  g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
+  size_t i;
+  g_autoptr(GError) error = NULL;
+
+  // Add the same aggregate event to different days
+  for (i = 0; i < 50; i++)
+    {
+      g_autoptr(GDateTime) dt = g_date_time_add_days (datetime, i - 25);
+
+      emer_aggregate_tally_store_event (fixture->tally,
+                                        EMER_TALLY_DAILY_EVENTS,
+                                        1001,
+                                        uuids[0],
+                                        v,
+                                        1,
+                                        dt,
+                                        &error);
+
+      g_assert_no_error (error);
+    }
+
+  // Add a monthly event
+    {
+      g_autoptr(GDateTime) dt = g_date_time_add_months (datetime, -1);
+
+      emer_aggregate_tally_store_event (fixture->tally,
+                                        EMER_TALLY_MONTHLY_EVENTS,
+                                        1001,
+                                        uuids[0],
+                                        v,
+                                        1,
+                                        dt,
+                                        &error);
+
+      g_assert_no_error (error);
+    }
+
+  /* Iterate all daily events */
+  emer_aggregate_tally_iter (fixture->tally,
+                             EMER_TALLY_DAILY_EVENTS,
+                             NULL,
+                             EMER_TALLY_ITER_FLAG_DEFAULT,
+                             tally_iter_func,
+                             events,
+                             &error);
+  g_assert_no_error (error);
+  g_assert_cmpuint (events->len, ==, 50);
+  g_ptr_array_set_size (events, 0);
+
+  /* Iterate all monthly events */
+  emer_aggregate_tally_iter (fixture->tally,
+                             EMER_TALLY_MONTHLY_EVENTS,
+                             NULL,
+                             EMER_TALLY_ITER_FLAG_DEFAULT,
+                             tally_iter_func,
+                             events,
+                             &error);
+  g_assert_no_error (error);
+  g_assert_cmpuint (events->len, ==, 1);
+}
+
+static void
+test_aggregate_tally_read_only_open_nonexistent_db (void)
+{
+  const gchar *cache_dir = g_get_user_cache_dir ();
+  const gboolean readonly = TRUE;
+  g_autoptr(GError) error = NULL;
+  EmerAggregateTally *tally = emer_aggregate_tally_new (cache_dir, readonly, &error);
+  g_assert_null (tally);
+  /* No particular assertion about what the error should be */
+  g_assert_nonnull (error);
+
+  /* The file should not have been created */
+  g_autofree gchar *metrics_db_path = g_build_filename (cache_dir, "metrics.db", NULL);
+  g_assert_false (g_file_test (metrics_db_path, G_FILE_TEST_EXISTS));
+
+  /* Nor should the directory. Somewhat surprisingly the GLib test harness
+   * specifies that it doesn't create the isolated test directories. */
+  g_assert_false (g_file_test (cache_dir, G_FILE_TEST_EXISTS));
+}
+
+static void
+test_aggregate_tally_read_only (struct Fixture *fixture,
+                                gconstpointer   dontuseme)
+{
+  g_autoptr(GDateTime) datetime = g_date_time_new_utc (2021, 9, 22, 0, 0, 0);
+  g_autoptr(GError) error = NULL;
+
+  /* Store an event via a writable object */
+  emer_aggregate_tally_store_event (fixture->tally,
+                                    EMER_TALLY_DAILY_EVENTS,
+                                    1001,
+                                    uuids[0],
+                                    NULL,
+                                    2,
+                                    datetime,
+                                    &error);
+  g_assert_no_error (error);
+
+  /* Now open the same database, read-only */
+  const gchar *cache_dir = g_get_user_cache_dir ();
+  g_autoptr(EmerAggregateTally) tally_ro = emer_aggregate_tally_new (cache_dir, TRUE, &error);
+  g_assert_no_error (error);
+  g_assert_nonnull (tally_ro);
+
+  /* Read back the event from the read-only connection */
+  g_autoptr(GPtrArray) events = g_ptr_array_new_with_free_func (aggregate_event_free);
+  emer_aggregate_tally_iter (tally_ro,
+                             EMER_TALLY_DAILY_EVENTS,
+                             NULL,
+                             EMER_TALLY_ITER_FLAG_DEFAULT,
+                             tally_iter_func,
+                             events,
+                             &error);
+  g_assert_no_error (error);
+  g_assert_cmpuint (events->len, ==, 1);
+
+  /* Try to delete – this should fail */
+  g_ptr_array_set_size (events, 0);
+  emer_aggregate_tally_iter (tally_ro,
+                             EMER_TALLY_DAILY_EVENTS,
+                             NULL,
+                             EMER_TALLY_ITER_FLAG_DELETE,
+                             tally_iter_func,
+                             events,
+                             &error);
+  /* No particular assertion about the error */
+  g_assert_nonnull (error);
+  g_assert_cmpuint (events->len, ==, 1);
+  g_clear_error (&error);
+
+  /* Try to insert via the read-only connection: this should fail. */
+  gboolean ret = emer_aggregate_tally_store_event (tally_ro, EMER_TALLY_DAILY_EVENTS, 0, uuids[1], NULL, 2, datetime, &error);
+  /* No particular assertion about the error */
+  g_assert_nonnull (error);
+  g_assert_false (ret);
 }
 
 gint
@@ -646,6 +808,14 @@ main (gint                argc,
                                  test_aggregate_tally_iter_before_daily);
   ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/iter-before/monthly",
                                  test_aggregate_tally_iter_before_monthly);
+  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/iter-all",
+                                 test_aggregate_tally_iter_all);
+
+  /* No fixture for this one */
+  g_test_add_func ("/aggregate-tally/read-only/open-nonexistent-db",
+                   test_aggregate_tally_read_only_open_nonexistent_db);
+  ADD_AGGREGATE_TALLY_TEST_FUNC ("/aggregate-tally/read-only/access",
+                                 test_aggregate_tally_read_only);
 
 #undef ADD_AGGREGATE_TALLY_TEST_FUNC
 

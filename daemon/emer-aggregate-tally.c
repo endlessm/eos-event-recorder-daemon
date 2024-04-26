@@ -33,10 +33,18 @@ struct _EmerAggregateTally
   GObject parent_instance;
 
   gchar *persistent_cache_directory;
+  gboolean read_only;
   sqlite3 *db;
 };
 
-G_DEFINE_TYPE (EmerAggregateTally, emer_aggregate_tally, G_TYPE_OBJECT)
+static void emer_aggregate_tally_initable_iface_init (gpointer g_iface,
+                                                      gpointer iface_data);
+
+G_DEFINE_TYPE_WITH_CODE (EmerAggregateTally,
+                         emer_aggregate_tally,
+                         G_TYPE_OBJECT,
+                         G_IMPLEMENT_INTERFACE (G_TYPE_INITABLE,
+                                                emer_aggregate_tally_initable_iface_init))
 
 /* Error domain; codes from https://www.sqlite.org/rescode.html */
 G_DEFINE_QUARK ("emer-sqlite-error", emer_sqlite_error)
@@ -44,6 +52,7 @@ G_DEFINE_QUARK ("emer-sqlite-error", emer_sqlite_error)
 
 enum {
   PROP_PERSISTENT_CACHE_DIRECTORY = 1,
+  PROP_READ_ONLY,
   N_PROPS,
 };
 
@@ -178,16 +187,19 @@ delete_tally_entries (EmerAggregateTally  *self,
     }
   g_string_append (query, ");");
 
-  if (!CHECK (sqlite3_prepare_v2 (self->db, query->str, -1, &stmt, NULL)) ||
-      !CHECK (sqlite3_step (stmt)) ||
-      !CHECK (sqlite3_reset (stmt)) ||
-      !CHECK (sqlite3_finalize (stmt)))
-    {
-      g_prefix_error (error, "Failed to delete %u tally entries: ", rows_to_delete->len);
-      return FALSE;
-    }
+  gboolean ret =
+      CHECK (sqlite3_prepare_v2 (self->db, query->str, -1, &stmt, NULL)) &&
+      CHECK (sqlite3_step (stmt));
 
-  return TRUE;
+  if (ret)
+    ret = CHECK (sqlite3_finalize (stmt));
+  else
+    sqlite3_finalize (stmt);
+
+  if (!ret)
+    g_prefix_error (error, "Failed to delete %u tally entries: ", rows_to_delete->len);
+
+  return ret;
 }
 
 static void
@@ -217,10 +229,10 @@ emer_aggregate_tally_read_user_version (sqlite3  *db,
   if (ret == SQLITE_ROW)
     version = sqlite3_column_int64 (stmt, 0);
   else if (!CHECK (ret))
-    return -1;
+    version = -1;
 
-  if (!CHECK (sqlite3_finalize (stmt)))
-    return -1;
+  /* Ignore errors here: we have got what we came for. */
+  sqlite3_finalize (stmt);
 
   return version;
 }
@@ -230,9 +242,13 @@ emer_aggregate_tally_init_db (EmerAggregateTally  *self,
                               const char          *path,
                               GError             **error)
 {
+  int flags = self->read_only
+    ? SQLITE_OPEN_READONLY
+    : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
+
   g_assert (self->db == NULL);
 
-  if (!CHECK (sqlite3_open (path, &self->db)))
+  if (!CHECK (sqlite3_open_v2 (path, &self->db, flags, /* vfs */ NULL)))
     {
       g_prefix_error (error, "Failed to open %s: ", path);
       return FALSE;
@@ -256,7 +272,8 @@ emer_aggregate_tally_init_db (EmerAggregateTally  *self,
     return FALSE;
 
   /* Magic number is "emer" in ASCII */
-  if (!CHECK (sqlite3_exec (self->db, "PRAGMA application_id = 0x656d6572", NULL, NULL, NULL)))
+  if (!self->read_only &&
+      !CHECK (sqlite3_exec (self->db, "PRAGMA application_id = 0x656d6572", NULL, NULL, NULL)))
     return FALSE;
 
   sqlite3_int64 user_version = emer_aggregate_tally_read_user_version (self->db, error);
@@ -348,45 +365,49 @@ emer_aggregate_tally_delete_db (EmerAggregateTally *self,
     }
 }
 
-static void
-emer_aggregate_tally_constructed (GObject *object)
+static gboolean
+emer_aggregate_tally_initable_init (GInitable     *initable,
+                                    GCancellable  *cancellable,
+                                    GError       **error)
 {
-  EmerAggregateTally *self = EMER_AGGREGATE_TALLY (object);
+  EmerAggregateTally *self = EMER_AGGREGATE_TALLY (initable);
   g_autofree gchar *old_path = NULL;
   g_autofree gchar *path = NULL;
-  g_autoptr(GError) error = NULL;
-
-  G_OBJECT_CLASS (emer_aggregate_tally_parent_class)->constructed (object);
+  g_autoptr(GError) local_error = NULL;
 
   g_assert (self->persistent_cache_directory != NULL);
-  ensure_folder_exists (self, self->persistent_cache_directory, NULL);
-
- /* No daemon version that used this path made it into a production release,
-  * or even beta. So rather than migrating the data for the schema & filename
-  * change, just delete it (and ignore errors).
-  */
-  old_path = g_build_filename (self->persistent_cache_directory,
-                               "aggregate-events.db",
-                               NULL);
-  emer_aggregate_tally_delete_db (self, old_path);
+  if (!self->read_only)
+    ensure_folder_exists (self, self->persistent_cache_directory, NULL);
 
   path = g_build_filename (self->persistent_cache_directory,
                            "metrics.db",
                            NULL);
-  if (!emer_aggregate_tally_init_db (self, path, &error))
+  if (emer_aggregate_tally_init_db (self, path, &local_error))
+    return TRUE;
+
+  if (self->read_only)
     {
-      g_warning ("Failed to initialize %s: %s; trying to delete and recreate it",
-                 path, error->message);
-      g_clear_error (&error);
-
-      g_clear_pointer (&self->db, close_db);
-      emer_aggregate_tally_delete_db (self, path);
-
-      if (!emer_aggregate_tally_init_db (self, path, &error))
-        {
-          g_error ("Failed to initialize %s again: %s", path, error->message);
-        }
+      g_propagate_error (error, g_steal_pointer (&local_error));
+      return FALSE;
     }
+
+  g_warning ("Failed to initialize %s: %s; trying to delete and recreate it",
+             path, local_error->message);
+  g_clear_error (&local_error);
+
+  g_clear_pointer (&self->db, close_db);
+  emer_aggregate_tally_delete_db (self, path);
+
+  if (!emer_aggregate_tally_init_db (self, path, &local_error))
+    {
+      g_propagate_prefixed_error (error,
+                                  g_steal_pointer (&local_error),
+                                  "Failed to initialize %s: ",
+                                  path);
+      return FALSE;
+    }
+
+  return TRUE;
 }
 
 static void
@@ -415,6 +436,10 @@ emer_aggregate_tally_set_property (GObject      *object,
       self->persistent_cache_directory = g_value_dup_string (value);
       break;
 
+    case PROP_READ_ONLY:
+      self->read_only = g_value_get_boolean (value);
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
     }
@@ -425,7 +450,6 @@ emer_aggregate_tally_class_init (EmerAggregateTallyClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
-  object_class->constructed = emer_aggregate_tally_constructed;
   object_class->finalize = emer_aggregate_tally_finalize;
   object_class->set_property = emer_aggregate_tally_set_property;
 
@@ -444,6 +468,18 @@ emer_aggregate_tally_class_init (EmerAggregateTallyClass *klass)
                          G_PARAM_CONSTRUCT_ONLY | G_PARAM_WRITABLE |
                          G_PARAM_STATIC_STRINGS);
 
+  /*
+   * EmerDaemon:read-only:
+   *
+   * If %TRUE, the underlying database will be opened read-only.
+   */
+  properties[PROP_READ_ONLY] =
+    g_param_spec_boolean ("read-only", NULL, NULL,
+                          FALSE,
+                          (G_PARAM_CONSTRUCT_ONLY |
+                           G_PARAM_WRITABLE |
+                           G_PARAM_STATIC_STRINGS));
+
   g_object_class_install_properties (object_class, N_PROPS, properties);
 }
 
@@ -452,12 +488,27 @@ emer_aggregate_tally_init (EmerAggregateTally *self)
 {
 }
 
-EmerAggregateTally *
-emer_aggregate_tally_new (const char *persistent_cache_directory)
+static void
+emer_aggregate_tally_initable_iface_init (gpointer g_iface,
+                                          gpointer iface_data)
 {
-  return g_object_new (EMER_TYPE_AGGREGATE_TALLY,
-                       "persistent-cache-directory", persistent_cache_directory,
-                       NULL);
+  GInitableIface *initable_iface = g_iface;
+
+  initable_iface->init = emer_aggregate_tally_initable_init;
+}
+
+EmerAggregateTally *
+emer_aggregate_tally_new (const char  *persistent_cache_directory,
+                          gboolean     read_only,
+                          GError     **error)
+{
+  GCancellable *cancellable = NULL;
+  return g_initable_new (EMER_TYPE_AGGREGATE_TALLY,
+                         cancellable,
+                         error,
+                         "persistent-cache-directory", persistent_cache_directory,
+                         "read-only", read_only,
+                         NULL);
 }
 
 gboolean
@@ -497,8 +548,12 @@ emer_aggregate_tally_store_event (EmerAggregateTally  *self,
                                 payload ? g_variant_get_size (payload) : 0,
                                 SQLITE_TRANSIENT)) &&
       CHECK (sqlite3_bind_int64 (stmt, 5, counter)) &&
-      CHECK (sqlite3_step (stmt)) &&
-      CHECK (sqlite3_finalize (stmt));
+      CHECK (sqlite3_step (stmt));
+
+  if (ret)
+    ret = CHECK (sqlite3_finalize (stmt));
+  else
+    sqlite3_finalize (stmt);
 
   g_clear_pointer (&payload, g_variant_unref);
 
@@ -518,18 +573,36 @@ emer_aggregate_tally_iter_internal (EmerAggregateTally *self,
                                     GError             **error)
 {
   g_autoptr(GArray) rows_to_delete = NULL;
-  g_autofree gchar *date = NULL;
   sqlite3_stmt *stmt = NULL;
   int ret;
 
-  date = format_datetime_for_tally_type (datetime, tally_type);
   rows_to_delete = g_array_new (FALSE, FALSE, sizeof (sqlite3_int64));
 
-  if (!CHECK (sqlite3_prepare_v2 (self->db, query, -1, &stmt, NULL)) ||
-      !CHECK (sqlite3_bind_text (stmt, 1, date, -1, SQLITE_TRANSIENT)))
+  if (!CHECK (sqlite3_prepare_v2 (self->db, query, -1, &stmt, NULL)))
     {
       g_prefix_error (error, "While preparing query: ");
       return FALSE;
+    }
+
+  if (datetime != NULL)
+    {
+      gchar *date = format_datetime_for_tally_type (datetime, tally_type);
+      if (!CHECK (sqlite3_bind_text (stmt, 1, date, strlen (date), g_free)))
+        {
+          g_prefix_error (error, "While binding date parameter: ");
+          return FALSE;
+        }
+    }
+  else
+    {
+      g_autoptr(GDateTime) now = g_date_time_new_now_utc ();
+      g_autofree gchar *now_str = format_datetime_for_tally_type (now, tally_type);
+
+      if (!CHECK (sqlite3_bind_int (stmt, 1, strlen (now_str))))
+        {
+          g_prefix_error (error, "While binding date length parameter: ");
+          return FALSE;
+        }
     }
 
   while ((ret = sqlite3_step (stmt)) == SQLITE_ROW)
@@ -539,80 +612,101 @@ emer_aggregate_tally_iter_internal (EmerAggregateTally *self,
       guint32 counter = column_to_uint32 (stmt, 4);
       const char *event_date = (const char *) sqlite3_column_text (stmt, 5);
       uuid_t event_id = { 0 };
-      EmerTallyIterResult result;
 
       column_to_uuid (stmt, 1, event_id);
 
-      result = func (unix_user_id, event_id,
-                     payload,
-                     counter, event_date, user_data);
+      func (unix_user_id, event_id, payload, counter, event_date, user_data);
 
       if (flags & EMER_TALLY_ITER_FLAG_DELETE)
         {
           const sqlite3_int64 row_id = sqlite3_column_int64 (stmt, 0);
           g_array_append_val (rows_to_delete, row_id);
         }
-
-      if (result & EMER_TALLY_ITER_STOP)
-        break;
     }
+
+  /* Close the cursor before we try to delete the rows it returned */
+  if (ret == SQLITE_DONE)
+    ret = sqlite3_finalize (stmt);
+  else
+    sqlite3_finalize (stmt);
 
   return
       CHECK (ret) &&
-      CHECK (sqlite3_finalize (stmt)) &&
       delete_tally_entries (self, rows_to_delete, error);
 }
 
-void
-emer_aggregate_tally_iter (EmerAggregateTally *self,
-                           EmerTallyType       tally_type,
-                           GDateTime          *datetime,
-                           EmerTallyIterFlags  flags,
-                           EmerTallyIterFunc   func,
-                           gpointer            user_data)
+/**
+ * emer_aggregate_tally_iter:
+ * @self:
+ * @tally_type: Frequency of events to iterate (daily or monthly)
+ * @datetime: (nullable): Date to iterate, or %NULL to iterate all events
+ *                        with frequency @tally_type
+ * @flags: Whether to delete events while iterating
+ * @func: (scope call): Callback to call for each matching event
+ * @user_data: (closure func): Data to pass to @func
+ * @error: Location to store an error if one occurs while iterating or
+ *         deleting events.
+ *
+ * Iterate all events in the tally for the given frequency, either on a
+ * specific date/month or (if @datetime is %NULL) on all dates at that
+ * frequency.
+ *
+ * Returns: %TRUE on success, or %FALSE with @error set otherwise.
+ */
+gboolean
+emer_aggregate_tally_iter (EmerAggregateTally  *self,
+                           EmerTallyType        tally_type,
+                           GDateTime           *datetime,
+                           EmerTallyIterFlags   flags,
+                           EmerTallyIterFunc    func,
+                           gpointer             user_data,
+                           GError             **error)
 {
   const char *SELECT_SQL =
     "SELECT id, event_id, unix_user_id, "
     "       payload, counter, date "
     "FROM tally "
     "WHERE date = ?";
-  g_autoptr(GError) error = NULL;
+  const char *SELECT_ALL_SQL =
+  "SELECT id, event_id, unix_user_id, "
+    "       payload, counter, date "
+    "FROM tally "
+    "WHERE length(date) = ?";
+  const char *query = (datetime != NULL) ? SELECT_SQL : SELECT_ALL_SQL;
 
-  if (!emer_aggregate_tally_iter_internal (self,
-                                           SELECT_SQL,
-                                           tally_type,
-                                           datetime,
-                                           flags,
-                                           func,
-                                           user_data,
-                                           &error))
-    g_critical ("%s: %s", G_STRFUNC, error->message);
+  return emer_aggregate_tally_iter_internal (self,
+                                             query,
+                                             tally_type,
+                                             datetime,
+                                             flags,
+                                             func,
+                                             user_data,
+                                             error);
 }
 
-void
-emer_aggregate_tally_iter_before (EmerAggregateTally *self,
-                                  EmerTallyType       tally_type,
-                                  GDateTime          *datetime,
-                                  EmerTallyIterFlags  flags,
-                                  EmerTallyIterFunc   func,
-                                  gpointer            user_data)
+gboolean
+emer_aggregate_tally_iter_before (EmerAggregateTally  *self,
+                                  EmerTallyType        tally_type,
+                                  GDateTime           *datetime,
+                                  EmerTallyIterFlags   flags,
+                                  EmerTallyIterFunc    func,
+                                  gpointer             user_data,
+                                  GError             **error)
 {
   const char *SELECT_SQL =
     "SELECT id, event_id, unix_user_id, "
     "       payload, counter, date "
     "FROM tally "
     "WHERE length(date) = length(?1) AND date < ?1;";
-  g_autoptr(GError) error = NULL;
 
-  if (!emer_aggregate_tally_iter_internal (self,
-                                           SELECT_SQL,
-                                           tally_type,
-                                           datetime,
-                                           flags,
-                                           func,
-                                           user_data,
-                                           &error))
-    g_critical ("%s: %s", G_STRFUNC, error->message);
+  return emer_aggregate_tally_iter_internal (self,
+                                             SELECT_SQL,
+                                             tally_type,
+                                             datetime,
+                                             flags,
+                                             func,
+                                             user_data,
+                                             error);
 }
 
 gboolean

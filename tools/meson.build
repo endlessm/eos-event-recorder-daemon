@@ -7,14 +7,15 @@ print_persistent_cache_sources = [
     'print-persistent-cache.c'
 ]
 
-executable('print-persistent-cache',
+executable('eos-metrics-print-persistent-cache',
     print_persistent_cache_sources,
     dependencies: [
         emer_required_modules,
         emer_shared_dep,
     ],
     include_directories: include_directories('../daemon'),
-    install: false,
+    install: true,
+    install_dir: get_option('libexecdir'),
 )
 
 print_aggregates_sources = [
@@ -22,14 +23,15 @@ print_aggregates_sources = [
     'print-aggregates.c',
 ]
 
-executable('print-aggregates',
+executable('eos-metrics-print-aggregates',
     print_aggregates_sources,
     dependencies: [
         emer_required_modules,
         emer_shared_dep,
     ],
     include_directories: include_directories('../daemon'),
-    install: false,
+    install: true,
+    install_dir: get_option('libexecdir'),
 )
 
 install_data('eos-metrics-collector.exe',

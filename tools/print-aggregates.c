@@ -96,8 +96,7 @@ main (gint   argc,
   };
 
   GOptionContext *option_context =
-    g_option_context_new ("Log the contents of a persistent cache in a "
-                          "human-readable format.");
+    g_option_context_new ("Log buffered aggregate events in a human-readable format.");
 
   g_option_context_add_main_entries (option_context, options, NULL);
 
